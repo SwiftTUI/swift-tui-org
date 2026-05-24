@@ -1,0 +1,12 @@
+[submodule "swift-tui"]
+	path = swift-tui
+	url = git@github.com:SwiftTUI/swift-tui.git
+[submodule "swift-tui-web"]
+	path = swift-tui-web
+	url = git@github.com:SwiftTUI/swift-tui-web.git
+[submodule "swift-tui-examples"]
+	path = swift-tui-examples
+	url = git@github.com:SwiftTUI/swift-tui-examples.git
+[submodule "swift-tui-site"]
+	path = swift-tui-site
+	url = git@github.com:SwiftTUI/swift-tui-site.git

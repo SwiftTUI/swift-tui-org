@@ -1,0 +1,50 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "submodule_status",
+    srcs = ["tools/bazel/submodule_status.sh"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+test_suite(
+    name = "swift_tui_native_gate",
+    tests = ["@swift_tui//:native_gate"],
+)
+
+test_suite(
+    name = "swift_tui_web_native_gate",
+    tests = ["@swift_tui_web//:native_gate"],
+)
+
+test_suite(
+    name = "swift_tui_examples_native_gate",
+    tests = ["@swift_tui_examples//:native_gate"],
+)
+
+test_suite(
+    name = "swift_tui_site_native_gate",
+    tests = ["@swift_tui_site//:native_gate"],
+)
+
+test_suite(
+    name = "native_gates",
+    tests = [
+        ":swift_tui_native_gate",
+        ":swift_tui_web_native_gate",
+        ":swift_tui_examples_native_gate",
+        ":swift_tui_site_native_gate",
+    ],
+)
+
+test_suite(
+    name = "org",
+    tests = [
+        ":submodule_status",
+        ":native_gates",
+    ],
+)

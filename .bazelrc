@@ -1,0 +1,9 @@
+common --enable_bzlmod
+common --announce_rc
+
+test --test_output=errors
+test --test_env=PATH
+test --test_env=HOME
+test --test_env=TMPDIR
+test --test_env=DEVELOPER_DIR
+test --test_timeout=3600
