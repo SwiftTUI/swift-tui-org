@@ -47,9 +47,9 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   readiness wait, timeout, close wakeup, and write wakeup behavior.
 - Modify `swift-tui-web/packages/web/src/wasi/WasmSceneWorker.ts`: replace
   `installEfficientClockPoll(...)` with the scheduler install call.
-- Create `swift-tui-examples/Examples/WebExample/src/frame-cadence.browser.ts`:
+- Create `swift-tui-examples/WebExample/src/frame-cadence.browser.ts`:
   browser integration regression for Game of Life frame cadence.
-- Modify `swift-tui-examples/Examples/WebExample/package.json`: include the new
+- Modify `swift-tui-examples/WebExample/package.json`: include the new
   browser cadence test in `test:browser`.
 - Modify `swift-tui/docs/HOSTS-AND-PLATFORMS.md`: record that WASI worker
   scheduling is responsible for blocking stdin/timer readiness.
@@ -62,8 +62,8 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 ### Task 1: Add A Failing WebExample Cadence Regression
 
 **Files:**
-- Create: `swift-tui-examples/Examples/WebExample/src/frame-cadence.browser.ts`
-- Modify: `swift-tui-examples/Examples/WebExample/package.json`
+- Create: `swift-tui-examples/WebExample/src/frame-cadence.browser.ts`
+- Modify: `swift-tui-examples/WebExample/package.json`
 
 - [ ] **Step 1: Write the browser cadence test**
 
@@ -183,7 +183,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   Run:
 
   ```bash
-  bun --cwd swift-tui-examples/Examples/WebExample run test:browser
+  bun --cwd swift-tui-examples/WebExample run test:browser
   ```
 
   Expected now: the existing nonblank canvas test passes and the new cadence
@@ -192,7 +192,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 - [ ] **Step 4: Commit the failing regression**
 
   ```bash
-  git -C swift-tui-examples add Examples/WebExample/src/frame-cadence.browser.ts Examples/WebExample/package.json
+  git -C swift-tui-examples add WebExample/src/frame-cadence.browser.ts WebExample/package.json
   git -C swift-tui-examples commit -m "test: cover WASI worker frame cadence"
   ```
 
@@ -594,7 +594,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 - [ ] **Step 1: Run the focused browser regression**
 
   ```bash
-  bun --cwd swift-tui-examples/Examples/WebExample run test:browser
+  bun --cwd swift-tui-examples/WebExample run test:browser
   ```
 
   Expected: PASS. The cadence test should report a steady median below `150 ms`
@@ -611,16 +611,16 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 - [ ] **Step 3: Rebuild the WebExample static bundle**
 
   ```bash
-  bun --cwd swift-tui-examples/Examples/WebExample run build
+  bun --cwd swift-tui-examples/WebExample run build
   ```
 
-  Expected: PASS and `Examples/WebExample/dist/wasm-scene-worker.js` includes
+  Expected: PASS and `WebExample/dist/wasm-scene-worker.js` includes
   the scheduler-backed worker bundle.
 
 - [ ] **Step 4: Commit the passing cadence proof**
 
   ```bash
-  git -C swift-tui-examples add Examples/WebExample/package.json Examples/WebExample/src/frame-cadence.browser.ts
+  git -C swift-tui-examples add WebExample/package.json WebExample/src/frame-cadence.browser.ts
   git -C swift-tui-examples commit -m "test: verify static WASI frame cadence"
   ```
 
@@ -658,7 +658,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   ```bash
   git -C swift-tui diff --check
   bun --cwd swift-tui-web/packages/web test
-  bun --cwd swift-tui-examples/Examples/WebExample run test:browser
+  bun --cwd swift-tui-examples/WebExample run test:browser
   ```
 
   Expected: all commands pass.

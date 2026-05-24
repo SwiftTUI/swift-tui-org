@@ -52,9 +52,9 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   keep localhost WebHost damage coverage aligned with WASI.
 - Modify `swift-tui-web/packages/web/src/WebHostSceneRuntime.test.ts`: cover
   empty damage and image-removal dirty rows in the browser canvas renderer.
-- Create `swift-tui-examples/Examples/WebExample/src/raster-damage.browser.ts`:
+- Create `swift-tui-examples/WebExample/src/raster-damage.browser.ts`:
   browser integration proof that real WebExample frames carry damage.
-- Modify `swift-tui-examples/Examples/WebExample/package.json`: include the new
+- Modify `swift-tui-examples/WebExample/package.json`: include the new
   browser damage test in `test:browser`.
 - Modify `swift-tui/Platforms/SwiftUI/Tests/SwiftUIHostTests/HostedSurfaceRegressionTests.swift`:
   prove host-managed SwiftUI receives non-nil damage through
@@ -684,8 +684,8 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 ### Task 5: Prove The WebExample Sends Damage In The Real Path
 
 **Files:**
-- Create: `swift-tui-examples/Examples/WebExample/src/raster-damage.browser.ts`
-- Modify: `swift-tui-examples/Examples/WebExample/package.json`
+- Create: `swift-tui-examples/WebExample/src/raster-damage.browser.ts`
+- Modify: `swift-tui-examples/WebExample/package.json`
 
 - [ ] **Step 1: Write the real-path damage browser test**
 
@@ -798,7 +798,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 - [ ] **Step 3: Run the real browser integration**
 
   ```bash
-  bun --cwd swift-tui-examples/Examples/WebExample run test:browser
+  bun --cwd swift-tui-examples/WebExample run test:browser
   ```
 
   Expected: PASS with the cadence and damage assertions both satisfied.
@@ -806,7 +806,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 - [ ] **Step 4: Commit real-path damage proof**
 
   ```bash
-  git -C swift-tui-examples add Examples/WebExample/src/raster-damage.browser.ts Examples/WebExample/package.json
+  git -C swift-tui-examples add WebExample/src/raster-damage.browser.ts WebExample/package.json
   git -C swift-tui-examples commit -m "test: verify WebExample emits raster damage"
   ```
 

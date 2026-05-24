@@ -528,7 +528,7 @@ command and its argv.
 ### Task 4: Move Examples Into `swift-tui-examples`
 
 **Files:**
-- Create in `SwiftTUI/swift-tui-examples`: `Examples/`
+- Create root-level example package directories in `SwiftTUI/swift-tui-examples`
 - Create in `SwiftTUI/swift-tui-examples`: `Scripts/check_examples.sh`
 - Create in `SwiftTUI/swift-tui-examples`: `.github/workflows/test.yml`
 - Modify in `swift-tui`: `Scripts/test_all.sh`
@@ -543,7 +543,8 @@ command and its argv.
   gh repo create SwiftTUI/swift-tui-examples --public --clone
   cd swift-tui-examples
   mkdir -p Scripts
-  rsync -a --delete ../swift-tui/Examples/ Examples/
+  LEGACY_SWIFTTUI_EXAMPLES_DIR=../swift-tui/Examples
+  rsync -a --delete "$LEGACY_SWIFTTUI_EXAMPLES_DIR"/ .
   cp ../swift-tui/Scripts/check_demo_builds.sh Scripts/check_examples.sh
   cp ../swift-tui/Scripts/stack_safety_harness.py Scripts/stack_safety_harness.py
   ```
@@ -556,29 +557,29 @@ command and its argv.
   Replace each example manifest dependency on the root package with:
 
   ```swift
+  .package(name: "swift-tui", path: "../../swift-tui")
+  ```
+
+  for examples under `<name>/Package.swift`, and:
+
+  ```swift
   .package(name: "swift-tui", path: "../../../swift-tui")
   ```
 
-  for examples under `Examples/<name>/Package.swift`, and:
-
-  ```swift
-  .package(name: "swift-tui", path: "../../../../swift-tui")
-  ```
-
-  for nested packages such as `Examples/WebExample/TerminalApp`.
+  for nested packages such as `WebExample/TerminalApp`.
 
   Run:
 
   ```bash
-  rg -n 'package\\(name: "swift-tui"|github.com/SwiftTUI/swift-tui|path: "../.."' Examples
+  rg -n 'package\\(name: "swift-tui"|github.com/SwiftTUI/swift-tui|path: "../.."' .
   ```
 
-  Expected: every dependency *on the framework* resolves to `../../../swift-tui`
-  or `../../../../swift-tui`; no example points back to an in-repo root package
+  Expected: every dependency *on the framework* resolves to `../../swift-tui`
+  or `../../../swift-tui`; no example points back to an in-repo root package
   path.
 
   Note the grep also surfaces intra-examples dependencies that must stay
-  unchanged — `Examples/WebExample/TerminalApp/Package.swift` declares
+  unchanged — `WebExample/TerminalApp/Package.swift` declares
   `.package(path: "../../gallery")`, and that relative path is still correct
   because `gallery` and `WebExample` move together. Only rewrite dependencies
   that point at the framework root, not sibling-example dependencies.
@@ -590,10 +591,10 @@ command and its argv.
   with `../swift-tui` as the framework checkout. The script must still run:
 
   ```bash
-  swiftly run swift build --package-path Examples/gallery
-  swiftly run swift test --package-path Examples/WebHostExample
-  bun run --cwd Examples/WebExample build
-  python3 Scripts/stack_safety_harness.py --binary Examples/gallery/.build/debug/gallery-demo --count 20
+  swiftly run swift build --package-path gallery
+  swiftly run swift test --package-path WebHostExample
+  bun run --cwd WebExample build
+  python3 Scripts/stack_safety_harness.py --binary gallery/.build/debug/gallery-demo --count 20
   ```
 
 - [ ] **Step 4: Add examples CI**
@@ -642,7 +643,7 @@ command and its argv.
 
   In `swift-tui`, update `Scripts/test_all.sh` and `Scripts/test_gate.sh` help
   text and command lists so the core repo gate no longer invokes
-  `Examples/*` packages after they move. Keep root Swift package tests, platform
+  root-level example packages after they move. Keep root Swift package tests, platform
   product tests, policy checks, `Platforms/WebHost` Swift target builds, and the
   WebHost browser bundle integrity check.
 
@@ -692,8 +693,8 @@ command and its argv.
 **Files:**
 - Create in `SwiftTUI/swift-tui-site`: `Website/`
 - Modify in `SwiftTUI/swift-tui-site`: `Website/package.json` (rebase the
-  `build:wasm` / `build:wasm:dev` `../Examples/WebExample` paths to the
-  multi-repo checkout)
+  `build:wasm` / `build:wasm:dev` legacy WebExample paths to the multi-repo
+  checkout)
 - Create in `SwiftTUI/swift-tui-site`: `.github/workflows/cloudflare-pages.yml`
 - Create in `SwiftTUI/swift-tui-site`: `docs/docc-repos.yml`
 - Create in `SwiftTUI/swift-tui-site`: `Scripts/build_docc_site.sh`
@@ -703,12 +704,12 @@ command and its argv.
 > **Cross-repo wasm chain (read first).** The WebExample WASI demo is built by a
 > chain that currently lives entirely inside `swift-tui`:
 > `package.json:build:wasm` → `Website/package.json:build:wasm` →
-> `bun run --cwd ../Examples/WebExample build` → `compress:wasm`. After the
+> `bun run --cwd <legacy WebExample path> build` → `compress:wasm`. After the
 > split this chain spans three repos: the `SwiftTUIWASI` target stays in
 > `swift-tui`, `WebExample` (which emits `app.wasm`) moves to
 > `swift-tui-examples`, and the Astro site that compresses/serves it moves to
-> `swift-tui-site`. The relative path `../Examples/WebExample` is only valid in
-> the old monorepo; it must be rebased, and the wasm SDK install, Binaryen,
+> `swift-tui-site`. The legacy relative WebExample path is only valid in the
+> old monorepo; it must be rebased, and the wasm SDK install, Binaryen,
 > Brotli, and Cloudflare size/file-count validation that the current workflow
 > performs must be carried into the new site workflow. See Step 4.
 
@@ -803,7 +804,7 @@ command and its argv.
   - `brew install binaryen brotli` (the wasm is Binaryen-optimized and
     Brotli-compressed).
   - Build the demo: today this is `bun run build:wasm`, which calls
-    `Website/package.json:build:wasm` → `bun run --cwd ../Examples/WebExample`.
+    `Website/package.json:build:wasm` → a legacy relative WebExample path.
     After the split, WebExample lives in the `swift-tui-examples` checkout, so
     rebase that relative path (see the `Website/package.json` edit below).
   - Validate the emitted `app.wasm`: `brotli --test` plus the in-browser
@@ -821,19 +822,19 @@ command and its argv.
   Then rebase the demo path in `swift-tui-site/Website/package.json`. With the
   workflow checking examples out at `path: swift-tui-examples` (a sibling of the
   `swift-tui-site` checkout), the path from `Website/` becomes
-  `../../swift-tui-examples/Examples/WebExample`. Prefer making it overridable so
+  `../../swift-tui-examples/WebExample`. Prefer making it overridable so
   local runs and CI can differ:
 
   ```jsonc
   // Website/package.json — accept an env override, default to the CI layout
-  "build:wasm": "bun run --cwd \"${WEBEXAMPLE_DIR:-../../swift-tui-examples/Examples/WebExample}\" build && bun run compress:wasm",
-  "build:wasm:dev": "bun run --cwd \"${WEBEXAMPLE_DIR:-../../swift-tui-examples/Examples/WebExample}\" build:dev && bun run compress:wasm:dev"
+  "build:wasm": "bun run --cwd \"${WEBEXAMPLE_DIR:-../../swift-tui-examples/WebExample}\" build && bun run compress:wasm",
+  "build:wasm:dev": "bun run --cwd \"${WEBEXAMPLE_DIR:-../../swift-tui-examples/WebExample}\" build:dev && bun run compress:wasm:dev"
   ```
 
   Confirm no stale monorepo paths remain:
 
   ```bash
-  rg -n "\.\./Examples/WebExample|--cwd Website" swift-tui-site
+  rg -n "legacy WebExample path|--cwd Website" swift-tui-site
   ```
 
   Expected: no matches (every demo path now resolves through the examples
@@ -906,7 +907,7 @@ command and its argv.
 - Modify in `swift-tui`: `bun.lock`
 - Delete from `swift-tui`: `Platforms/Web/`
 - Delete from `swift-tui`: `Platforms/WebBuild/`
-- Delete from `swift-tui`: `Examples/`
+- Delete from `swift-tui`: the legacy in-repo examples directory
 - Delete from `swift-tui`: `Scripts/check_demo_builds.sh` (its example
   build/test matrix now lives in `swift-tui-examples/Scripts/check_examples.sh`)
 - Delete from `swift-tui`: `Scripts/stack_safety_harness.py` (referenced only by
@@ -923,7 +924,7 @@ command and its argv.
   ```
 
   `check_demo_builds.sh` is standalone (no other script invokes it) and only
-  builds `Examples/`, so it is dead once `Examples/` is gone;
+  builds the legacy in-repo examples, so it is dead once those examples are gone;
   `stack_safety_harness.py` is referenced only by it. Both now live in
   `swift-tui-examples`. Before deleting, confirm nothing else references them:
 
@@ -941,7 +942,7 @@ command and its argv.
   "workspaces": [
     "Platforms/Web",
     "Platforms/WebBuild",
-    "Examples/WebExample",
+    "WebExample",
     "Website"
   ]
   ```
@@ -1179,7 +1180,7 @@ via Task 1 Step 4.
   - The file currently imports only `SwiftTUI` and `Testing`. The `@OptionGroup`
     property wrapper is an `ArgumentParser` type, so add `import ArgumentParser`
     at the top of the file — every in-repo `@OptionGroup` user imports it
-    explicitly (e.g. `Examples/gitviz/.../Options.swift`); do not rely on it
+    explicitly (e.g. `gitviz/.../Options.swift`); do not rely on it
     leaking through the `SwiftTUI` re-export.
   - This fixture is the same `App, SwiftTUICommand` shape proven in
     `Platforms/Arguments/Tests/SwiftTUIArgumentsTests/SwiftTUICommandTests.swift`
@@ -1264,7 +1265,7 @@ via Task 1 Step 4.
 
 - **The cross-repo wasm chain is the highest-risk part of this split.** The
   WebExample WASI demo is currently built by `build:wasm` →
-  `--cwd ../Examples/WebExample` → `compress:wasm`, a chain that, after the
+  a legacy relative WebExample path → `compress:wasm`, a chain that, after the
   split, spans `swift-tui` (the `SwiftTUIWASI` target), `swift-tui-examples`
   (WebExample, which emits `app.wasm`), and `swift-tui-site` (Astro
   compression/serving). Task 5 must rebase the relative demo path and carry the

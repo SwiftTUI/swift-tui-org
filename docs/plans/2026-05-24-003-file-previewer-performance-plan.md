@@ -22,18 +22,18 @@ preview always terminates the previous child process.
 
 - `ColumnBrowser.body` calls `entries(in:)` while building columns, so directory
   enumeration is part of render work:
-  `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:27-40`.
+  `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:27-40`.
 - `ColumnBrowser.moveSelection(by:)` calls `entries(in:)` again for every
   up/down key press:
-  `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:115-132`.
+  `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:115-132`.
 - `FileEntry.entries(in:)` synchronously calls `FileManager.contentsOfDirectory`,
   asks for resource values, maps every URL, and sorts the full list:
-  `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/FileEntry.swift:24-46`.
+  `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/FileEntry.swift:24-46`.
 - `FileColumn.body` renders every entry in an eager `VStack`:
-  `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:195-216`.
+  `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:195-216`.
 - `ColumnBrowser.advanceOrPreview` replaces `previewSession` without terminating
   the old `TerminalProcessSession`:
-  `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:145-173`.
+  `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift:145-173`.
 - `TerminalProcessSession` already exposes `terminate(signal:)`:
   `swift-tui/Platforms/Embedding/Sources/SwiftTUITerminal/TerminalProcessSession.swift:95-98`.
 - The terminal-workspace package has the expected ownership pattern: remove the
@@ -58,27 +58,27 @@ preview always terminates the previous child process.
 
 ## File Structure To Create Or Modify
 
-- Create `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/DirectoryEntryCache.swift`:
+- Create `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/DirectoryEntryCache.swift`:
   owns cached directory listings and bounded eviction.
-- Create `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/PreviewSessionSlot.swift`:
+- Create `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/PreviewSessionSlot.swift`:
   owns the current preview session and invokes termination when the session is
   replaced or cleared.
-- Create `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/FileColumn.swift`:
+- Create `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/FileColumn.swift`:
   moves the row-rendering view out of `ColumnBrowser.swift` and renders rows via
   `ScrollView` plus a single-`ForEach` `LazyVStack`.
-- Modify `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`:
+- Modify `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`:
   use the directory cache, use the preview session slot, and delete the nested
   private `FileColumn`.
-- Create `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/DirectoryEntryCacheTests.swift`:
+- Create `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/DirectoryEntryCacheTests.swift`:
   prove repeated reads are cached and old directory entries are evicted.
-- Create `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/PreviewSessionSlotTests.swift`:
+- Create `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/PreviewSessionSlotTests.swift`:
   prove session replacement and clearing terminate the previous session exactly
   once.
-- Create `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/FileColumnRenderingTests.swift`:
+- Create `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/FileColumnRenderingTests.swift`:
   prove a large column realizes only viewport-scale rows.
-- Create `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/ColumnBrowserCacheTests.swift`:
+- Create `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/ColumnBrowserCacheTests.swift`:
   prove repeated renders of the browser do not reread the same directory.
-- Modify `swift-tui-examples/Examples/file-previewer/README.md`:
+- Modify `swift-tui-examples/file-previewer/README.md`:
   update the test list and document the large-directory acceptance check.
 
 ## Acceptance Criteria
@@ -101,8 +101,8 @@ preview always terminates the previous child process.
 ### Task 1: Add A Bounded Directory Entry Cache
 
 **Files:**
-- Create: `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/DirectoryEntryCache.swift`
-- Create: `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/DirectoryEntryCacheTests.swift`
+- Create: `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/DirectoryEntryCache.swift`
+- Create: `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/DirectoryEntryCacheTests.swift`
 
 - [ ] **Step 1: Write failing cache tests**
 
@@ -194,7 +194,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter DirectoryEntryCacheTests
   ```
 
@@ -265,7 +265,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter DirectoryEntryCacheTests
   ```
 
@@ -275,8 +275,8 @@ preview always terminates the previous child process.
 
   ```bash
   git -C swift-tui-examples add \
-    Examples/file-previewer/Sources/FilePreviewerApp/DirectoryEntryCache.swift \
-    Examples/file-previewer/Tests/FilePreviewerAppTests/DirectoryEntryCacheTests.swift
+    file-previewer/Sources/FilePreviewerApp/DirectoryEntryCache.swift \
+    file-previewer/Tests/FilePreviewerAppTests/DirectoryEntryCacheTests.swift
   git -C swift-tui-examples commit -m "fix: add file previewer directory cache"
   ```
 
@@ -285,8 +285,8 @@ preview always terminates the previous child process.
 ### Task 2: Wire Directory Caching Into ColumnBrowser
 
 **Files:**
-- Modify: `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`
-- Create: `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/ColumnBrowserCacheTests.swift`
+- Modify: `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`
+- Create: `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/ColumnBrowserCacheTests.swift`
 
 - [ ] **Step 1: Write a failing browser cache test**
 
@@ -344,7 +344,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter ColumnBrowserCacheTests
   ```
 
@@ -433,7 +433,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter ColumnBrowserCacheTests
   ```
 
@@ -443,7 +443,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer
+    --package-path swift-tui-examples/file-previewer
   ```
 
   Expected: PASS.
@@ -452,8 +452,8 @@ preview always terminates the previous child process.
 
   ```bash
   git -C swift-tui-examples add \
-    Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift \
-    Examples/file-previewer/Tests/FilePreviewerAppTests/ColumnBrowserCacheTests.swift
+    file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift \
+    file-previewer/Tests/FilePreviewerAppTests/ColumnBrowserCacheTests.swift
   git -C swift-tui-examples commit -m "fix: cache file previewer directory listings"
   ```
 
@@ -462,9 +462,9 @@ preview always terminates the previous child process.
 ### Task 3: Terminate Replaced Preview Sessions
 
 **Files:**
-- Create: `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/PreviewSessionSlot.swift`
-- Create: `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/PreviewSessionSlotTests.swift`
-- Modify: `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`
+- Create: `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/PreviewSessionSlot.swift`
+- Create: `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/PreviewSessionSlotTests.swift`
+- Modify: `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`
 
 - [ ] **Step 1: Write failing preview session ownership tests**
 
@@ -536,7 +536,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter PreviewSessionSlotTests
   ```
 
@@ -579,7 +579,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter PreviewSessionSlotTests
   ```
 
@@ -658,7 +658,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer
+    --package-path swift-tui-examples/file-previewer
   ```
 
   Expected: PASS.
@@ -667,9 +667,9 @@ preview always terminates the previous child process.
 
   ```bash
   git -C swift-tui-examples add \
-    Examples/file-previewer/Sources/FilePreviewerApp/PreviewSessionSlot.swift \
-    Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift \
-    Examples/file-previewer/Tests/FilePreviewerAppTests/PreviewSessionSlotTests.swift
+    file-previewer/Sources/FilePreviewerApp/PreviewSessionSlot.swift \
+    file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift \
+    file-previewer/Tests/FilePreviewerAppTests/PreviewSessionSlotTests.swift
   git -C swift-tui-examples commit -m "fix: terminate replaced file preview sessions"
   ```
 
@@ -678,9 +678,9 @@ preview always terminates the previous child process.
 ### Task 4: Render File Rows With LazyVStack
 
 **Files:**
-- Create: `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/FileColumn.swift`
-- Modify: `swift-tui-examples/Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`
-- Create: `swift-tui-examples/Examples/file-previewer/Tests/FilePreviewerAppTests/FileColumnRenderingTests.swift`
+- Create: `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/FileColumn.swift`
+- Modify: `swift-tui-examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift`
+- Create: `swift-tui-examples/file-previewer/Tests/FilePreviewerAppTests/FileColumnRenderingTests.swift`
 
 - [ ] **Step 1: Write a failing large-column rendering test**
 
@@ -730,7 +730,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter FileColumnRenderingTests
   ```
 
@@ -819,7 +819,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer \
+    --package-path swift-tui-examples/file-previewer \
     --filter FileColumnRenderingTests
   ```
 
@@ -840,7 +840,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer
+    --package-path swift-tui-examples/file-previewer
   ```
 
   Expected: PASS.
@@ -849,9 +849,9 @@ preview always terminates the previous child process.
 
   ```bash
   git -C swift-tui-examples add \
-    Examples/file-previewer/Sources/FilePreviewerApp/FileColumn.swift \
-    Examples/file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift \
-    Examples/file-previewer/Tests/FilePreviewerAppTests/FileColumnRenderingTests.swift
+    file-previewer/Sources/FilePreviewerApp/FileColumn.swift \
+    file-previewer/Sources/FilePreviewerApp/ColumnBrowser.swift \
+    file-previewer/Tests/FilePreviewerAppTests/FileColumnRenderingTests.swift
   git -C swift-tui-examples commit -m "fix: lazily render file previewer columns"
   ```
 
@@ -860,13 +860,13 @@ preview always terminates the previous child process.
 ### Task 5: Add End-To-End Regression Checks And Docs
 
 **Files:**
-- Modify: `swift-tui-examples/Examples/file-previewer/README.md`
+- Modify: `swift-tui-examples/file-previewer/README.md`
 
 - [ ] **Step 1: Run the focused automated test suite**
 
   ```bash
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer
+    --package-path swift-tui-examples/file-previewer
   ```
 
   Expected: PASS, including:
@@ -896,7 +896,7 @@ preview always terminates the previous child process.
 
   ```bash
   swiftly run swift build \
-    --package-path swift-tui-examples/Examples/file-previewer
+    --package-path swift-tui-examples/file-previewer
   ```
 
   Expected: PASS.
@@ -910,7 +910,7 @@ preview always terminates the previous child process.
   done
   cd "$TMPDIR"
   swiftly run swift run \
-    --package-path /Users/adamz/Developer/swift-tui-org/swift-tui-examples/Examples/file-previewer \
+    --package-path /Users/adamz/Developer/swift-tui-org/swift-tui-examples/file-previewer \
     FilePreviewerApp
   ```
 
@@ -937,7 +937,7 @@ preview always terminates the previous child process.
   done
   cd "$TMPBASE/files"
   PATH="$TMPBASE/bin:$PATH" swiftly run swift run \
-    --package-path /Users/adamz/Developer/swift-tui-org/swift-tui-examples/Examples/file-previewer \
+    --package-path /Users/adamz/Developer/swift-tui-org/swift-tui-examples/file-previewer \
     FilePreviewerApp
   ```
 
@@ -959,7 +959,7 @@ preview always terminates the previous child process.
   ## Test
 
   ```bash
-  swiftly run swift test --package-path Examples/file-previewer
+  swiftly run swift test --package-path file-previewer
   ```
 
   The tests cover preview-command lookup, Miller-column width allocation,
@@ -972,9 +972,9 @@ preview always terminates the previous child process.
   ```bash
   git -C swift-tui-examples diff --check
   swiftly run swift test \
-    --package-path swift-tui-examples/Examples/file-previewer
+    --package-path swift-tui-examples/file-previewer
   swiftly run swift build \
-    --package-path swift-tui-examples/Examples/file-previewer
+    --package-path swift-tui-examples/file-previewer
   ```
 
   Expected: PASS.
@@ -983,7 +983,7 @@ preview always terminates the previous child process.
 
   ```bash
   git -C swift-tui-examples add \
-    Examples/file-previewer/README.md
+    file-previewer/README.md
   git -C swift-tui-examples commit -m "docs: document file previewer performance checks"
   ```
 
@@ -993,7 +993,7 @@ preview always terminates the previous child process.
 
 - Keep the existing dirty worktree isolated. At the time this plan was written,
   `swift-tui` had unrelated terminal-workspace fixes and `swift-tui-examples`
-  had an existing `Examples/file-previewer/Package.resolved` change. Do not
+  had an existing `file-previewer/Package.resolved` change. Do not
   revert or absorb those changes unless the user explicitly asks.
 - If a test command changes `Package.resolved`, inspect the diff before staging.
   Do not commit dependency-resolution churn as part of this fix unless it is
