@@ -51,22 +51,57 @@ git submodule update --init --recursive
 
 ## Tooling
 
-This repo pins Bazel through `.bazelversion`. The easiest launcher is Bazelisk:
+This repo uses `mise.toml` to pin the local orchestration tools:
+
+- Bazelisk 1.28.1, with Bazel pinned by `.bazelversion`
+- Bun 1.3.13
+
+Install mise once, then install the repo tools from the root:
 
 ```sh
-npx @bazel/bazelisk@latest version
+mise trust
+mise install
 ```
 
-If you install Bazelisk globally or through your preferred tool manager, the
-plain `bazel` command will use `.bazelversion`.
+If your shell activates mise, the normal commands are plain `bazel` commands.
+The repo-local `tools/bin/bazel` wrapper forwards to Bazelisk, so
+`.bazelversion` remains the Bazel version pin:
+
+```sh
+bazel version
+bazel test //:org
+```
+
+Without shell activation, run through mise explicitly:
+
+```sh
+mise exec -- bazel test //:org
+```
+
+Maintainers who prefer Bazelisk outside mise can keep using it directly; the
+same `.bazelversion` file controls the Bazel version in both paths.
 
 The child native gates still require their native tools:
 
 - Swift 6.3.x and SwiftPM
-- Bun
 - Xcode/macOS toolchain for app/example gates that require it
 
+Swift and Xcode are intentionally not installed by mise because they come from
+the local Apple toolchain setup.
+
+Useful mise tasks:
+
+```sh
+mise run fetch
+mise run submodule-status
+mise run native-gates
+mise run org
+```
+
 ## Bazel Commands
+
+After `mise install`, or from an activated mise shell, use the Bazel targets
+directly.
 
 Fetch Bazel external dependencies for the organization targets and validate the
 module graph:

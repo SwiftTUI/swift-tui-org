@@ -1,2 +1,4 @@
 .DS_Store
 bazel-*
+mise.local.toml
+.mise.local.toml
