@@ -24,6 +24,12 @@ Submodules are only the checkout and pinning layer. Bazel is the orchestration
 layer. The child repositories remain the source of truth for their native
 package-manager manifests and release tags.
 
+## Planning Documents
+
+Organization-level plans live in [docs/README.md](docs/README.md). These plans
+can span multiple child repositories, so they are tracked in the orchestration
+root rather than in a single package's docs tree.
+
 ## Hard Invariants
 
 - `SwiftTUI/swift-tui` must remain consumable via SwiftPM:

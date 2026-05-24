@@ -1,0 +1,22 @@
+# SwiftTUI Organization Docs
+
+This directory holds organization-level documents for the `swift-tui-org`
+orchestration repository. Child repositories keep their package-specific
+documentation in their own `docs/` trees.
+
+## Planning Documents
+
+- [plans/2026-05-22-001-github-organization-split-plan.md](plans/2026-05-22-001-github-organization-split-plan.md) -
+  execution plan for splitting SwiftTUI across GitHub organization repositories
+  while preserving the one-package terminal/WebHost consumer path and coherent
+  DocC generation.
+- [plans/2026-05-24-001-wasi-worker-scheduler-plan.md](plans/2026-05-24-001-wasi-worker-scheduler-plan.md) -
+  execution plan for fixing static WASI browser worker scheduling so authored
+  timer cadences are preserved.
+- [plans/2026-05-24-002-raster-damage-support-plan.md](plans/2026-05-24-002-raster-damage-support-plan.md) -
+  execution plan for producing and consuming raster damage across terminal,
+  WASI/browser, localhost WebHost, and host-managed SwiftUI paths.
+- [plans/2026-05-24-003-file-previewer-performance-plan.md](plans/2026-05-24-003-file-previewer-performance-plan.md) -
+  execution plan for improving FilePreviewer responsiveness with cached
+  directory listings, lazy file-row rendering, and explicit preview-process
+  cleanup.
