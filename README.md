@@ -7,7 +7,7 @@ SwiftTUI through the native package managers owned by the child repositories.
 The root repo provides three things:
 
 1. A pinned source checkout of the organization through Git submodules.
-2. A Bazel/Bzlmod module graph over those checked-out repos.
+2. A Bazel/Bzlmod contract graph over those checked-out repos.
 3. One place to run organization-level validation without replacing SwiftPM,
    Bun, npm, Astro, or DocC as the native tools of record.
 
@@ -20,9 +20,9 @@ The root repo provides three things:
 | `swift-tui-examples/` | `SwiftTUI/swift-tui-examples` | Runnable Swift examples and demo gates | `swift_tui_examples` |
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site and DocC composition | `swift_tui_site` |
 
-Submodules are only the checkout and pinning layer. Bazel is the orchestration
-layer. The child repositories remain the source of truth for their native
-package-manager manifests and release tags.
+Submodules are only the checkout and pinning layer. Bazel owns cross-repo
+contracts for the pinned organization state. The child repositories remain the
+source of truth for their native package-manager manifests and release tags.
 
 ## Planning Documents
 
@@ -75,13 +75,13 @@ The repo-local `tools/bin/bazel` wrapper forwards to Bazelisk, so
 
 ```sh
 bazel version
-bazel test //:org
+bazel test //:org_fast
 ```
 
 Without shell activation, run through mise explicitly:
 
 ```sh
-mise exec -- bazel test //:org
+mise exec -- bazel test //:org_full
 ```
 
 Maintainers who prefer Bazelisk outside mise can keep using it directly; the
@@ -101,7 +101,10 @@ Useful mise tasks:
 ```sh
 mise run fetch
 mise run submodule-status
+mise run org-fast
 mise run native-gates
+mise run org-full
+mise run release-candidate
 mise run org
 ```
 
@@ -110,17 +113,31 @@ mise run org
 After `mise install`, or from an activated mise shell, use the Bazel targets
 directly.
 
-Fetch Bazel external dependencies for the organization targets and validate the
-module graph:
+Fetch Bazel external dependencies for the full organization target and validate
+the module graph:
 
 ```sh
-bazel fetch //:org
+bazel fetch //:org_full
 ```
 
-Check that submodules are initialized and have Bazel metadata:
+Run the cheap organization contract checks:
+
+```sh
+bazel test //:org_fast
+```
+
+`//:org_fast` checks that submodules are initialized, the child registry is
+consistent across `.gitmodules`, `MODULE.bazel`, `BUILD.bazel`, and this README,
+the root CI workflow still runs the intended Bazel lanes, and the submodule
+checkouts are clean at the commits pinned by the root repo.
+
+Useful individual contract targets:
 
 ```sh
 bazel test //:submodule_status
+bazel test //:repo_registry_contract
+bazel test //:pin_cleanliness
+bazel test //:org_ci_workflow
 ```
 
 Run every repository's native gate through Bazel:
@@ -138,16 +155,25 @@ bazel test //:swift_tui_examples_native_gate
 bazel test //:swift_tui_site_native_gate
 ```
 
-`//:org` is the full orchestration target:
+`//:org_full` is the full orchestration target:
 
 ```sh
-bazel test //:org
+bazel test //:org_full
 ```
 
-CI runs the same aggregate from `.github/workflows/org-gate.yml`. Child
+`//:org` remains a compatibility alias for `//:org_full`.
+
+Release candidates add a published-pin check:
+
+```sh
+bazel test //:release_candidate
+```
+
+CI runs `//:org_fast` by default from `.github/workflows/org-gate.yml`. The same
+workflow exposes a manual full gate that fetches and runs `//:org_full`. Child
 repositories still own their native workflow definitions; the root workflow
-checks the pinned submodule combination by running the Bazel orchestration
-target over those child-owned gates.
+checks the pinned submodule combination by running Bazel contract targets over
+those child-owned gates.
 
 ## What The Native Gates Run
 
@@ -192,8 +218,9 @@ git commit -m "chore: update SwiftTUI org pins"
 After updating pins, run:
 
 ```sh
-bazel fetch //:org
-bazel test //:org
+bazel fetch //:org_full
+bazel test //:org_fast
+bazel test //:org_full
 ```
 
 ## Editing Child Repositories
@@ -224,7 +251,7 @@ A release should still be published from the native repos:
 
 1. Validate and tag child repos with their native gates.
 2. Update this org root's submodule pins to those exact release commits.
-3. Run `bazel test //:org`.
+3. Run `bazel test //:release_candidate`.
 4. Commit and tag this orchestration repo with the same release name if the
    whole-organization state matters.
 
@@ -245,6 +272,8 @@ the child repo release tags that SwiftPM, npm, or the site workflow consume.
    `MODULE.bazel`.
 5. Add an alias to `BUILD.bazel` and include it in `//:native_gates`.
 6. Update this README.
+7. Run `bazel test //:repo_registry_contract` to verify the registry stays
+   consistent.
 
 ## Troubleshooting
 
@@ -265,5 +294,5 @@ uncommitted local edits.
 If `bazel fetch` has stale external state, force a refresh:
 
 ```sh
-bazel fetch --force //:org
+bazel fetch --force //:org_full
 ```

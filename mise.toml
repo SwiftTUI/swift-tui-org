@@ -9,16 +9,28 @@ bun = "1.3.13"
 
 [tasks.fetch]
 description = "Fetch Bazel external dependencies for the organization graph"
-run = "bazel fetch //:org"
+run = "bazel fetch //:org_full"
 
 [tasks.submodule-status]
 description = "Verify submodules are initialized and expose Bazel metadata"
 run = "bazel test //:submodule_status"
 
+[tasks.org-fast]
+description = "Run the cheap organization contract checks"
+run = "bazel test //:org_fast"
+
 [tasks.native-gates]
 description = "Run every child repository's native gate through Bazel"
 run = "bazel test //:native_gates"
 
+[tasks.org-full]
+description = "Run the full organization validation target"
+run = "bazel test //:org_full"
+
+[tasks.release-candidate]
+description = "Run the release candidate organization validation target"
+run = "bazel test //:release_candidate"
+
 [tasks.org]
-description = "Run the full SwiftTUI organization validation target"
+description = "Run the compatibility alias for the full SwiftTUI organization target"
 run = "bazel test //:org"

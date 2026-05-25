@@ -20,6 +20,33 @@ sh_test(
     ],
 )
 
+sh_test(
+    name = "repo_registry_contract",
+    srcs = ["tools/bazel/repo_registry_contract.sh"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_test(
+    name = "pin_cleanliness",
+    srcs = ["tools/bazel/pin_cleanliness.sh"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_test(
+    name = "release_pin_contract",
+    srcs = ["tools/bazel/release_pin_contract.sh"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
 test_suite(
     name = "swift_tui_native_gate",
     tests = ["@swift_tui//:native_gate"],
@@ -51,10 +78,34 @@ test_suite(
 )
 
 test_suite(
-    name = "org",
+    name = "org_fast",
     tests = [
         ":org_ci_workflow",
+        ":pin_cleanliness",
+        ":repo_registry_contract",
         ":submodule_status",
+    ],
+)
+
+test_suite(
+    name = "org_full",
+    tests = [
         ":native_gates",
+        ":org_fast",
+    ],
+)
+
+test_suite(
+    name = "release_candidate",
+    tests = [
+        ":org_full",
+        ":release_pin_contract",
+    ],
+)
+
+test_suite(
+    name = "org",
+    tests = [
+        ":org_full",
     ],
 )
