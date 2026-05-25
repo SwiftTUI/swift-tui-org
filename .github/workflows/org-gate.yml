@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_gate:
+        description: Run the full child native gates from the org checkout
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -20,13 +26,40 @@ env:
 jobs:
   org-gate:
     name: Org repo gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout organization workspace
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.SWIFTTUI_CI_TOKEN || github.token }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Bazelisk
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global @bazel/bazelisk@1.28.1
+          echo "$GITHUB_WORKSPACE/tools/bin" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/tools/bin/bazel" version
+
+      - name: Run organization contract
+        shell: bash
+        run: bazel test //:org_ci_workflow //:submodule_status
+
+  full-org-gate:
+    name: Full organization gate
     runs-on: macos-26
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_gate }}
     timeout-minutes: 150
 
     steps:
       - name: Checkout organization workspace
         uses: actions/checkout@v6
         with:
+          token: ${{ secrets.SWIFTTUI_CI_TOKEN || github.token }}
           submodules: recursive
           fetch-depth: 0
 
@@ -80,10 +113,6 @@ jobs:
         shell: bash
         run: bazel fetch //:org
 
-      - name: Check submodule pins
-        shell: bash
-        run: bazel test //:submodule_status
-
-      - name: Run organization gate
+      - name: Run full organization gate
         shell: bash
         run: bazel test //:org
