@@ -41,9 +41,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global @bazel/bazelisk@1.28.1
+          npm install --prefix "$RUNNER_TEMP/bazelisk" @bazel/bazelisk@1.28.1
+          echo "$RUNNER_TEMP/bazelisk/node_modules/.bin" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/tools/bin" >> "$GITHUB_PATH"
-          "$GITHUB_WORKSPACE/tools/bin/bazel" version
+          PATH="$RUNNER_TEMP/bazelisk/node_modules/.bin:$GITHUB_WORKSPACE/tools/bin:$PATH" \
+            "$GITHUB_WORKSPACE/tools/bin/bazel" version
 
       - name: Run organization contract
         shell: bash
@@ -67,9 +69,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global @bazel/bazelisk@1.28.1
+          npm install --prefix "$RUNNER_TEMP/bazelisk" @bazel/bazelisk@1.28.1
+          echo "$RUNNER_TEMP/bazelisk/node_modules/.bin" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/tools/bin" >> "$GITHUB_PATH"
-          "$GITHUB_WORKSPACE/tools/bin/bazel" version
+          PATH="$RUNNER_TEMP/bazelisk/node_modules/.bin:$GITHUB_WORKSPACE/tools/bin:$PATH" \
+            "$GITHUB_WORKSPACE/tools/bin/bazel" version
 
       - name: Install native gate dependencies
         shell: bash
