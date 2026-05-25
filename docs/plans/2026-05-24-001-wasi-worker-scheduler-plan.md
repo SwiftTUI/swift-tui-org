@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make the static WASI browser runtime honor SwiftTUI timer deadlines
 closely enough that the WebExample Game of Life scene advances at the authored
@@ -65,7 +65,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 - Create: `swift-tui-examples/WebExample/src/frame-cadence.browser.ts`
 - Modify: `swift-tui-examples/WebExample/package.json`
 
-- [ ] **Step 1: Write the browser cadence test**
+- [x] **Step 1: Write the browser cadence test**
 
   Create `src/frame-cadence.browser.ts` with a JSON-parse probe that records
   decoded web-surface frame times. The current static WASI worker should fail
@@ -170,7 +170,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   }
   ```
 
-- [ ] **Step 2: Include the cadence test in the browser script**
+- [x] **Step 2: Include the cadence test in the browser script**
 
   In `package.json`, change `test:browser` to run all browser integration files:
 
@@ -178,7 +178,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   "test:browser": "playwright install chromium && bun run build && bun test ./src/*.browser.ts --timeout 120000"
   ```
 
-- [ ] **Step 3: Run the regression and capture the failure**
+- [x] **Step 3: Run the regression and capture the failure**
 
   Run:
 
@@ -189,7 +189,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   Expected now: the existing nonblank canvas test passes and the new cadence
   test fails with `median` above `150`.
 
-- [ ] **Step 4: Commit the failing regression**
+- [x] **Step 4: Commit the failing regression**
 
   ```bash
   git -C swift-tui-examples add WebExample/src/frame-cadence.browser.ts WebExample/package.json
@@ -202,7 +202,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 - Modify: `swift-tui-web/packages/web/src/wasi/SharedInputQueue.ts`
 - Modify: `swift-tui-web/packages/web/src/wasi/SharedInputQueue.test.ts`
 
-- [ ] **Step 1: Add failing queue readiness tests**
+- [x] **Step 1: Add failing queue readiness tests**
 
   Append these tests to `SharedInputQueue.test.ts`:
 
@@ -250,7 +250,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   });
   ```
 
-- [ ] **Step 2: Run tests and verify they fail**
+- [x] **Step 2: Run tests and verify they fail**
 
   ```bash
   bun --cwd swift-tui-web/packages/web test src/wasi/SharedInputQueue.test.ts
@@ -259,7 +259,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   Expected: FAIL because `availableBytes()` and `waitForReadable(...)` do not
   exist.
 
-- [ ] **Step 3: Implement queue readiness without consuming bytes**
+- [x] **Step 3: Implement queue readiness without consuming bytes**
 
   Add this result type and methods to `SharedInputQueue.ts`:
 
@@ -299,7 +299,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   }
   ```
 
-- [ ] **Step 4: Verify queue tests pass**
+- [x] **Step 4: Verify queue tests pass**
 
   ```bash
   bun --cwd swift-tui-web/packages/web test src/wasi/SharedInputQueue.test.ts
@@ -307,7 +307,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit the queue readiness API**
+- [x] **Step 5: Commit the queue readiness API**
 
   ```bash
   git -C swift-tui-web add packages/web/src/wasi/SharedInputQueue.ts packages/web/src/wasi/SharedInputQueue.test.ts
@@ -320,7 +320,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 - Create: `swift-tui-web/packages/web/src/wasi/WasiPollScheduler.ts`
 - Create: `swift-tui-web/packages/web/src/wasi/WasiPollScheduler.test.ts`
 
-- [ ] **Step 1: Write scheduler tests against a fake memory view**
+- [x] **Step 1: Write scheduler tests against a fake memory view**
 
   Create `WasiPollScheduler.test.ts` with tests that construct subscriptions
   through the same `wasi.Subscription` and `wasi.Event` classes the worker uses.
@@ -399,7 +399,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   }
   ```
 
-- [ ] **Step 2: Run tests and verify they fail**
+- [x] **Step 2: Run tests and verify they fail**
 
   ```bash
   bun --cwd swift-tui-web/packages/web test src/wasi/WasiPollScheduler.test.ts
@@ -407,7 +407,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 
   Expected: FAIL because `WasiPollScheduler.ts` does not exist.
 
-- [ ] **Step 3: Implement the scheduler module**
+- [x] **Step 3: Implement the scheduler module**
 
   Create `WasiPollScheduler.ts` with:
 
@@ -485,7 +485,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   should write one `wasi.Event` per ready subscription and return success with at
   least one event when a clock expires, stdin becomes readable, or stdin closes.
 
-- [ ] **Step 4: Verify scheduler unit tests pass**
+- [x] **Step 4: Verify scheduler unit tests pass**
 
   ```bash
   bun --cwd swift-tui-web/packages/web test src/wasi/WasiPollScheduler.test.ts
@@ -493,7 +493,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit the scheduler module**
+- [x] **Step 5: Commit the scheduler module**
 
   ```bash
   git -C swift-tui-web add packages/web/src/wasi/WasiPollScheduler.ts packages/web/src/wasi/WasiPollScheduler.test.ts
@@ -505,7 +505,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 **Files:**
 - Modify: `swift-tui-web/packages/web/src/wasi/WasmSceneWorker.ts`
 
-- [ ] **Step 1: Replace the old clock-only shim**
+- [x] **Step 1: Replace the old clock-only shim**
 
   In `WasmSceneWorker.ts`, replace `installEfficientClockPoll(...)` with a
   scheduler install that owns the same import patch:
@@ -553,7 +553,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   }
   ```
 
-- [ ] **Step 2: Make `BlockingInputFileDescriptor` implement readiness**
+- [x] **Step 2: Make `BlockingInputFileDescriptor` implement readiness**
 
   Add these methods:
 
@@ -571,7 +571,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   queue is not closed. `poll_oneoff` now blocks for readiness; `fd_read` should
   still be non-blocking when called outside a readiness poll.
 
-- [ ] **Step 3: Run worker-adjacent tests**
+- [x] **Step 3: Run worker-adjacent tests**
 
   ```bash
   bun --cwd swift-tui-web/packages/web test src/wasi
@@ -579,7 +579,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 4: Commit the worker integration**
+- [x] **Step 4: Commit the worker integration**
 
   ```bash
   git -C swift-tui-web add packages/web/src/wasi/WasmSceneWorker.ts
@@ -591,7 +591,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 **Files:**
 - No new files in this task.
 
-- [ ] **Step 1: Run the focused browser regression**
+- [x] **Step 1: Run the focused browser regression**
 
   ```bash
   bun --cwd swift-tui-examples/WebExample run test:browser
@@ -600,7 +600,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   Expected: PASS. The cadence test should report a steady median below `150 ms`
   and p95 below `190 ms`.
 
-- [ ] **Step 2: Run web package tests**
+- [x] **Step 2: Run web package tests**
 
   ```bash
   bun --cwd swift-tui-web/packages/web test
@@ -608,7 +608,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 3: Rebuild the WebExample static bundle**
+- [x] **Step 3: Rebuild the WebExample static bundle**
 
   ```bash
   bun --cwd swift-tui-examples/WebExample run build
@@ -617,7 +617,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   Expected: PASS and `WebExample/dist/wasm-scene-worker.js` includes
   the scheduler-backed worker bundle.
 
-- [ ] **Step 4: Commit the passing cadence proof**
+- [x] **Step 4: Commit the passing cadence proof**
 
   ```bash
   git -C swift-tui-examples add WebExample/package.json WebExample/src/frame-cadence.browser.ts
@@ -630,7 +630,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 - Modify: `swift-tui/docs/HOSTS-AND-PLATFORMS.md`
 - Modify: `swift-tui/docs/RENDER-PIPELINE.md`
 
-- [ ] **Step 1: Document the worker scheduling contract**
+- [x] **Step 1: Document the worker scheduling contract**
 
   In `HOSTS-AND-PLATFORMS.md`, add this paragraph under `## The web packages`:
 
@@ -641,7 +641,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   stdin readability, resize/style control messages, and queue closure.
   ```
 
-- [ ] **Step 2: Document the WASI inline-tail distinction**
+- [x] **Step 2: Document the WASI inline-tail distinction**
 
   In `RENDER-PIPELINE.md`, extend the WASI bullet under
   `## Main actor versus frame-tail worker`:
@@ -653,7 +653,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
   pipeline consumes the wakeups after the WASI runtime resumes Swift tasks.
   ```
 
-- [ ] **Step 3: Verify docs and package tests**
+- [x] **Step 3: Verify docs and package tests**
 
   ```bash
   git -C swift-tui diff --check
@@ -663,7 +663,7 @@ Playwright, SharedArrayBuffer, Atomics, Swift 6.3.1 via `swiftly`.
 
   Expected: all commands pass.
 
-- [ ] **Step 4: Commit the documentation**
+- [x] **Step 4: Commit the documentation**
 
   ```bash
   git -C swift-tui add docs/HOSTS-AND-PLATFORMS.md docs/RENDER-PIPELINE.md

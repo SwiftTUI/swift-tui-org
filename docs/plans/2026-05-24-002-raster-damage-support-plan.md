@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Produce accurate raster damage for committed frames and consume it in
 each presentation path: terminal-native, WASI/browser, localhost WebHost, and
@@ -72,7 +72,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 - Create: `swift-tui/Sources/SwiftTUICore/Raster/RasterSurfaceDamageDiff.swift`
 - Create: `swift-tui/Tests/SwiftTUICoreTests/RasterSurfaceDamageDiffTests.swift`
 
-- [ ] **Step 1: Write failing core diff tests**
+- [x] **Step 1: Write failing core diff tests**
 
   Create `RasterSurfaceDamageDiffTests.swift`:
 
@@ -177,7 +177,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   }
   ```
 
-- [ ] **Step 2: Run tests and verify they fail**
+- [x] **Step 2: Run tests and verify they fail**
 
   ```bash
   swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests
@@ -185,7 +185,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: FAIL because `RasterSurfaceDamageDiff` does not exist.
 
-- [ ] **Step 3: Implement `RasterSurfaceDamageDiff`**
+- [x] **Step 3: Implement `RasterSurfaceDamageDiff`**
 
   Create `RasterSurfaceDamageDiff.swift`:
 
@@ -304,7 +304,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   }
   ```
 
-- [ ] **Step 4: Verify core diff tests pass**
+- [x] **Step 4: Verify core diff tests pass**
 
   ```bash
   swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests
@@ -312,7 +312,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit the core diff**
+- [x] **Step 5: Commit the core diff**
 
   ```bash
   git add Sources/SwiftTUICore/Raster/RasterSurfaceDamageDiff.swift Tests/SwiftTUICoreTests/RasterSurfaceDamageDiffTests.swift
@@ -325,7 +325,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 - Modify: `swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailRenderer+InlineStages.swift`
 - Modify: `swift-tui/Tests/SwiftTUITests/PipelineContractTests.swift`
 
-- [ ] **Step 1: Add a failing renderer contract test**
+- [x] **Step 1: Add a failing renderer contract test**
 
   Add this test to `PipelineContractTests`:
 
@@ -363,7 +363,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   }
   ```
 
-- [ ] **Step 2: Run the renderer contract test and verify it fails**
+- [x] **Step 2: Run the renderer contract test and verify it fails**
 
   ```bash
   swiftly run swift test --filter SwiftTUITests.PipelineContractTests/rendererDerivesRasterDamageForBroadStateUpdates
@@ -372,7 +372,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   Expected: FAIL because broad state updates can still produce `nil`
   presentation damage.
 
-- [ ] **Step 3: Compute final damage after rasterization**
+- [x] **Step 3: Compute final damage after rasterization**
 
   In `FrameTailRenderer+InlineStages.swift`, update `rasterizeDrawTree(...)` so
   the rasterizer can still use retained-layout damage for incremental
@@ -402,7 +402,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   )
   ```
 
-- [ ] **Step 4: Verify focused Swift tests pass**
+- [x] **Step 4: Verify focused Swift tests pass**
 
   ```bash
   swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests
@@ -411,7 +411,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit runtime wiring**
+- [x] **Step 5: Commit runtime wiring**
 
   ```bash
   git add Sources/SwiftTUIRuntime/Rendering/FrameTailRenderer+InlineStages.swift Tests/SwiftTUITests/PipelineContractTests.swift
@@ -426,7 +426,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 - Modify: `swift-tui/Platforms/SwiftUI/Tests/SwiftUIHostTests/HostedSurfaceRegressionTests.swift`
 - Modify: `swift-tui/Tests/SwiftTUITests/TerminalPresentationTests.swift`
 
-- [ ] **Step 1: Add WASI semantic frame damage coverage**
+- [x] **Step 1: Add WASI semantic frame damage coverage**
 
   Add a test mirroring the WebHost transport damage test:
 
@@ -466,7 +466,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   }
   ```
 
-- [ ] **Step 2: Add host-managed SwiftUI frame damage coverage**
+- [x] **Step 2: Add host-managed SwiftUI frame damage coverage**
 
   In `HostedSurfaceRegressionTests.swift`, add a test that presents two
   compatible frames through `HostedRasterSurface` and waits for the second frame:
@@ -493,7 +493,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   }
   ```
 
-- [ ] **Step 3: Add a terminal planner smoke test for diff-derived empty damage**
+- [x] **Step 3: Add a terminal planner smoke test for diff-derived empty damage**
 
   In `TerminalPresentationTests.swift`, add:
 
@@ -515,7 +515,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   }
   ```
 
-- [ ] **Step 4: Run focused presentation tests**
+- [x] **Step 4: Run focused presentation tests**
 
   ```bash
   swiftly run swift test --filter WASISurfaceBridgeTests.WebSurfaceTransportTests
@@ -526,7 +526,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit path coverage**
+- [x] **Step 5: Commit path coverage**
 
   ```bash
   git add Platforms/WASI/Tests/WASISurfaceBridgeTests/WebSurfaceTransportTests.swift Platforms/WebHost/Tests/SwiftTUIWebHostTests/WebSocketSurfaceTransportTests.swift Platforms/SwiftUI/Tests/SwiftUIHostTests/HostedSurfaceRegressionTests.swift Tests/SwiftTUITests/TerminalPresentationTests.swift
@@ -538,7 +538,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 **Files:**
 - Modify: `swift-tui-web/packages/web/src/WebHostSceneRuntime.test.ts`
 
-- [ ] **Step 1: Add empty-damage canvas coverage**
+- [x] **Step 1: Add empty-damage canvas coverage**
 
   Add a test after the existing damaged-cells test:
 
@@ -589,7 +589,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   });
   ```
 
-- [ ] **Step 2: Add image-removal dirty-row coverage**
+- [x] **Step 2: Add image-removal dirty-row coverage**
 
   Add this test after the empty-damage test:
 
@@ -666,7 +666,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   });
   ```
 
-- [ ] **Step 3: Run browser runtime tests**
+- [x] **Step 3: Run browser runtime tests**
 
   ```bash
   bun --cwd swift-tui-web/packages/web test src/WebHostSceneRuntime.test.ts
@@ -674,7 +674,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: PASS.
 
-- [ ] **Step 4: Commit browser damage tests**
+- [x] **Step 4: Commit browser damage tests**
 
   ```bash
   git -C swift-tui-web add packages/web/src/WebHostSceneRuntime.test.ts
@@ -687,7 +687,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 - Create: `swift-tui-examples/WebExample/src/raster-damage.browser.ts`
 - Modify: `swift-tui-examples/WebExample/package.json`
 
-- [ ] **Step 1: Write the real-path damage browser test**
+- [x] **Step 1: Write the real-path damage browser test**
 
   Create `src/raster-damage.browser.ts`:
 
@@ -787,7 +787,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   }, 120_000);
   ```
 
-- [ ] **Step 2: Include the damage test in the browser script**
+- [x] **Step 2: Include the damage test in the browser script**
 
   In `package.json`, change `test:browser` to run all browser integration files:
 
@@ -795,7 +795,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   "test:browser": "playwright install chromium && bun run build && bun test ./src/*.browser.ts --timeout 120000"
   ```
 
-- [ ] **Step 3: Run the real browser integration**
+- [x] **Step 3: Run the real browser integration**
 
   ```bash
   bun --cwd swift-tui-examples/WebExample run test:browser
@@ -803,7 +803,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: PASS with the cadence and damage assertions both satisfied.
 
-- [ ] **Step 4: Commit real-path damage proof**
+- [x] **Step 4: Commit real-path damage proof**
 
   ```bash
   git -C swift-tui-examples add WebExample/src/raster-damage.browser.ts WebExample/package.json
@@ -816,7 +816,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 - Modify: `swift-tui/docs/RENDER-PIPELINE.md`
 - Modify: `swift-tui/docs/HOSTS-AND-PLATFORMS.md`
 
-- [ ] **Step 1: Document retained-layout damage versus raster diff damage**
+- [x] **Step 1: Document retained-layout damage versus raster diff damage**
 
   In `RENDER-PIPELINE.md`, add this paragraph after the raster phase
   description:
@@ -830,7 +830,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   host fallback for broad state invalidations such as task-driven root updates.
   ```
 
-- [ ] **Step 2: Document per-host damage consumption**
+- [x] **Step 2: Document per-host damage consumption**
 
   In `HOSTS-AND-PLATFORMS.md`, add this table below `## The host-frame
   contract`:
@@ -844,7 +844,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
   | Host-managed SwiftUI | `HostedRasterSurface` carries damage through `SemanticHostFrame`; `NativeTerminalSurfaceView` invalidates only dirty native rects. |
   ```
 
-- [ ] **Step 3: Run docs and focused tests**
+- [x] **Step 3: Run docs and focused tests**
 
   ```bash
   git -C swift-tui diff --check
@@ -855,7 +855,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: PASS.
 
-- [ ] **Step 4: Run the repo gate**
+- [x] **Step 4: Run the repo gate**
 
   ```bash
   bun --cwd swift-tui run test
@@ -863,7 +863,7 @@ SwiftUIHost, Swift Testing, TypeScript, Bun test, Playwright.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit documentation**
+- [x] **Step 5: Commit documentation**
 
   ```bash
   git -C swift-tui add docs/RENDER-PIPELINE.md docs/HOSTS-AND-PLATFORMS.md
