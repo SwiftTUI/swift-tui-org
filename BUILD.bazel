@@ -3,6 +3,15 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 package(default_visibility = ["//visibility:public"])
 
 sh_test(
+    name = "org_ci_workflow",
+    srcs = ["tools/bazel/check_org_ci_workflow.sh"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_test(
     name = "submodule_status",
     srcs = ["tools/bazel/submodule_status.sh"],
     tags = [
@@ -44,6 +53,7 @@ test_suite(
 test_suite(
     name = "org",
     tests = [
+        ":org_ci_workflow",
         ":submodule_status",
         ":native_gates",
     ],

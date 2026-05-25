@@ -91,6 +91,7 @@ The child native gates still require their native tools:
 
 - Swift 6.3.x and SwiftPM
 - Xcode/macOS toolchain for app/example gates that require it
+- Binaryen and Brotli for browser/WASI packaging checks
 
 Swift and Xcode are intentionally not installed by mise because they come from
 the local Apple toolchain setup.
@@ -142,6 +143,11 @@ bazel test //:swift_tui_site_native_gate
 ```sh
 bazel test //:org
 ```
+
+CI runs the same aggregate from `.github/workflows/org-gate.yml`. Child
+repositories still own their native workflow definitions; the root workflow
+checks the pinned submodule combination by running the Bazel orchestration
+target over those child-owned gates.
 
 ## What The Native Gates Run
 
