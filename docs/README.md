@@ -20,3 +20,7 @@ documentation in their own `docs/` trees.
   execution plan for improving FilePreviewer responsiveness with cached
   directory listings, lazy file-row rendering, and explicit preview-process
   cleanup.
+- [plans/2026-05-25-001-shared-surface-damage-contract-plan.md](plans/2026-05-25-001-shared-surface-damage-contract-plan.md) -
+  execution plan for fixing command-palette raster damage regressions by
+  splitting private raster reuse hints from shared host-facing raster damage and
+  encoding presentation/compositing topology in core metadata.
