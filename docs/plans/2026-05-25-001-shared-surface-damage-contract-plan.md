@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make every rendering frontend consume a host-independent raster damage
 contract that is derived from actual committed raster surfaces, so command
@@ -116,7 +116,7 @@ via `swiftly`.
 - Modify: `swift-tui/Sources/SwiftTUICore/Resolve/ResolvedNode.swift`
 - Modify: `swift-tui/Sources/SwiftTUICore/Place/PlacedNode.swift`
 
-- [ ] **Step 1: Create the shared surface-composition metadata type**
+- [x] **Step 1: Create the shared surface-composition metadata type**
 
   Create `swift-tui/Sources/SwiftTUICore/Commit/SurfaceCompositionMetadata.swift`:
 
@@ -237,7 +237,7 @@ via `swiftly`.
   }
   ```
 
-- [ ] **Step 2: Add metadata to resolved nodes**
+- [x] **Step 2: Add metadata to resolved nodes**
 
   Modify `swift-tui/Sources/SwiftTUICore/Resolve/ResolvedNode.swift`:
 
@@ -249,7 +249,7 @@ via `swiftly`.
   package initializers, assign it in each initializer, and include it in
   `Equatable` through the existing synthesized node equality path.
 
-- [ ] **Step 3: Mirror metadata through placed nodes**
+- [x] **Step 3: Mirror metadata through placed nodes**
 
   Modify `PlacedNodeResolvedMetadata` in
   `swift-tui/Sources/SwiftTUICore/Place/PlacedNode.swift`:
@@ -271,7 +271,7 @@ via `swiftly`.
   `resolvedMetadata`, and update `applyResolvedMetadata(_:)` so retained
   placement reuse refreshes this metadata every frame.
 
-- [ ] **Step 4: Run the package build**
+- [x] **Step 4: Run the package build**
 
   ```bash
   swiftly run swift test --package-path swift-tui --filter SwiftTUITests.PipelineContractTests
@@ -281,7 +281,7 @@ via `swiftly`.
   defaulted `surfaceComposition` parameter propagated. Fix those compile errors
   by passing `.normal` or using the initializer default.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git -C swift-tui add Sources/SwiftTUICore/Commit/SurfaceCompositionMetadata.swift \
@@ -299,7 +299,7 @@ via `swiftly`.
 - Modify: `swift-tui/Sources/SwiftTUIViews/Presentation/OverlayStack.swift`
 - Modify: `swift-tui/Sources/SwiftTUIViews/Modifiers/ViewMetadataModifiers.swift`
 
-- [ ] **Step 1: Mark the portal root**
+- [x] **Step 1: Mark the portal root**
 
   In `composePresentationPortalTree(...)`, construct the no-overlay portal
   root with explicit metadata:
@@ -315,7 +315,7 @@ via `swiftly`.
   The no-overlay case still matters because open and dismiss compare the same
   portal root across the transition.
 
-- [ ] **Step 2: Mark the overlay stack and overlay host**
+- [x] **Step 2: Mark the overlay stack and overlay host**
 
   In `composeOverlayStackTree(...)`, pass this metadata to the returned
   `ResolvedNode`:
@@ -339,7 +339,7 @@ via `swiftly`.
   )
   ```
 
-- [ ] **Step 3: Mark each overlay entry without inspecting kind names later**
+- [x] **Step 3: Mark each overlay entry without inspecting kind names later**
 
   In `OverlayStackEntryHost.resolveElements(in:)`, pass this metadata to the
   `ResolvedNode` that uses `entry.kindName`:
@@ -355,7 +355,7 @@ via `swiftly`.
   This is where presentation-specific knowledge belongs. The damage resolver
   will only see shared metadata.
 
-- [ ] **Step 4: Mark compositing groups**
+- [x] **Step 4: Mark compositing groups**
 
   In `DrawEffectModifier.resolve(content:in:)`, after appending the effect,
   mark compositing groups:
@@ -374,7 +374,7 @@ via `swiftly`.
   covered by post-raster actual damage; a later optimization can add a stricter
   blend-specific scope if needed.
 
-- [ ] **Step 5: Add a metadata-focused presentation test**
+- [x] **Step 5: Add a metadata-focused presentation test**
 
   Add this test to `swift-tui/Tests/SwiftTUITests/PresentationSurfaceTests.swift`:
 
@@ -405,7 +405,7 @@ via `swiftly`.
   #expect(entries.contains { $0.role == .detachedOverlayEntry && $0.stableKey?.isEmpty == false })
   ```
 
-- [ ] **Step 6: Run the focused presentation tests**
+- [x] **Step 6: Run the focused presentation tests**
 
   ```bash
   swiftly run swift test --package-path swift-tui --filter SwiftTUITests.PresentationSurfaceTests
@@ -413,7 +413,7 @@ via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
   ```bash
   git -C swift-tui add Sources/SwiftTUIViews/Presentation/PresentationCoordinator.swift \
@@ -434,7 +434,7 @@ via `swiftly`.
 - Modify: `swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailRenderer+InlineStages.swift`
 - Modify: `swift-tui/Sources/SwiftTUICore/Commit/FrameArtifacts.swift`
 
-- [ ] **Step 1: Carry previous topology into frame-tail input**
+- [x] **Step 1: Carry previous topology into frame-tail input**
 
   In `FrameTailRetainedInput`, add:
 
@@ -463,7 +463,7 @@ via `swiftly`.
   Keep `previousFrameIndex` based on `baselinePlacedTree`; retained layout still
   needs the canonical layout baseline.
 
-- [ ] **Step 2: Rename the resolver role in code comments and model**
+- [x] **Step 2: Rename the resolver role in code comments and model**
 
   Keep the file name for a small diff, but change the internal comments in
   `FrameTailPresentationDamage.swift` to say that the resolver computes a
@@ -487,7 +487,7 @@ via `swiftly`.
   }
   ```
 
-- [ ] **Step 3: Make topology changes block pre-raster reuse**
+- [x] **Step 3: Make topology changes block pre-raster reuse**
 
   Change the resolver signature to:
 
@@ -524,7 +524,7 @@ via `swiftly`.
   )
   ```
 
-- [ ] **Step 4: Derive artifact damage only after rasterization**
+- [x] **Step 4: Derive artifact damage only after rasterization**
 
   In `FrameTailRenderer+InlineStages.swift`, replace:
 
@@ -559,7 +559,7 @@ via `swiftly`.
   repainting rows. It does not get to define the artifact or frontend damage
   contracts.
 
-- [ ] **Step 5: Update artifact documentation**
+- [x] **Step 5: Update artifact documentation**
 
   In `FrameArtifacts.swift`, replace the `presentationDamage` doc with:
 
@@ -577,7 +577,7 @@ via `swiftly`.
   public var presentationDamage: PresentationDamage?
   ```
 
-- [ ] **Step 6: Run the focused pipeline tests**
+- [x] **Step 6: Run the focused pipeline tests**
 
   ```bash
   swiftly run swift test --package-path swift-tui --filter SwiftTUITests.PipelineContractTests
@@ -588,7 +588,7 @@ via `swiftly`.
   target name, run the exact target that owns
   `swift-tui/Tests/SwiftTUICoreTests/RasterSurfaceDamageDiffTests.swift`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
   ```bash
   git -C swift-tui add Sources/SwiftTUIRuntime/Rendering/FrameTailModels.swift \
@@ -607,7 +607,7 @@ via `swiftly`.
 - Create: `swift-tui/Tests/SwiftTUITests/SurfaceDamageContractTests.swift`
 - Modify: `swift-tui/Tests/SwiftTUITests/PipelineContractTests.swift`
 
-- [ ] **Step 1: Create a coverage helper**
+- [x] **Step 1: Create a coverage helper**
 
   Create `SurfaceDamageContractTests.swift` with this helper:
 
@@ -736,7 +736,7 @@ via `swiftly`.
   }
   ```
 
-- [ ] **Step 2: Verify the test fails before Task 3 and passes after Task 3**
+- [x] **Step 2: Verify the test fails before Task 3 and passes after Task 3**
 
   ```bash
   swiftly run swift test --package-path swift-tui --filter SwiftTUITests.SurfaceDamageContractTests
@@ -745,7 +745,7 @@ via `swiftly`.
   Expected before Task 3: FAIL if retained-layout damage escapes as artifact
   damage. Expected after Task 3: PASS.
 
-- [ ] **Step 3: Strengthen the existing broad update contract**
+- [x] **Step 3: Strengthen the existing broad update contract**
 
   In `PipelineContractTests.rendererDerivesRasterDamageForBroadStateUpdates`,
   capture the first frame and assert equality with the actual diff:
@@ -771,7 +771,7 @@ via `swiftly`.
   )
   ```
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
   ```bash
   swiftly run swift test --package-path swift-tui --filter SwiftTUITests.SurfaceDamageContractTests
@@ -780,7 +780,7 @@ via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git -C swift-tui add Tests/SwiftTUITests/SurfaceDamageContractTests.swift \
@@ -795,7 +795,7 @@ via `swiftly`.
 **Files:**
 - Modify: `swift-tui-examples/gallery/Tests/GalleryDemoViewsTests/GalleryTabSwitchTests.swift`
 
-- [ ] **Step 1: Add a damage-aware gallery host**
+- [x] **Step 1: Add a damage-aware gallery host**
 
   Add this host near `GalleryTabSwitchRecordingHost`:
 
@@ -860,7 +860,7 @@ via `swiftly`.
   }
   ```
 
-- [ ] **Step 2: Add the default async palette open/dismiss test**
+- [x] **Step 2: Add the default async palette open/dismiss test**
 
   Add this test to `GalleryTabSwitchTests`:
 
@@ -921,7 +921,7 @@ via `swiftly`.
   host-facing value must be re-derived at the presentation boundary from the
   previous actually presented raster surface.
 
-- [ ] **Step 3: Run the gallery focused test**
+- [x] **Step 3: Run the gallery focused test**
 
   ```bash
   swiftly run swift test --package-path swift-tui-examples/gallery --filter GalleryDemoViewsTests.GalleryTabSwitchTests/defaultAsyncPaletteOpenAndDismissPublishValidSharedRasterDamage
@@ -930,7 +930,7 @@ via `swiftly`.
   Expected: PASS after Task 3. Before Task 3, this should record a damage
   mismatch or show a one-row/three-cell damage frame for palette open.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git -C swift-tui-examples add gallery/Tests/GalleryDemoViewsTests/GalleryTabSwitchTests.swift
@@ -945,7 +945,7 @@ via `swiftly`.
 - Modify: `swift-tui-web/packages/web/src/WebHostSceneRuntime.test.ts`
 - Modify: `swift-tui/Tests/SwiftTUITests/HostedSceneSessionTests.swift`
 
-- [ ] **Step 1: Add a web dirty-rect removal regression**
+- [x] **Step 1: Add a web dirty-rect removal regression**
 
   In `WebHostSceneRuntime.test.ts`, add a test that sends:
 
@@ -970,7 +970,7 @@ via `swiftly`.
   small test-local helper that checks painted cell positions for the characters
   used by the fixture rows. Do not add production web runtime logic.
 
-- [ ] **Step 2: Add a hosted surface damage equality regression**
+- [x] **Step 2: Add a hosted surface damage equality regression**
 
   In `HostedSceneSessionTests.swift`, add a test that waits for two hosted
   frames from a small state-changing view and asserts:
@@ -988,7 +988,7 @@ via `swiftly`.
   Use the existing `HostedRasterSurface.waitForFrames(matching:)` helper so the
   test observes `SemanticHostFrame.rasterDamage`, not just `RasterSurface`.
 
-- [ ] **Step 3: Run focused consumer tests**
+- [x] **Step 3: Run focused consumer tests**
 
   ```bash
   bun --cwd swift-tui-web test packages/web/src/WebHostSceneRuntime.test.ts
@@ -997,7 +997,7 @@ via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git -C swift-tui-web add packages/web/src/WebHostSceneRuntime.test.ts
@@ -1015,7 +1015,7 @@ via `swiftly`.
 - Modify: `swift-tui/docs/RENDER-PIPELINE.md`
 - Modify: `swift-tui/docs/HOSTS-AND-PLATFORMS.md`
 
-- [ ] **Step 1: Document the damage split**
+- [x] **Step 1: Document the damage split**
 
   In `swift-tui/docs/RENDER-PIPELINE.md`, add a section named
   `Host-Facing Raster Damage`:
@@ -1051,7 +1051,7 @@ via `swiftly`.
   actual raster diff.
   ```
 
-- [ ] **Step 2: Document frontend consumption**
+- [x] **Step 2: Document frontend consumption**
 
   In `swift-tui/docs/HOSTS-AND-PLATFORMS.md`, add:
 
@@ -1074,7 +1074,7 @@ via `swiftly`.
   bug belongs to that frontend's damage consumer.
   ```
 
-- [ ] **Step 3: Run focused checks**
+- [x] **Step 3: Run focused checks**
 
   ```bash
   swiftly run swift test --package-path swift-tui --filter SwiftTUITests.SurfaceDamageContractTests
@@ -1086,7 +1086,7 @@ via `swiftly`.
 
   Expected: PASS.
 
-- [ ] **Step 4: Run the org-level fast gate**
+- [x] **Step 4: Run the org-level fast gate**
 
   From the org root:
 
@@ -1098,7 +1098,7 @@ via `swiftly`.
   or stale build state, record the failing target and run the focused command
   above for the touched child repo before changing more code.
 
-- [ ] **Step 5: Commit docs and submodule pins**
+- [x] **Step 5: Commit docs and submodule pins**
 
   ```bash
   git -C swift-tui add docs/RENDER-PIPELINE.md docs/HOSTS-AND-PLATFORMS.md
@@ -1129,31 +1129,3 @@ via `swiftly`.
   metadata, not damage resolver string matching.
 - TerminalHost has no product-code changes for this fix.
 - Web canvas and hosted raster tests validate the same shared damage contract.
-
-## Final Manual Smoke
-
-Run the gallery in default async mode:
-
-```bash
-TERMUI_DIAGNOSTICS=/tmp/gallery-palette-surface-damage-after.tsv \
-TERMUI_RENDER_MODE=async \
-swiftly run swift run --package-path swift-tui-examples/gallery gallery-demo --no-color
-```
-
-Manual steps:
-
-1. Press `Ctrl+K`.
-2. Confirm the command palette body appears on the first visible frame.
-3. Press `Escape`.
-4. Confirm the palette clears on the first visible frame.
-5. Switch across several gallery tabs.
-6. Confirm no stale palette fragments are revealed or cleared piecemeal.
-
-Inspect diagnostics:
-
-```bash
-tail -20 /tmp/gallery-palette-surface-damage-after.tsv
-```
-
-Expected: no committed palette open or dismiss frame reports a tiny
-one-row/three-cell damage span when the actual surface changed across many rows.

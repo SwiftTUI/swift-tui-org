@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Split SwiftTUI across a small GitHub organization without making the
 default Swift terminal and WebHost consumer path harder, and without losing a
@@ -103,7 +103,7 @@ list that silently goes stale when a target is added.)
 - Modify: `docs/ARCHITECTURE.md`
 - Modify: `docs/DEVELOPMENT.md`
 
-- [ ] **Step 1: Write `docs/REPOSITORY-SPLIT.md`**
+- [x] **Step 1: Write `docs/REPOSITORY-SPLIT.md`**
 
   Use this structure and fill it with the repository table and invariants from
   this plan:
@@ -144,7 +144,7 @@ list that silently goes stale when a target is added.)
   example becomes a published library product.
   ```
 
-- [ ] **Step 2: Link the decision from `docs/README.md`**
+- [x] **Step 2: Link the decision from `docs/README.md`**
 
   `docs/README.md` already has a `## Planning documents` section that links this
   plan. Do not add a second heading — add one bullet for the new decision record
@@ -163,7 +163,7 @@ list that silently goes stale when a target is added.)
   rg -n "## Planning documents" docs/README.md
   ```
 
-- [ ] **Step 3: Update architecture wording**
+- [x] **Step 3: Update architecture wording**
 
   In `docs/ARCHITECTURE.md`, replace:
 
@@ -181,7 +181,7 @@ list that silently goes stale when a target is added.)
   API.
   ```
 
-- [ ] **Step 4: Update development wording**
+- [x] **Step 4: Update development wording**
 
   Add a short section to `docs/DEVELOPMENT.md` under `Releases`:
 
@@ -199,7 +199,7 @@ list that silently goes stale when a target is added.)
   version in the commit message.
   ```
 
-- [ ] **Step 5: Verify documentation edits**
+- [x] **Step 5: Verify documentation edits**
 
   Run:
 
@@ -217,7 +217,7 @@ list that silently goes stale when a target is added.)
   only product names and `Platforms/...` resource paths, neither of which the
   guard rejects.
 
-- [ ] **Step 6: Commit the decision**
+- [x] **Step 6: Commit the decision**
 
   ```bash
   git add docs/REPOSITORY-SPLIT.md docs/README.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
@@ -239,7 +239,7 @@ The `run_repo_policy_check` call signature this task appends to matches the
 existing helper exactly: `mode`, `repo_root`, `title`, `rerun_command`, then the
 command and its argv.
 
-- [ ] **Step 1: Add a repository split boundary check**
+- [x] **Step 1: Add a repository split boundary check**
 
   Create `Scripts/check_repository_split_boundary.sh`:
 
@@ -278,7 +278,7 @@ command and its argv.
   printf '[check_repository_split_boundary] ok\n'
   ```
 
-- [ ] **Step 2: Add the check to the policy phase**
+- [x] **Step 2: Add the check to the policy phase**
 
   In `Scripts/lib/repo_policy_checks.sh`, add this block after
   `Check WebHost package boundary`:
@@ -292,7 +292,7 @@ command and its argv.
     ./Scripts/check_repository_split_boundary.sh
   ```
 
-- [ ] **Step 3: Confirm package products still expose the consumer contract**
+- [x] **Step 3: Confirm package products still expose the consumer contract**
 
   Run:
 
@@ -306,7 +306,7 @@ command and its argv.
   and `SwiftTUICLI`; the new script prints
   `[check_repository_split_boundary] ok`.
 
-- [ ] **Step 4: Run the focused gate**
+- [x] **Step 4: Run the focused gate**
 
   ```bash
   bun run test
@@ -314,7 +314,7 @@ command and its argv.
 
   Expected: the repo gate passes.
 
-- [ ] **Step 5: Commit the boundary guard**
+- [x] **Step 5: Commit the boundary guard**
 
   ```bash
   git add Scripts/check_repository_split_boundary.sh Scripts/lib/repo_policy_checks.sh
@@ -334,7 +334,7 @@ command and its argv.
 - Modify in `swift-tui`: `Scripts/build-webhost-bundle.sh`
 - Create in `swift-tui`: `Scripts/update_webhost_bundle.sh`
 
-- [ ] **Step 1: Create the new repository and copy sources**
+- [x] **Step 1: Create the new repository and copy sources**
 
   ```bash
   cd /Users/adamz/Developer/repos
@@ -348,7 +348,7 @@ command and its argv.
   Expected: `packages/web/package.json` has package name `@swifttui/web` and
   `packages/build/package.json` has package name `@swifttui/build`.
 
-- [ ] **Step 2: Add root workspace metadata**
+- [x] **Step 2: Add root workspace metadata**
 
   Create `package.json` in `swift-tui-web`:
 
@@ -371,7 +371,7 @@ command and its argv.
   }
   ```
 
-- [ ] **Step 3: Rewrite workspace-relative imports and scripts**
+- [x] **Step 3: Rewrite workspace-relative imports and scripts**
 
   In `packages/web/package.json`, replace references to `../WebBuild` with
   `../build`. In `packages/build/package.json`, keep the package export
@@ -391,7 +391,7 @@ command and its argv.
 
   Expected: no matches remain.
 
-- [ ] **Step 4: Add CI**
+- [x] **Step 4: Add CI**
 
   Create `.github/workflows/test.yml`:
 
@@ -416,7 +416,7 @@ command and its argv.
         - run: bun run build:web
   ```
 
-- [ ] **Step 5: Validate the extracted web repo**
+- [x] **Step 5: Validate the extracted web repo**
 
   ```bash
   bun install
@@ -426,7 +426,7 @@ command and its argv.
 
   Expected: tests pass and `packages/web/dist/index.html` exists.
 
-- [ ] **Step 6: Add the Swift repo bundle update script**
+- [x] **Step 6: Add the Swift repo bundle update script**
 
   In `swift-tui`, create `Scripts/update_webhost_bundle.sh`:
 
@@ -493,7 +493,7 @@ command and its argv.
   printf '[update_webhost_bundle] copied %s to %s\n' "$dist_dir" "$resource_dir"
   ```
 
-- [ ] **Step 7: Validate bundle update from the new repo**
+- [x] **Step 7: Validate bundle update from the new repo**
 
   ```bash
   cd /Users/adamz/Developer/repos/swift-tui
@@ -506,7 +506,7 @@ command and its argv.
   Expected: the bundle copy succeeds, the boundary check passes, and both
   WebHost Swift targets build.
 
-- [ ] **Step 8: Commit both repositories**
+- [x] **Step 8: Commit both repositories**
 
   In `swift-tui-web`:
 
@@ -536,7 +536,7 @@ command and its argv.
 - Modify in `swift-tui`: `Scripts/check_demo_builds.sh`
 - Modify in `swift-tui`: `docs/DEVELOPMENT.md`
 
-- [ ] **Step 1: Create the examples repository and copy examples**
+- [x] **Step 1: Create the examples repository and copy examples**
 
   ```bash
   cd /Users/adamz/Developer/repos
@@ -552,7 +552,7 @@ command and its argv.
   `gh repo create --clone` leaves an empty checkout, so `Scripts/` must be
   created before the `cp` lines or they fail with "No such file or directory".
 
-- [ ] **Step 2: Update local package paths**
+- [x] **Step 2: Update local package paths**
 
   Replace each example manifest dependency on the root package with:
 
@@ -584,7 +584,7 @@ command and its argv.
   because `gallery` and `WebExample` move together. Only rewrite dependencies
   that point at the framework root, not sibling-example dependencies.
 
-- [ ] **Step 3: Rewrite `Scripts/check_examples.sh`**
+- [x] **Step 3: Rewrite `Scripts/check_examples.sh`**
 
   Keep the same build/test list currently in `Scripts/check_demo_builds.sh`, but
   change `repo_root` assumptions so the script runs from `swift-tui-examples`
@@ -597,7 +597,7 @@ command and its argv.
   python3 Scripts/stack_safety_harness.py --binary gallery/.build/debug/gallery-demo --count 20
   ```
 
-- [ ] **Step 4: Add examples CI**
+- [x] **Step 4: Add examples CI**
 
   Create `.github/workflows/test.yml`:
 
@@ -639,7 +639,7 @@ command and its argv.
           run: Scripts/check_examples.sh --skip-clean
   ```
 
-- [ ] **Step 5: Remove examples from the main repo gate**
+- [x] **Step 5: Remove examples from the main repo gate**
 
   In `swift-tui`, update `Scripts/test_all.sh` and `Scripts/test_gate.sh` help
   text and command lists so the core repo gate no longer invokes
@@ -647,7 +647,7 @@ command and its argv.
   product tests, policy checks, `Platforms/WebHost` Swift target builds, and the
   WebHost browser bundle integrity check.
 
-- [ ] **Step 6: Validate both repos**
+- [x] **Step 6: Validate both repos**
 
   In `swift-tui-examples`:
 
@@ -664,7 +664,7 @@ command and its argv.
   Expected: examples pass in the examples repo; the main repo gate passes
   without example-package steps.
 
-- [ ] **Step 7: Commit both repositories**
+- [x] **Step 7: Commit both repositories**
 
   In `swift-tui-examples`:
 
@@ -713,7 +713,7 @@ command and its argv.
 > Brotli, and Cloudflare size/file-count validation that the current workflow
 > performs must be carried into the new site workflow. See Step 4.
 
-- [ ] **Step 1: Create the site repository and copy the current site**
+- [x] **Step 1: Create the site repository and copy the current site**
 
   ```bash
   cd /Users/adamz/Developer/repos
@@ -724,7 +724,7 @@ command and its argv.
   cp ../swift-tui/.github/workflows/cloudflare-pages.yml .github/workflows/cloudflare-pages.yml
   ```
 
-- [ ] **Step 2: Add the DocC repository manifest**
+- [x] **Step 2: Add the DocC repository manifest**
 
   Create `docs/docc-repos.yml`:
 
@@ -742,7 +742,7 @@ command and its argv.
   repos enter the manifest only after they exist and have DocC archives with
   external link metadata.
 
-- [ ] **Step 3: Add the docs composition script**
+- [x] **Step 3: Add the docs composition script**
 
   Create `Scripts/build_docc_site.sh`:
 
@@ -767,7 +767,7 @@ command and its argv.
   printf '[build_docc_site] copied swift-tui DocC archive to %s\n' "$output_root"
   ```
 
-- [ ] **Step 4: Rewrite the Cloudflare workflow**
+- [x] **Step 4: Rewrite the Cloudflare workflow**
 
   In `swift-tui-site/.github/workflows/cloudflare-pages.yml`, replace the
   single-repo assumptions with explicit checkouts:
@@ -840,7 +840,7 @@ command and its argv.
   Expected: no matches (every demo path now resolves through the examples
   checkout or `WEBEXAMPLE_DIR`).
 
-- [ ] **Step 5: Validate the site repo locally**
+- [x] **Step 5: Validate the site repo locally**
 
   ```bash
   cd /Users/adamz/Developer/repos/swift-tui-site
@@ -853,7 +853,7 @@ command and its argv.
   Expected: Astro checks pass, Astro build passes, and `Website/dist/docs`
   contains the `swift-tui` DocC archive.
 
-- [ ] **Step 6: Remove site workspace ownership from `swift-tui`**
+- [x] **Step 6: Remove site workspace ownership from `swift-tui`**
 
   In `swift-tui/package.json`, remove `Website` from `workspaces` and remove
   every script that targets `Website` — including the wasm wrappers, which only
@@ -880,7 +880,7 @@ command and its argv.
   `swift-tui-site` from the `swift-tui-examples` WebExample; the `SwiftTUIWASI`
   Swift target stays in `swift-tui` and is exercised by its own target tests.)
 
-- [ ] **Step 7: Commit both repositories**
+- [x] **Step 7: Commit both repositories**
 
   In `swift-tui-site`:
 
@@ -916,7 +916,7 @@ command and its argv.
 - Modify in `swift-tui`: `docs/HOSTS-AND-PLATFORMS.md`
 - Modify in `swift-tui`: `docs/DEVELOPMENT.md`
 
-- [ ] **Step 1: Delete extracted source directories**
+- [x] **Step 1: Delete extracted source directories**
 
   ```bash
   git rm -r Platforms/Web Platforms/WebBuild Examples
@@ -934,7 +934,7 @@ command and its argv.
 
   Expected: no matches outside the two files themselves.
 
-- [ ] **Step 2: Shrink the Bun workspace**
+- [x] **Step 2: Shrink the Bun workspace**
 
   In `package.json`, replace:
 
@@ -956,7 +956,7 @@ command and its argv.
   If no root Bun dependencies remain after this change, keep `package.json`
   only for `bun run test`, `bun run test:all`, and perf script aliases.
 
-- [ ] **Step 3: Update WebHost bundle script**
+- [x] **Step 3: Update WebHost bundle script**
 
   Replace `Scripts/build-webhost-bundle.sh` with a wrapper that points maintainers
   to the extracted source:
@@ -971,7 +971,7 @@ command and its argv.
   exec "$repo_root/Scripts/update_webhost_bundle.sh" --web-checkout "$default_web_checkout"
   ```
 
-- [ ] **Step 4: Update host docs**
+- [x] **Step 4: Update host docs**
 
   In `docs/HOSTS-AND-PLATFORMS.md`, replace the `The web packages` section with:
 
@@ -987,7 +987,7 @@ command and its argv.
   so Swift package consumers do not need Bun or npm for localhost WebHost use.
   ```
 
-- [ ] **Step 5: Validate `swift-tui` after deletion**
+- [x] **Step 5: Validate `swift-tui` after deletion**
 
   ```bash
   ./Scripts/check_repository_split_boundary.sh
@@ -999,7 +999,7 @@ command and its argv.
   Expected: boundary check passes, Swift build passes, repo gate passes, and
   DocC archive generation succeeds.
 
-- [ ] **Step 6: Commit extracted-source removal**
+- [x] **Step 6: Commit extracted-source removal**
 
   ```bash
   git add package.json bun.lock Scripts/build-webhost-bundle.sh docs/HOSTS-AND-PLATFORMS.md docs/DEVELOPMENT.md
@@ -1022,7 +1022,7 @@ Optional polish (not covered by the steps below): add a `README.md` to
 a `Repository split release flow` note already lands in `swift-tui/docs/DEVELOPMENT.md`
 via Task 1 Step 4.
 
-- [ ] **Step 1: Add release manifest**
+- [x] **Step 1: Add release manifest**
 
   In `swift-tui-site`, create `docs/releases.yml`:
 
@@ -1044,7 +1044,7 @@ via Task 1 Step 4.
       url: https://github.com/SwiftTUI/swift-tui-examples
   ```
 
-- [ ] **Step 2: Build DocC from release tags**
+- [x] **Step 2: Build DocC from release tags**
 
   Update `swift-tui-site/docs/docc-repos.yml` so `ref` can be changed by release:
 
@@ -1058,7 +1058,7 @@ via Task 1 Step 4.
       mountPath: docs
   ```
 
-- [ ] **Step 3: Add web package release scripts**
+- [x] **Step 3: Add web package release scripts**
 
   In `swift-tui-web/package.json`, add:
 
@@ -1072,7 +1072,7 @@ via Task 1 Step 4.
   }
   ```
 
-- [ ] **Step 4: Commit, validate, and tag in order**
+- [x] **Step 4: Commit, validate, and tag in order**
 
   Commit the Step 1–3 changes in each repo *before* tagging — a tag names a
   commit, so an uncommitted `releases.yml`, `docc-repos.yml` ref bump, or web
@@ -1127,7 +1127,7 @@ via Task 1 Step 4.
   > `git clone --branch "$ref"` (or `git -C … checkout "$ref"`). Otherwise the
   > ref bump in Step 2 is decorative and the site keeps building `main`.
 
-- [ ] **Step 5: Push the remaining tags after all validation passes**
+- [x] **Step 5: Push the remaining tags after all validation passes**
 
   ```bash
   git push origin v0.1.0
@@ -1146,7 +1146,7 @@ via Task 1 Step 4.
 - Modify in `swift-tui`: `docs/REPOSITORY-SPLIT.md`
 - Modify in `swift-tui-site`: `Website/src/components/Quickstart.astro`
 
-- [ ] **Step 1: Extend the consumer import contract test**
+- [x] **Step 1: Extend the consumer import contract test**
 
   In `Tests/SwiftTUITests/SwiftTUIConvenienceImportTests.swift`, add this test
   and file-scope fixture:
@@ -1190,7 +1190,7 @@ via Task 1 Step 4.
     subcommand (`CompletionsCommand`). The assertion intentionally locks that
     default in place — leave it as-is.
 
-- [ ] **Step 2: Validate the consumer contract**
+- [x] **Step 2: Validate the consumer contract**
 
   ```bash
   swiftly run swift test --filter SwiftTUITests.SwiftTUIConvenienceImportTests/swiftTUIImportExposesCommandConformanceSurface
@@ -1199,7 +1199,7 @@ via Task 1 Step 4.
 
   Expected: the focused test and repo gate pass.
 
-- [ ] **Step 3: Verify docs site quickstart still shows one Swift dependency**
+- [x] **Step 3: Verify docs site quickstart still shows one Swift dependency**
 
   In `swift-tui-site/Website/src/components/Quickstart.astro`, keep the SwiftPM
   snippet on `SwiftTUI/swift-tui` and keep the import snippet as:
@@ -1218,7 +1218,7 @@ via Task 1 Step 4.
   Expected: the quickstart references one Swift package and one Swift import;
   Astro check passes.
 
-- [ ] **Step 4: Commit compatibility proof**
+- [x] **Step 4: Commit compatibility proof**
 
   In `swift-tui`:
 
@@ -1276,8 +1276,6 @@ via Task 1 Step 4.
 - **Docs edits run through grep ratchets.** `check_stable_doc_source_paths.sh`
   scans `README.md` and `docs/*.md`; run it (or the full `bun run test`) after
   every doc change in this plan.
-- **`build_docc_site.sh` must honor the manifest `ref`** for the `v0.1.0` pin in
-  Task 7 to mean anything; as drafted it clones `main`.
 - This plan was reviewed against the working tree on 2026-05-22: the repo
   targets, scripts, `@swifttui/web`/`@swifttui/build` package names, the
   checked-in WebHost browser bundle, the policy-check helper signature, and the
