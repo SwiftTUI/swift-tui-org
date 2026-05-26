@@ -1,5 +1,11 @@
 # Raster Damage Support Implementation Plan
 
+> **Current path note (2026-05-26):** This plan was drafted across the
+> transition from the original mono-checkout to public child repos. Use the
+> current child repo layouts for implementation paths, and use
+> [`docs/PUBLIC-REPO-READINESS.md`](../PUBLIC-REPO-READINESS.md) for split
+> readiness work. Legacy `Platforms/*` paths below may be historical context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use

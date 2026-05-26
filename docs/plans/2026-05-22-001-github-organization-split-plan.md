@@ -1,5 +1,12 @@
 # GitHub Organization Split Implementation Plan
 
+> **Current status (2026-05-26):** This plan is implementation history. For the
+> active coordination workflow and remaining public-repo cutover work, use the
+> root [`README.md`](../../README.md) and
+> [`docs/PUBLIC-REPO-READINESS.md`](../PUBLIC-REPO-READINESS.md). Legacy
+> `Platforms/Web`, `Platforms/WebBuild`, `Examples`, and monorepo path
+> references below are retained as migration context, not current defaults.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use

@@ -4,6 +4,12 @@ This directory holds organization-level documents for the `swift-tui-org`
 orchestration repository. Child repositories keep their package-specific
 documentation in their own `docs/` trees.
 
+## Current Public-Repo Readiness
+
+- [PUBLIC-REPO-READINESS.md](PUBLIC-REPO-READINESS.md) - current checklist for
+  getting the child repos to standalone public defaults and wiring the final
+  public dependency guard into `//:org_fast`.
+
 ## Planning Documents
 
 - [plans/2026-05-22-001-github-organization-split-plan.md](plans/2026-05-22-001-github-organization-split-plan.md) -

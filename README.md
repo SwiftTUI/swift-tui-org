@@ -47,6 +47,43 @@ coordination-repo concerns only. Do not commit SHA pin files, generated
 pre-release dependency blocks, or sibling-checkout assumptions into public child
 repos.
 
+## Current Pre-Public Workflow
+
+Until the child repos have tag-aligned public releases, use this coordination
+repo for cross-repo development:
+
+1. Edit and commit changes in the affected child repo.
+2. Return here and record the new submodule pin.
+3. Run `bazel test //:org_fast` for cheap registry, workflow, and cleanliness
+   checks.
+4. Run the pre-tag overlay gates when downstream repos need to consume
+   untagged upstream commits:
+
+   ```sh
+   bazel test //:examples_pretag_native_gate
+   bazel test //:site_pretag_native_gate
+   ```
+
+The overlay gates copy the pinned child repos under `.build/coordination/` and
+rewrite dependencies only in those temporary copies. The examples overlay also
+uses one sequential SwiftPM scratch directory,
+`swift-tui-examples/.build/shared-swiftpm`, so repeated example package builds
+reuse SwiftPM build products without sharing that directory across parallel
+jobs.
+
+## Remaining Public-Readiness Work
+
+The public-readiness backlog is tracked in
+[docs/PUBLIC-REPO-READINESS.md](docs/PUBLIC-REPO-READINESS.md). In short:
+
+- cut tag-aligned child repo releases newer than the current checked-out
+  post-`v0.1.0` commits;
+- publish `@swifttui/web` and `@swifttui/build` to npm, or attach their
+  tarballs to a public `swift-tui-web` GitHub release;
+- switch `swift-tui-examples` and `swift-tui-site` defaults from sibling
+  checkouts/workspaces to those tagged public dependencies;
+- then wire `//:public_dependency_contracts` into `//:org_fast`.
+
 ## Planning Documents
 
 Organization-level plans live in [docs/README.md](docs/README.md). These plans

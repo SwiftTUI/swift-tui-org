@@ -45,6 +45,8 @@ install` once. Then, from an activated mise shell, use Bazel targets directly:
 bazel test //:org_fast      # cheap org contract checks (CI default)
 bazel test //:org_full      # full org gate, incl. every native gate
 bazel test //:native_gates  # run all child repos' native gates
+bazel test //:examples_pretag_native_gate
+bazel test //:site_pretag_native_gate
 bazel fetch //:org_full     # refresh Bazel external state after pin bumps
 ```
 
@@ -69,6 +71,9 @@ Xcode are intentionally **not** installed by mise.
 - **Pre-tag integration:** run it from this root using the pinned submodules and
   coordination-owned temporary overrides. Do not commit those overrides into a
   public child repo.
+- **Examples pre-tag gate:** uses an overlay-owned
+  `swift-tui-examples/.build/shared-swiftpm` scratch path to reuse SwiftPM
+  products sequentially. Do not share that scratch path across parallel gates.
 
 ## Hard invariants — do not break
 
