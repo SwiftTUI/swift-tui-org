@@ -24,6 +24,29 @@ Submodules are only the checkout and pinning layer. Bazel owns cross-repo
 contracts for the pinned organization state. The child repositories remain the
 source of truth for their native package-manager manifests and release tags.
 
+## Public Repository Contract
+
+The child repositories are the public products. By default, a fresh clone of a
+child repository must build with its native tools and must not require this
+coordination repository, Bazel, submodules, or any private checkout layout.
+
+Cross-repository dependencies in public child repositories must point at public,
+tagged artifacts:
+
+- Swift packages use HTTPS SwiftPM dependencies on release tags, for example
+  `https://github.com/SwiftTUI/swift-tui.git` at an exact tagged version.
+- Web packages use npm/Bun-consumable published packages or public HTTPS
+  release tarballs from tagged releases.
+- Site and documentation builds use public release tags or released artifacts by
+  default.
+
+All pre-tag integration state belongs here in the coordination repo. That means
+submodule SHAs, known-good untagged combinations, local checkout overrides, and
+tests where one repository consumes another repository's untagged commit are
+coordination-repo concerns only. Do not commit SHA pin files, generated
+pre-release dependency blocks, or sibling-checkout assumptions into public child
+repos.
+
 ## Planning Documents
 
 Organization-level plans live in [docs/README.md](docs/README.md). These plans
@@ -35,10 +58,17 @@ root rather than in a single package's docs tree.
 - `SwiftTUI/swift-tui` must remain consumable via SwiftPM:
   `.package(url: "https://github.com/SwiftTUI/swift-tui", ...)`.
 - `Package.swift` stays in the root of `SwiftTUI/swift-tui`.
+- Public child repos use only their native tools by default: SwiftPM, Bun/npm,
+  Astro, and DocC.
+- Public child repos consume other SwiftTUI repos only through public tagged
+  HTTPS dependencies or released artifacts.
 - Web packages remain Bun/npm-consumable from `SwiftTUI/swift-tui-web`.
-- The site remains buildable with its Astro/Bun workflow.
+- The site remains buildable with its Astro/Bun workflow without this
+  coordination checkout.
 - Bazel may orchestrate native gates, but it does not replace those public
   package-manager contracts.
+- Pre-tag cross-repo testing and pin tracking live only in this coordination
+  repository.
 
 ## First Checkout
 
@@ -131,6 +161,10 @@ consistent across `.gitmodules`, `MODULE.bazel`, `BUILD.bazel`, and this README,
 the root CI workflow still runs the intended Bazel lanes, and the submodule
 checkouts are clean at the commits pinned by the root repo.
 
+`//:org_fast` should stay cheap and coordination-local. It must not run tests
+that require SwiftPM, Bun package installs, network dependency resolution, or
+one public child repo consuming another child repo's untagged commit.
+
 Useful individual contract targets:
 
 ```sh
@@ -163,6 +197,12 @@ bazel test //:org_full
 
 `//:org` remains a compatibility alias for `//:org_full`.
 
+`//:org_full` is where coordination-only pre-tag integration checks belong. A
+pre-tag check may materialize temporary local overrides so a public repo can be
+tested against sibling submodule commits, but those overrides must be generated
+under the coordination repo's build/tmp area and must not be committed back into
+child repositories.
+
 Release candidates add a published-pin check:
 
 ```sh
@@ -191,6 +231,10 @@ The wrapper targets are marked `local` and `no-sandbox` because these first
 entrypoints intentionally run the existing repo-native build systems in their
 real source checkouts. This keeps SwiftPM/Bun/Astro behavior faithful while the
 Bazel graph becomes the organization-level scheduler.
+
+Public child-repo CI should prove public-consumer behavior against tagged
+dependencies. Coordination-repo targets may additionally prove the exact
+submodule graph before those commits are tagged.
 
 Future migration can replace these package-level wrappers with finer-grained
 Bazel Swift, TypeScript, and DocC targets where the payoff is clear.

@@ -24,3 +24,7 @@ documentation in their own `docs/` trees.
   execution plan for fixing command-palette raster damage regressions by
   splitting private raster reuse hints from shared host-facing raster damage and
   encoding presentation/compositing topology in core metadata.
+- [plans/2026-05-26-001-standalone-submodule-builds-plan.md](plans/2026-05-26-001-standalone-submodule-builds-plan.md) -
+  execution plan for making public child repositories standalone with native
+  tooling and public tagged dependencies, while keeping all pre-tag integration
+  pins and tests in this coordination repository.

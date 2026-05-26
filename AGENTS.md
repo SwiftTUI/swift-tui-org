@@ -26,6 +26,16 @@ repos' native package managers (SwiftPM, Bun/npm, Astro/DocC). The root provides
 Submodules are the checkout/pinning layer; Bazel owns cross-repo contracts. Each
 child repo remains the source of truth for its own manifests and release tags.
 
+## Public vs coordination contracts
+
+- Public child repos must build from a fresh clone with native tools only.
+- Public child repos must consume sibling SwiftTUI repos only through public,
+  tagged HTTPS dependencies or released artifacts.
+- Pin files, generated pre-tag dependency overrides, and tests where one repo
+  consumes another repo's untagged commit belong only in this coordination repo.
+- Bazel is coordination tooling. Do not make a public child repo require Bazel
+  or this root checkout for its default build.
+
 ## Build & test commands
 
 Tooling is pinned via `mise.toml` (Bazelisk + Bun). Run `mise trust && mise
@@ -56,10 +66,15 @@ Xcode are intentionally **not** installed by mise.
   `bazel fetch //:org_full && bazel test //:org_fast`.
 - **First checkout:** clone with `--recurse-submodules` (or
   `git submodule update --init --recursive`).
+- **Pre-tag integration:** run it from this root using the pinned submodules and
+  coordination-owned temporary overrides. Do not commit those overrides into a
+  public child repo.
 
 ## Hard invariants — do not break
 
 - `SwiftTUI/swift-tui` stays SwiftPM-consumable; `Package.swift` stays at its root.
+- Public child repos use tagged HTTPS dependencies or released artifacts for
+  sibling SwiftTUI repos.
 - Web packages stay Bun/npm-consumable; the site stays Astro/Bun-buildable.
 - Bazel may *orchestrate* native gates but must not *replace* the public
   package-manager contracts.
