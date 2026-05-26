@@ -34,3 +34,7 @@ documentation in their own `docs/` trees.
   execution plan for making public child repositories standalone with native
   tooling and public tagged dependencies, while keeping all pre-tag integration
   pins and tests in this coordination repository.
+- [plans/2026-05-26-002-examples-coverage-opportunities-todo.md](plans/2026-05-26-002-examples-coverage-opportunities-todo.md) -
+  todo list for consolidating, slimming, removing, and extending examples so the
+  examples repo covers framework features and build configurations more
+  comprehensively.
