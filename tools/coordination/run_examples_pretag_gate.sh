@@ -24,4 +24,5 @@ bun install
 
 SWIFTTUI_CHECKOUT="$overlay_dir/swift-tui" \
 SWIFTTUI_WEB_CHECKOUT="$overlay_dir/swift-tui-web" \
+SWIFTTUI_EXAMPLES_SWIFTPM_SCRATCH="$examples_dir/.build/shared-swiftpm" \
   Scripts/check_examples.sh --skip-clean --skip-bun-install
