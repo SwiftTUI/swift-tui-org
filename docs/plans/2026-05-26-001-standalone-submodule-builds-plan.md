@@ -21,6 +21,17 @@ coordination orchestration, SwiftPM for Swift packages, Bun/npm for web
 packages, Astro/DocC for the site, and shell scripts for coordination-only
 overlay materialization.
 
+**Implementation status (2026-05-26):** coordination-owned contract and
+pre-tag overlay machinery is implemented. The public child-repo manifest switch
+is still blocked on real public release artifacts: `@swifttui/web` and
+`@swifttui/build` are not published to npm, `SwiftTUI/swift-tui-web` has no
+GitHub release for the current `v0.1.0` tag, and the checked-out dependency
+repos are ahead of their only `v0.1.0` tags. Do not update public manifests to
+placeholder release URLs that do not resolve. Verified implemented targets:
+`//:examples_pretag_native_gate` passed in 1160.7s,
+`//:site_pretag_native_gate` passed in 330.8s, and `//:org_fast` still passes
+without the public contract target wired in.
+
 ---
 
 ## Governing Rules
@@ -213,7 +224,7 @@ overlay materialization.
 
 ### Phase 2: Add cheap coordination contract checks
 
-- [ ] Create `tools/bazel/check_public_dependency_contracts.sh`.
+- [x] Create `tools/bazel/check_public_dependency_contracts.sh`.
 
   The script should check:
 
@@ -226,9 +237,14 @@ overlay materialization.
   Each command should fail the script if it finds a match. Allow intra-repo
   paths such as `../layouts` and `../../gallery`.
 
-- [ ] Add a root `sh_test(name = "public_dependency_contracts", ...)` in
+- [x] Add a root `sh_test(name = "public_dependency_contracts", ...)` in
   `BUILD.bazel`, tagged `local` and `no-sandbox`.
 - [ ] Add `:public_dependency_contracts` to `//:org_fast`.
+
+  Status: intentionally pending until Phase 4/5 can point at resolving public
+  artifacts. The target exists and correctly fails against the current public
+  child repos; adding it to `//:org_fast` now would make the coordination gate
+  red before the publish-owned prerequisites are complete.
 - [ ] Run:
 
   ```bash
@@ -242,7 +258,7 @@ overlay materialization.
 - [ ] In `swift-tui`, choose the dependency tag that public examples will use
   first. If current examples require post-`v0.1.0` APIs, cut and push a new
   `swift-tui` release tag before editing examples.
-- [ ] In `swift-tui-web`, verify package tarballs:
+- [x] In `swift-tui-web`, verify package tarballs:
 
   ```bash
   bun run pack:web
@@ -250,10 +266,17 @@ overlay materialization.
   ```
 
   Expected: both commands produce installable tarballs for `@swifttui/web` and
-  `@swifttui/build`.
+  `@swifttui/build`. Verified locally with Bun 1.3.13; `bun pm pack` produced
+  `swifttui-web-0.1.0.tgz` and `swifttui-build-0.1.0.tgz`, and the packed
+  `@swifttui/build` manifest rewrote its workspace dependency to
+  `@swifttui/web` version `0.1.0`.
 
 - [ ] Attach those tarballs to the matching `swift-tui-web` GitHub release, or
   publish them to the intended npm registry.
+
+  Status: blocked outside the coordination repo. `gh release view v0.1.0 --repo
+  SwiftTUI/swift-tui-web` reports no release, and `npm view @swifttui/web` /
+  `npm view @swifttui/build` return 404.
 - [ ] Record the chosen SwiftTUI tag, web package version, and package artifact
   URLs in `swift-tui-site/docs/releases.yml`.
 
@@ -319,6 +342,14 @@ overlay materialization.
 
 - [ ] Change `swift-tui-site/docs/releases.yml` so examples and web references
   are tags or package versions, not `main`.
+- [ ] Update `swift-tui-site/.github/workflows/test.yml` so the public default
+  site gate does not check out untagged sibling `swift-tui-examples` or
+  `swift-tui-web` repositories.
+- [ ] Update `swift-tui-site/.github/workflows/cloudflare-pages.yml` so deploys
+  build/copy WebExample from a tagged public source or published artifact, not
+  a default sibling checkout.
+- [ ] Update `swift-tui-site/Scripts/check_site_ci_workflow.sh` so it enforces
+  the standalone workflow shape instead of requiring sibling checkouts.
 - [ ] Update site scripts so `bun run --cwd Website build:full` can fetch the
   tagged WebExample input into a site-owned build directory when `WEBEXAMPLE_DIR`
   is not set.
@@ -336,7 +367,7 @@ overlay materialization.
 
 ### Phase 6: Add coordination-only pre-tag overlays
 
-- [ ] Create `tools/coordination/materialize_pretag_overlay.sh`.
+- [x] Create `tools/coordination/materialize_pretag_overlay.sh`.
 
   Required behavior:
 
@@ -346,7 +377,7 @@ overlay materialization.
     coordination checkout's submodules.
   - Leave every child submodule worktree clean.
 
-- [ ] Create `tools/coordination/run_examples_pretag_gate.sh`.
+- [x] Create `tools/coordination/run_examples_pretag_gate.sh`.
 
   Required behavior:
 
@@ -357,7 +388,7 @@ overlay materialization.
     `swift-tui-web` packages.
   - Run the examples native gate in the overlay.
 
-- [ ] Create `tools/coordination/run_site_pretag_gate.sh`.
+- [x] Create `tools/coordination/run_site_pretag_gate.sh`.
 
   Required behavior:
 
@@ -366,14 +397,14 @@ overlay materialization.
     examples overlay.
   - Run the site native gate in the overlay.
 
-- [ ] Add Bazel targets:
+- [x] Add Bazel targets:
 
   ```python
   sh_test(name = "examples_pretag_native_gate", ...)
   sh_test(name = "site_pretag_native_gate", ...)
   ```
 
-- [ ] Add those targets to `//:org_full`, not `//:org_fast`.
+- [x] Add those targets to `//:org_full`, not `//:org_fast`.
 
 ### Phase 7: Verify both public and coordination paths
 

@@ -172,7 +172,15 @@ bazel test //:submodule_status
 bazel test //:repo_registry_contract
 bazel test //:pin_cleanliness
 bazel test //:org_ci_workflow
+bazel test //:public_dependency_contracts
 ```
+
+`//:public_dependency_contracts` is the cheap guard for public child-repo
+standalone rules. It fails if a child repo still has cross-repo sibling paths,
+workspace-only SwiftTUI web package dependencies, or untagged `main` release
+metadata. It is intentionally separate until the public release artifacts exist;
+once the child repos are switched to real tagged public dependencies it belongs
+in `//:org_fast`.
 
 Run every repository's native gate through Bazel:
 
@@ -202,6 +210,17 @@ pre-tag check may materialize temporary local overrides so a public repo can be
 tested against sibling submodule commits, but those overrides must be generated
 under the coordination repo's build/tmp area and must not be committed back into
 child repositories.
+
+Explicit coordination-only pre-tag gates:
+
+```sh
+bazel test //:examples_pretag_native_gate
+bazel test //:site_pretag_native_gate
+```
+
+These targets copy the pinned child repos into `.build/coordination/...` and
+rewrite dependencies only inside that temporary overlay before running the
+native child gates.
 
 Release candidates add a published-pin check:
 
