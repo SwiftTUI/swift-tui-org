@@ -36,6 +36,11 @@ TypeScript, `@swifttui/web`, Playwright/Bun browser integration tests.
   that the browser will not draw.
 - `FrameDiagnosticsLogger` is currently file-backed and returns `nil` for WASI, so
   the browser build cannot emit the existing per-frame diagnostics.
+- The WebExample demo may include additional scene tabs and content by the time
+  this plan is executed. That does not change the implementation scope: the
+  cadence regression and the copy-on-write smell are still measured through the
+  Gallery Life tab, while diagnostics and delta decoding should remain generic for
+  every WebExample tab.
 
 ## Non-Goals
 
@@ -131,6 +136,11 @@ bun --cwd swift-tui-web test packages/web/src/WebHostSurfaceTransport.test.ts
 ```bash
 bun --cwd swift-tui-examples/WebExample test src/browser-integration.browser.ts
 ```
+
+- [ ] When recording the browser baseline, note the WebExample scene and tab used
+  for the measurement. If additional tabs have been added since this plan was
+  written, navigate explicitly to the Gallery Life tab and do not compare cadence
+  numbers collected from another tab.
 
 - [ ] Capture an ad hoc generation-gap sample with the existing browser harness or
   a one-off Playwright script. Record:
@@ -815,6 +825,10 @@ onFrameDiagnostic: (diagnostic) => {
   `console.debug`, and asserts at least one `"SwiftTUI frame"` entry arrives after
   the scene has mounted.
 
+- [ ] Keep this hook scene-agnostic. The WebExample may expose more tabs than the
+  original Life repro, and the diagnostics channel should report whichever tab is
+  currently producing frames without adding tab-specific UI.
+
 - [ ] Run:
 
 ```bash
@@ -837,6 +851,7 @@ bun --cwd swift-tui-examples/WebExample run build
   - `TUIGUI_SURFACE_DELTA=1`
   - diagnostics disabled
   - normal Life tick interval
+  - Gallery Life tab selected, even if WebExample now contains additional tabs
 
 - [ ] Run the diagnostics measurement:
   - `?frameDiagnostics=1`
@@ -923,4 +938,3 @@ bazel test //:org_fast
   storage with a reference-backed buffer while preserving value semantics with
   `isKnownUniquelyReferenced` before mutation. Add a copy-isolation test before
   making that larger model change.
-
