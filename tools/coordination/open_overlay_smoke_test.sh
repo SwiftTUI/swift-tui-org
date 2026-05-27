@@ -77,6 +77,20 @@ else
   err "no examples Package.swift rewrites found"
 fi
 
+webexample_package="$worktree_overlay/swift-tui-examples/WebExample/package.json"
+if grep -q '"@swifttui/web": "file:../../swift-tui-web/packages/web"' "$webexample_package"; then
+  ok "WebExample package rewrites @swifttui/web to the local overlay package"
+else
+  err "WebExample package did not rewrite @swifttui/web to the local overlay package"
+fi
+
+examples_package="$worktree_overlay/swift-tui-examples/package.json"
+if grep -q '"@swifttui/web": "workspace:\*"' "$examples_package"; then
+  ok "examples workspace override no longer forces released @swifttui/web"
+else
+  err "examples workspace override still forces released @swifttui/web"
+fi
+
 # ─── open_overlay --print-env examples: emits exports, head mode skips marker ─
 info "open_overlay --print-env examples (head mode, marker still in tree)"
 env_overlay_ex="$tmpdir/env-examples"

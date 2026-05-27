@@ -172,7 +172,8 @@ rewrite_examples_overlay() {
     "WebExample",
     "../swift-tui-web/packages/web",
     "../swift-tui-web/packages/build"
-  ]#s' \
+  ]#s;
+       s#("\@swifttui/web":\s*")[^"]+(")#$1workspace:*$2#g' \
       "$examples_package"
   fi
 
