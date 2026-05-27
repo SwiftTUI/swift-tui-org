@@ -38,3 +38,7 @@ documentation in their own `docs/` trees.
   todo list for consolidating, slimming, removing, and extending examples so the
   examples repo covers framework features and build configurations more
   comprehensively.
+- [plans/2026-05-27-001-swifttui-app-command-conformance-plan.md](plans/2026-05-27-001-swifttui-app-command-conformance-plan.md) -
+  migration plan for making the batteries-included `SwiftTUI.App` protocol
+  conform to `SwiftTUICommand` while keeping `SwiftTUIRuntime.App` independent
+  from command-line parsing.
