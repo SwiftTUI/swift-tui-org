@@ -692,7 +692,7 @@ Expected:
 - gifcat help includes the paths argument and SwiftTUI options.
 - layouts help includes SwiftTUI options.
 
-- [ ] **Step 4: Run the relevant examples gate**
+- [x] **Step 4: Run the relevant examples gate**
 
 Run:
 
@@ -703,13 +703,15 @@ bun run check:focused
 
 Expected: pass.
 
-Status on 2026-05-27: ran `bun run check:focused` from
-`swift-tui-examples`; it failed only in the pre-existing layouts raster
-expectation
+Status on 2026-05-27: the first run failed only in the pre-existing layouts
+raster expectation
 `CircleInNonSquareFrameBehaviourTests.inscribed disc leaves empty cells at the
-wide frame's left/right corners`, not in the migrated app entry points.
+wide frame's left/right corners`, not in the migrated app entry points. That
+expectation drift was fixed by restoring the documented 12x5 circle frame in
+`swift-tui-examples` commit `eeebb7a`. A fresh `bun run check:focused` then
+passed.
 
-- [ ] **Step 5: Run org-level cheap validation**
+- [x] **Step 5: Run org-level cheap validation**
 
 From the org root, run:
 
@@ -719,9 +721,8 @@ mise exec -- bazel test //:org_fast
 
 Expected: pass.
 
-Status on 2026-05-27: ran `mise exec -- bazel test //:org_fast`; the
-non-pin targets passed, but `//:pin_cleanliness` failed because this working
-tree intentionally has uncommitted child-submodule edits.
+Status on 2026-05-27: after committing the child follow-up and recording the
+new org-root submodule pin, `mise exec -- bazel test //:org_fast` passed.
 
 ### Task 7: Commit child repos and record org pins
 
@@ -732,7 +733,7 @@ tree intentionally has uncommitted child-submodule edits.
 - Modify: root `docs/README.md` if this plan has not already been indexed
 - Modify: root submodule pins after child commits
 
-- [ ] **Step 1: Commit `swift-tui` changes inside the child repo**
+- [x] **Step 1: Commit `swift-tui` changes inside the child repo**
 
 Run:
 
@@ -744,7 +745,10 @@ git -C swift-tui commit -m "Add SwiftTUI App command overlay"
 
 Expected: commit succeeds and `git -C swift-tui status --short` is clean.
 
-- [ ] **Step 2: Commit `swift-tui-examples` changes inside the child repo**
+Status on 2026-05-27: complete in `swift-tui` commit `b4a23d66`
+(`Add SwiftTUI App command overlay`).
+
+- [x] **Step 2: Commit `swift-tui-examples` changes inside the child repo**
 
 Run:
 
@@ -757,7 +761,12 @@ git -C swift-tui-examples commit -m "Use SwiftTUI App command conformance"
 Expected: commit succeeds and `git -C swift-tui-examples status --short` is
 clean.
 
-- [ ] **Step 3: Record submodule pins in the org root**
+Status on 2026-05-27: complete in `swift-tui-examples` commit `486ec3e`
+(`Use SwiftTUI App command conformance`) plus follow-up commit `eeebb7a`
+(`Restore circle non-square frame width`), which fixed the focused layouts
+gate.
+
+- [x] **Step 3: Record submodule pins in the org root**
 
 Run:
 
@@ -769,6 +778,9 @@ git commit -m "Plan SwiftTUI App command conformance migration"
 
 Expected: root commit records only the plan/index updates and the new child
 submodule SHAs.
+
+Status on 2026-05-27: root commit `044c2c2` records the
+`swift-tui-examples` follow-up submodule pin.
 
 ## Risks And Checks
 

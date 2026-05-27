@@ -23,6 +23,49 @@ Current status checked on 2026-05-26:
 - Pre-tag cross-repo integration remains coordination-only through the overlay
   gates in this repo.
 
+## Aggregated Pre-Release Actions
+
+This aggregate was refreshed on 2026-05-27 from the current public-readiness
+checklist and the open plan checkboxes in `docs/plans/`.
+
+Completed on 2026-05-27: the `SwiftTUI.App` command-conformance migration
+follow-up is no longer a remaining pre-release action. The layouts raster drift
+was fixed in `swift-tui-examples`, the focused examples gate passed, and
+`mise exec -- bazel test //:org_fast` passed.
+
+1. Preserve the existing repository history for public pre-release. Do not
+   squash, rewrite, or replace history as part of the cutover.
+2. Choose and publish the release artifacts that downstream repos will consume:
+   - Choose the `swift-tui` tag for examples and WebExample. If current
+     downstream code needs post-`v0.1.0` APIs, cut and push a new tag first.
+   - Publish `@swifttui/web` and `@swifttui/build` to npm, or attach the packed
+     tarballs to a public `swift-tui-web` GitHub release.
+   - Record the chosen SwiftTUI tag, web package version, and artifact URLs in
+     `swift-tui-site/docs/releases.yml`.
+3. Switch public child repositories to standalone public defaults:
+   - In `swift-tui-examples`, replace cross-repo `swift-tui` sibling path
+     dependencies with exact public HTTPS tags.
+   - In `swift-tui-examples/WebExample`, replace `workspace:*` web dependencies
+     with npm versions or public release tarball URLs.
+   - Keep intra-repo example path dependencies unchanged.
+   - Update examples scripts, README, and CI so a default public gate checks out
+     only `swift-tui-examples` and runs against public dependency artifacts.
+   - In `swift-tui-site`, replace `examplesRef: main` and default sibling
+     WebExample/web inputs with public release tags or artifacts.
+   - Update site scripts and workflows so test/deploy paths work from a fresh
+     clone, while keeping local override env vars for maintainers.
+4. Wire and run the public dependency guard after the public manifests resolve:
+   - Run `mise exec -- bazel test //:public_dependency_contracts`.
+   - Add `:public_dependency_contracts` to `//:org_fast`.
+   - Run `mise exec -- bazel test //:org_fast`.
+5. Verify the final public and coordination paths:
+   - Fresh-clone `swift-tui-examples` and run the documented SwiftPM and
+     WebExample build checks against public artifacts.
+   - Fresh-clone `swift-tui-site` and run `Scripts/check_site.sh`.
+   - Run `mise exec -- bazel test //:org_full` from this coordination checkout
+     to keep native gates and pre-tag overlay gates covered.
+   - Commit the final coordination root pin update.
+
 ## Remaining Work By Repo
 
 ### `swift-tui`
