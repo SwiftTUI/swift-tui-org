@@ -7,7 +7,7 @@ documentation in their own `docs/` trees.
 ## Public Pre-Release Readiness
 
 - [PUBLIC-REPO-READINESS.md](PUBLIC-REPO-READINESS.md) - current checklist for
-  the `0.0.1` child-repo cutover, public dependency defaults, verification
+  the child-repo public pre-release state, public dependency defaults, verification
   notes, and npm follow-up.
 
 ## Cross-Repo Development
