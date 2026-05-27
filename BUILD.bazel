@@ -113,6 +113,7 @@ test_suite(
     tests = [
         ":org_ci_workflow",
         ":pin_cleanliness",
+        ":public_dependency_contracts",
         ":repo_registry_contract",
         ":submodule_status",
     ],

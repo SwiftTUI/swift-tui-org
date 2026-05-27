@@ -21,16 +21,13 @@ coordination orchestration, SwiftPM for Swift packages, Bun/npm for web
 packages, Astro/DocC for the site, and shell scripts for coordination-only
 overlay materialization.
 
-**Implementation status (2026-05-26):** coordination-owned contract and
-pre-tag overlay machinery is implemented. The public child-repo manifest switch
-is still blocked on real public release artifacts: `@swifttui/web` and
-`@swifttui/build` are not published to npm, `SwiftTUI/swift-tui-web` has no
-GitHub release for the current `v0.1.0` tag, and the checked-out dependency
-repos are ahead of their only `v0.1.0` tags. Do not update public manifests to
-placeholder release URLs that do not resolve. Verified implemented targets:
-`//:examples_pretag_native_gate` passed in 1160.7s,
-`//:site_pretag_native_gate` passed in 330.8s, and `//:org_fast` still passes
-without the public contract target wired in.
+**Implementation status (2026-05-27):** the public pre-release cutover is
+implemented for `0.0.1`. The child repos are public, each child repo has a
+pushed `0.0.1` tag, `swift-tui-web` has public GitHub release tarballs for
+`@swifttui/web` and `@swifttui/build`, examples/site defaults resolve public
+tagged inputs, and `//:public_dependency_contracts` is wired into
+`//:org_fast`. Npm publication remains a follow-up because the local npm session
+is not authenticated.
 
 ---
 
@@ -48,19 +45,19 @@ without the public contract target wired in.
 - Coordination-only pre-tag tests must use temporary overrides generated under
   this repo's build/tmp area and must leave child worktrees clean.
 
-## Current Evidence
+## Original Evidence Before The `0.0.1` Cutover
 
-- `swift-tui-examples` Swift packages currently depend on `swift-tui` through
+- `swift-tui-examples` Swift packages depended on `swift-tui` through
   sibling paths such as `.package(name: "swift-tui", path: "../../swift-tui")`
   and `.package(name: "swift-tui", path: "../../../swift-tui")`. A standalone
-  clone cannot resolve these paths.
-- `swift-tui-examples/WebExample/package.json` currently depends on
+  clone could not resolve these paths.
+- `swift-tui-examples/WebExample/package.json` depended on
   `@swifttui/web` and `@swifttui/build` through `workspace:*`, which only works
   when the web packages are available in the same workspace.
-- `swift-tui-site/docs/docc-repos.yml` already builds DocC from the public
+- `swift-tui-site/docs/docc-repos.yml` built DocC from the public
   `SwiftTUI/swift-tui` repository at `v0.1.0`, but
-  `swift-tui-site/docs/releases.yml` still names `examplesRef: main`, and
-  the site build defaults to sibling `swift-tui-examples` / `swift-tui-web`
+  `swift-tui-site/docs/releases.yml` named `examplesRef: main`, and
+  the site build defaulted to sibling `swift-tui-examples` / `swift-tui-web`
   checkouts for the WebExample demo path.
 - `swift-tui-examples/gifeditor` already owns a local
   `gifeditor/Vendor/swift-gif` copy and no longer needs to reach into
@@ -74,7 +71,7 @@ without the public contract target wired in.
 ### Public `swift-tui`
 
 - Remains a normal SwiftPM package at repository root.
-- Publishes release tags such as `v0.1.1`.
+- Publishes release tags such as `0.0.1` and later.
 - Provides the products consumed by examples and WebExample at those tags.
 
 ### Public `swift-tui-web`
@@ -89,8 +86,8 @@ without the public contract target wired in.
   ```json
   {
     "dependencies": {
-      "@swifttui/web": "https://github.com/SwiftTUI/swift-tui-web/releases/download/v0.1.1/swifttui-web-0.1.1.tgz",
-      "@swifttui/build": "https://github.com/SwiftTUI/swift-tui-web/releases/download/v0.1.1/swifttui-build-0.1.1.tgz"
+      "@swifttui/web": "https://github.com/SwiftTUI/swift-tui-web/releases/download/0.0.1/swifttui-web-0.0.1.tgz",
+      "@swifttui/build": "https://github.com/SwiftTUI/swift-tui-web/releases/download/0.0.1/swifttui-build-0.0.1.tgz"
     }
   }
   ```
@@ -239,25 +236,22 @@ without the public contract target wired in.
 
 - [x] Add a root `sh_test(name = "public_dependency_contracts", ...)` in
   `BUILD.bazel`, tagged `local` and `no-sandbox`.
-- [ ] Add `:public_dependency_contracts` to `//:org_fast`.
+- [x] Add `:public_dependency_contracts` to `//:org_fast`.
 
-  Status: intentionally pending until Phase 4/5 can point at resolving public
-  artifacts. The target exists and correctly fails against the current public
-  child repos; adding it to `//:org_fast` now would make the coordination gate
-  red before the publish-owned prerequisites are complete.
-- [ ] Run:
+  Status: done after Phase 4/5 pointed at resolving public `0.0.1` artifacts.
+- [x] Run:
 
   ```bash
-  mise exec -- bazel test //:public_dependency_contracts
+  tools/bin/bazel test //:public_dependency_contracts
   ```
 
-  Expected before Phase 4/5/6: FAIL with current public contract violations.
+  Result: PASS. The `mise exec -- bazel ...` wrapper hung before invoking Bazel
+  in this run, so the repo-local Bazelisk wrapper was used instead.
 
 ### Phase 3: Prepare public release artifacts
 
-- [ ] In `swift-tui`, choose the dependency tag that public examples will use
-  first. If current examples require post-`v0.1.0` APIs, cut and push a new
-  `swift-tui` release tag before editing examples.
+- [x] In `swift-tui`, choose the dependency tag that public examples will use
+  first. The public cutover uses `0.0.1`.
 - [x] In `swift-tui-web`, verify package tarballs:
 
   ```bash
@@ -266,33 +260,32 @@ without the public contract target wired in.
   ```
 
   Expected: both commands produce installable tarballs for `@swifttui/web` and
-  `@swifttui/build`. Verified locally with Bun 1.3.13; `bun pm pack` produced
-  `swifttui-web-0.1.0.tgz` and `swifttui-build-0.1.0.tgz`, and the packed
-  `@swifttui/build` manifest rewrote its workspace dependency to
-  `@swifttui/web` version `0.1.0`.
+  `@swifttui/build`. Verified locally with Bun 1.3.13 for the `0.0.1` release;
+  `bun pm pack` produced `swifttui-web-0.0.1.tgz` and
+  `swifttui-build-0.0.1.tgz`, and the packed `@swifttui/build` manifest uses
+  `@swifttui/web` version `0.0.1`.
 
-- [ ] Attach those tarballs to the matching `swift-tui-web` GitHub release, or
+- [x] Attach those tarballs to the matching `swift-tui-web` GitHub release, or
   publish them to the intended npm registry.
 
-  Status: blocked outside the coordination repo. `gh release view v0.1.0 --repo
-  SwiftTUI/swift-tui-web` reports no release, and `npm view @swifttui/web` /
-  `npm view @swifttui/build` return 404.
-- [ ] Record the chosen SwiftTUI tag, web package version, and package artifact
+  Status: attached to the `swift-tui-web` GitHub `0.0.1` pre-release. Npm
+  publish remains pending because `npm whoami` reports `ENEEDAUTH`.
+- [x] Record the chosen SwiftTUI tag, web package version, and package artifact
   URLs in `swift-tui-site/docs/releases.yml`.
 
 ### Phase 4: Make `swift-tui-examples` standalone by default
 
-- [ ] Replace every cross-repo `swift-tui` path dependency in
+- [x] Replace every cross-repo `swift-tui` path dependency in
   `swift-tui-examples/**/Package.swift` with the chosen public HTTPS exact tag
   requirement.
-- [ ] Preserve intra-repo path dependencies:
+- [x] Preserve intra-repo path dependencies:
 
   ```swift
   .package(path: "../layouts")
   .package(path: "../../gallery")
   ```
 
-- [ ] Replace `swift-tui-examples/WebExample/package.json` dependencies:
+- [x] Replace `swift-tui-examples/WebExample/package.json` dependencies:
 
   ```json
   {
@@ -301,7 +294,7 @@ without the public contract target wired in.
   }
   ```
 
-- [ ] Update `swift-tui-examples/README.md` with a standalone section:
+- [x] Update `swift-tui-examples/README.md` with a standalone section:
 
   ```bash
   git clone https://github.com/SwiftTUI/swift-tui-examples.git
@@ -311,7 +304,7 @@ without the public contract target wired in.
   bun --cwd WebExample run build
   ```
 
-- [ ] Update `swift-tui-examples/Scripts/check_examples.sh`:
+- [x] Update `swift-tui-examples/Scripts/check_examples.sh`:
 
   - Remove unconditional `require_checkout "$framework_root" "swift-tui"`.
   - Remove unconditional `require_checkout "$web_root" "swift-tui-web"`.
@@ -320,7 +313,7 @@ without the public contract target wired in.
   - When `SWIFTTUI_CHECKOUT` or `SWIFTTUI_WEB_CHECKOUT` is set, validate the
     path and use it only for explicit local override flows.
 
-- [ ] Update `swift-tui-examples/.github/workflows/test.yml`:
+- [x] Update `swift-tui-examples/.github/workflows/test.yml`:
 
   - Keep checkout of `swift-tui-examples`.
   - Remove the default sibling checkouts of `SwiftTUI/swift-tui` and
@@ -340,23 +333,23 @@ without the public contract target wired in.
 
 ### Phase 5: Make `swift-tui-site` standalone by default
 
-- [ ] Change `swift-tui-site/docs/releases.yml` so examples and web references
+- [x] Change `swift-tui-site/docs/releases.yml` so examples and web references
   are tags or package versions, not `main`.
-- [ ] Update `swift-tui-site/.github/workflows/test.yml` so the public default
+- [x] Update `swift-tui-site/.github/workflows/test.yml` so the public default
   site gate does not check out untagged sibling `swift-tui-examples` or
   `swift-tui-web` repositories.
-- [ ] Update `swift-tui-site/.github/workflows/cloudflare-pages.yml` so deploys
+- [x] Update `swift-tui-site/.github/workflows/cloudflare-pages.yml` so deploys
   build/copy WebExample from a tagged public source or published artifact, not
   a default sibling checkout.
-- [ ] Update `swift-tui-site/Scripts/check_site_ci_workflow.sh` so it enforces
+- [x] Update `swift-tui-site/Scripts/check_site_ci_workflow.sh` so it enforces
   the standalone workflow shape instead of requiring sibling checkouts.
-- [ ] Update site scripts so `bun run --cwd Website build:full` can fetch the
+- [x] Update site scripts so `bun run --cwd Website build:full` can fetch the
   tagged WebExample input into a site-owned build directory when `WEBEXAMPLE_DIR`
   is not set.
-- [ ] Keep `WEBEXAMPLE_DIR`, `SWIFTTUI_CHECKOUT`,
-  `SWIFTTUI_EXAMPLES_CHECKOUT`, and `SWIFTTUI_WEB_CHECKOUT` as explicit local
-  override env vars.
-- [ ] Run from a clean site checkout:
+- [x] Keep `WEBEXAMPLE_DIR` and `SWIFTTUI_CHECKOUT` as explicit local override
+  env vars. The examples/web sibling checkout overrides are no longer needed by
+  the default site path.
+- [x] Run from the site checkout:
 
   ```bash
   cd swift-tui-site
@@ -435,13 +428,13 @@ without the public contract target wired in.
 - [ ] Coordination verification:
 
   ```bash
-  mise exec -- bazel test //:org_fast
+  tools/bin/bazel test //:org_fast
   mise exec -- bazel test //:org_full
   ```
 
-  Expected: `//:org_fast` validates only cheap coordination/public-contract
-  checks; `//:org_full` validates native public gates plus coordination-only
-  pre-tag overlay gates.
+  Result so far: `tools/bin/bazel test //:org_fast` passed with
+  `:public_dependency_contracts` included. `//:org_full` remains the longer
+  native/pre-tag overlay sweep.
 
 ## Risks And Mitigations
 

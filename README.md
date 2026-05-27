@@ -47,15 +47,28 @@ coordination-repo concerns only. Do not commit SHA pin files, generated
 pre-release dependency blocks, or sibling-checkout assumptions into public child
 repos.
 
-## Current Pre-Public Workflow
+## Current Public Pre-Release State
 
-Until the child repos have tag-aligned public releases, use this coordination
-repo for cross-repo development:
+All child repositories are public and tagged at `0.0.1`. Public child defaults
+now resolve through public release artifacts:
+
+- `swift-tui` is consumed through the `0.0.1` HTTPS SwiftPM tag.
+- `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
+  the GitHub `0.0.1` release.
+- `swift-tui-examples` uses the `swift-tui` `0.0.1` tag and the web `0.0.1`
+  release tarballs by default.
+- `swift-tui-site` fetches tagged `swift-tui-examples` input into
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.1` tag.
+
+Npm publication is still a follow-up: the local npm session is not authenticated,
+so the first public web package path uses GitHub release tarballs.
+
+For cross-repo development before the next tag:
 
 1. Edit and commit changes in the affected child repo.
 2. Return here and record the new submodule pin.
-3. Run `bazel test //:org_fast` for cheap registry, workflow, and cleanliness
-   checks.
+3. Run `bazel test //:org_fast` for cheap registry, workflow, public dependency,
+   and cleanliness checks.
 4. Run the pre-tag overlay gates when downstream repos need to consume
    untagged upstream commits:
 
@@ -71,18 +84,13 @@ uses one sequential SwiftPM scratch directory,
 reuse SwiftPM build products without sharing that directory across parallel
 jobs.
 
-## Remaining Public-Readiness Work
+## Public-Readiness Notes
 
-The public-readiness backlog is tracked in
-[docs/PUBLIC-REPO-READINESS.md](docs/PUBLIC-REPO-READINESS.md). In short:
-
-- cut tag-aligned child repo releases newer than the current checked-out
-  post-`v0.1.0` commits;
-- publish `@swifttui/web` and `@swifttui/build` to npm, or attach their
-  tarballs to a public `swift-tui-web` GitHub release;
-- switch `swift-tui-examples` and `swift-tui-site` defaults from sibling
-  checkouts/workspaces to those tagged public dependencies;
-- then wire `//:public_dependency_contracts` into `//:org_fast`.
+The release cutover notes are tracked in
+[docs/PUBLIC-REPO-READINESS.md](docs/PUBLIC-REPO-READINESS.md). At this point
+the public default paths and `//:org_fast` guard are in place; the main remaining
+release follow-up is publishing the web packages to npm when credentials are
+available.
 
 ## Planning Documents
 
@@ -195,8 +203,9 @@ bazel test //:org_fast
 
 `//:org_fast` checks that submodules are initialized, the child registry is
 consistent across `.gitmodules`, `MODULE.bazel`, `BUILD.bazel`, and this README,
-the root CI workflow still runs the intended Bazel lanes, and the submodule
-checkouts are clean at the commits pinned by the root repo.
+the root CI workflow still runs the intended Bazel lanes, public child repos no
+longer contain sibling-checkout dependency defaults, and the submodule checkouts
+are clean at the commits pinned by the root repo.
 
 `//:org_fast` should stay cheap and coordination-local. It must not run tests
 that require SwiftPM, Bun package installs, network dependency resolution, or
@@ -215,9 +224,7 @@ bazel test //:public_dependency_contracts
 `//:public_dependency_contracts` is the cheap guard for public child-repo
 standalone rules. It fails if a child repo still has cross-repo sibling paths,
 workspace-only SwiftTUI web package dependencies, or untagged `main` release
-metadata. It is intentionally separate until the public release artifacts exist;
-once the child repos are switched to real tagged public dependencies it belongs
-in `//:org_fast`.
+metadata. It is part of `//:org_fast`.
 
 Run every repository's native gate through Bazel:
 
@@ -281,7 +288,7 @@ repo:
 | `//:swift_tui_native_gate` | `bun run test` |
 | `//:swift_tui_web_native_gate` | `bun run ci` |
 | `//:swift_tui_examples_native_gate` | `Scripts/check_examples.sh --skip-clean` |
-| `//:swift_tui_site_native_gate` | `bun install --cwd Website --frozen-lockfile`, `bun run --cwd Website check`, `bun run --cwd Website build`, `Scripts/build_docc_site.sh` |
+| `//:swift_tui_site_native_gate` | `Scripts/check_site.sh` |
 
 The wrapper targets are marked `local` and `no-sandbox` because these first
 entrypoints intentionally run the existing repo-native build systems in their
