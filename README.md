@@ -63,26 +63,38 @@ now resolve through public release artifacts:
 Npm publication is still a follow-up: the local npm session is not authenticated,
 so the first public web package path uses GitHub release tarballs.
 
-For cross-repo development before the next tag:
+For cross-repo development before the next tag, the org root materializes a
+**coordination overlay** under `.build/coordination/`. The overlay is a
+throwaway copy of the pinned children where it is safe to rewrite the manifest
+files (`Package.swift`, the `WebExample/package.json`, the SwiftPM workspace
+list, etc.) without touching the public child repos. Two source modes are
+supported:
 
-1. Edit and commit changes in the affected child repo.
-2. Return here and record the new submodule pin.
-3. Run `bazel test //:org_fast` for cheap registry, workflow, public dependency,
-   and cleanliness checks.
-4. Run the pre-tag overlay gates when downstream repos need to consume
-   untagged upstream commits:
+- `head` (CI default) — `git archive HEAD` of each submodule. Byte-for-byte
+  deterministic, matches what a release tag would see.
+- `worktree` (`bazel run //:open_overlay` default) — `rsync` of the live
+  working tree, including uncommitted edits. For local iteration.
 
-   ```sh
-   bazel test //:examples_pretag_native_gate
-   bazel test //:site_pretag_native_gate
-   ```
+Common entry points:
 
-The overlay gates copy the pinned child repos under `.build/coordination/` and
-rewrite dependencies only in those temporary copies. The examples overlay also
-uses one sequential SwiftPM scratch directory,
-`swift-tui-examples/.build/shared-swiftpm`, so repeated example package builds
-reuse SwiftPM build products without sharing that directory across parallel
-jobs.
+```sh
+bazel run //:open_overlay -- --print-env examples   # rsync working trees, emit env
+eval "$(bazel run //:open_overlay -- --print-env examples 2>/dev/null)"
+bun --cwd swift-tui-examples run check               # now uses overlay siblings
+
+bazel test //:examples_worktree_gate                 # full gate on uncommitted tree
+bazel test //:site_worktree_gate
+bazel test //:worktree_gates                         # both at once
+
+bazel test //:examples_pretag_native_gate            # CI-shape (head mode)
+bazel test //:site_pretag_native_gate
+```
+
+The `*_worktree_gate` targets are intentionally **not** in `//:org_full` or
+`//:release_candidate` — those keep CI-deterministic `head` semantics. The full
+workflow (source-mode mechanics, cookbooks, the `SWIFTTUI_CHECKOUT` env-var
+override path, troubleshooting) is in
+[docs/CROSS-REPO-DEVELOPMENT.md](docs/CROSS-REPO-DEVELOPMENT.md).
 
 ## Public-Readiness Notes
 

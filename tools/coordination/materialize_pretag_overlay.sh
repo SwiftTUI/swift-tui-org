@@ -8,21 +8,41 @@ else
   script_path="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$script_source")"
 fi
 
-repo_root="$(git -C "$(dirname "$script_path")" rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ -z "$repo_root" ]]; then
-  repo_root="$(cd "$(dirname "$script_path")/../.." && pwd)"
+# Resolution order: $BUILD_WORKSPACE_DIRECTORY (set by `bazel run`), then
+# `git rev-parse` from the script's directory, then a structural fallback for
+# Bazel test runfiles trees.
+if [[ -n "${BUILD_WORKSPACE_DIRECTORY:-}" ]]; then
+  repo_root="$BUILD_WORKSPACE_DIRECTORY"
+else
+  repo_root="$(git -C "$(dirname "$script_path")" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$repo_root" ]]; then
+    repo_root="$(cd "$(dirname "$script_path")/../.." && pwd)"
+  fi
 fi
 
 scope=all
 output="${SWIFTTUI_ORG_PRETAG_OVERLAY_DIR:-$repo_root/.build/coordination/pretag-overlay}"
+source_mode="${SWIFTTUI_ORG_OVERLAY_SOURCE_MODE:-head}"
 
 usage() {
   cat <<'EOF'
-Usage: tools/coordination/materialize_pretag_overlay.sh [--output DIR] [all|examples|site]
+Usage: tools/coordination/materialize_pretag_overlay.sh [options] [all|examples|site]
 
-Copies pinned child-repo commits into a temporary coordination-owned overlay and
-rewrites dependencies in that overlay only so pre-tag integration gates can test
-the root-pinned sibling SHAs before public release tags exist.
+Copies pinned child-repo state into a temporary coordination-owned overlay and
+rewrites dependencies in that overlay only, so pre-tag integration gates can
+test the root-pinned sibling sources before public release tags exist.
+
+Options:
+  --output DIR         Place the overlay at DIR (default:
+                       .build/coordination/pretag-overlay).
+  --source-mode MODE   Choose what to copy out of each child submodule:
+                         head      git archive HEAD (default; CI-deterministic,
+                                   matches what a release tag would see).
+                         worktree  rsync the live working tree, including
+                                   uncommitted and untracked edits. Excludes
+                                   .git, .build, node_modules, bazel-*, and
+                                   .DS_Store.
+                       Can also be set via SWIFTTUI_ORG_OVERLAY_SOURCE_MODE.
 EOF
 }
 
@@ -40,6 +60,13 @@ while [[ "$#" -gt 0 ]]; do
       output=$2
       shift 2
       ;;
+    --source-mode)
+      if [[ "$#" -lt 2 ]]; then
+        fail "--source-mode requires a value"
+      fi
+      source_mode=$2
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -53,6 +80,15 @@ while [[ "$#" -gt 0 ]]; do
       ;;
   esac
 done
+
+case "$source_mode" in
+  head|worktree) ;;
+  *) fail "unknown --source-mode: $source_mode (expected: head, worktree)" ;;
+esac
+
+if [[ "$source_mode" == "worktree" ]] && ! command -v rsync >/dev/null 2>&1; then
+  fail "--source-mode worktree requires rsync, which was not found on PATH"
+fi
 
 mkdir -p "$(dirname "$output")"
 output_parent="$(cd "$(dirname "$output")" && pwd)"
@@ -78,7 +114,20 @@ copy_repo() {
   fi
 
   mkdir -p "$dst"
-  git -C "$src" archive --format=tar HEAD | tar -x -C "$dst"
+  case "$source_mode" in
+    head)
+      git -C "$src" archive --format=tar HEAD | tar -x -C "$dst"
+      ;;
+    worktree)
+      rsync -a \
+        --exclude='.git' \
+        --exclude='.build' \
+        --exclude='node_modules' \
+        --exclude='bazel-*' \
+        --exclude='.DS_Store' \
+        "$src/" "$dst/"
+      ;;
+  esac
 }
 
 relative_path() {

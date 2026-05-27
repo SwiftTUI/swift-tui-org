@@ -9,13 +9,24 @@ else
 fi
 
 script_dir="$(cd "$(dirname "$script_path")" && pwd)"
-repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ -z "$repo_root" ]]; then
-  repo_root="$(cd "$script_dir/../.." && pwd)"
+if [[ -n "${BUILD_WORKSPACE_DIRECTORY:-}" ]]; then
+  repo_root="$BUILD_WORKSPACE_DIRECTORY"
+else
+  repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$repo_root" ]]; then
+    repo_root="$(cd "$script_dir/../.." && pwd)"
+  fi
 fi
 
-overlay_dir="${SWIFTTUI_ORG_EXAMPLES_PRETAG_DIR:-$repo_root/.build/coordination/examples-pretag}"
-overlay_dir="$("$script_dir/materialize_pretag_overlay.sh" --output "$overlay_dir" examples)"
+source_mode="${SWIFTTUI_ORG_OVERLAY_SOURCE_MODE:-head}"
+case "$source_mode" in
+  head)     default_overlay="$repo_root/.build/coordination/examples-pretag" ;;
+  worktree) default_overlay="$repo_root/.build/coordination/examples-worktree" ;;
+  *) printf '[run_examples_pretag_gate] unknown SWIFTTUI_ORG_OVERLAY_SOURCE_MODE: %s\n' "$source_mode" >&2; exit 1 ;;
+esac
+
+overlay_dir="${SWIFTTUI_ORG_EXAMPLES_PRETAG_DIR:-$default_overlay}"
+overlay_dir="$("$script_dir/materialize_pretag_overlay.sh" --source-mode "$source_mode" --output "$overlay_dir" examples)"
 
 examples_dir="$overlay_dir/swift-tui-examples"
 

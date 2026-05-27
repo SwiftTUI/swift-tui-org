@@ -1,6 +1,24 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 package(default_visibility = ["//visibility:public"])
+
+# `bazel run`-able developer entry points.
+#
+# Prefer these over invoking the scripts directly: Bazel exports
+# $BUILD_WORKSPACE_DIRECTORY so the scripts locate the workspace correctly no
+# matter where `bazel run` is invoked from.
+
+sh_binary(
+    name = "open_overlay",
+    srcs = ["tools/coordination/open_overlay.sh"],
+    data = ["tools/coordination/materialize_pretag_overlay.sh"],
+)
+
+sh_binary(
+    name = "materialize_pretag_overlay",
+    srcs = ["tools/coordination/materialize_pretag_overlay.sh"],
+)
 
 sh_test(
     name = "org_ci_workflow",
@@ -78,6 +96,49 @@ sh_test(
     ],
 )
 
+sh_test(
+    name = "examples_worktree_gate",
+    srcs = ["tools/coordination/run_examples_pretag_gate.sh"],
+    data = ["tools/coordination/materialize_pretag_overlay.sh"],
+    env = {"SWIFTTUI_ORG_OVERLAY_SOURCE_MODE": "worktree"},
+    tags = [
+        "exclusive",
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_test(
+    name = "site_worktree_gate",
+    srcs = ["tools/coordination/run_site_pretag_gate.sh"],
+    data = ["tools/coordination/materialize_pretag_overlay.sh"],
+    env = {"SWIFTTUI_ORG_OVERLAY_SOURCE_MODE": "worktree"},
+    tags = [
+        "exclusive",
+        "local",
+        "no-sandbox",
+    ],
+)
+
+# Cheap script-level smoke test for the overlay tooling. Does not invoke
+# SwiftPM or Bun, so it catches materializer / open_overlay regressions in
+# seconds rather than the multi-minute native gates. Tagged `exclusive`
+# because it places a temporary marker file in swift-tui/ to exercise the
+# worktree-mode copy path, and pin_cleanliness would fail if it raced.
+sh_test(
+    name = "open_overlay_smoke",
+    srcs = ["tools/coordination/open_overlay_smoke_test.sh"],
+    data = [
+        "tools/coordination/materialize_pretag_overlay.sh",
+        "tools/coordination/open_overlay.sh",
+    ],
+    tags = [
+        "exclusive",
+        "local",
+        "no-sandbox",
+    ],
+)
+
 test_suite(
     name = "swift_tui_native_gate",
     tests = ["@swift_tui//:native_gate"],
@@ -105,6 +166,14 @@ test_suite(
         ":swift_tui_web_native_gate",
         ":swift_tui_examples_native_gate",
         ":swift_tui_site_native_gate",
+    ],
+)
+
+test_suite(
+    name = "worktree_gates",
+    tests = [
+        ":examples_worktree_gate",
+        ":site_worktree_gate",
     ],
 )
 

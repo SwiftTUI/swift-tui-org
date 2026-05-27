@@ -42,17 +42,27 @@ Tooling is pinned via `mise.toml` (Bazelisk + Bun). Run `mise trust && mise
 install` once. Then, from an activated mise shell, use Bazel targets directly:
 
 ```bash
-bazel test //:org_fast      # cheap org contract checks (CI default)
-bazel test //:org_full      # full org gate, incl. every native gate
-bazel test //:native_gates  # run all child repos' native gates
-bazel test //:examples_pretag_native_gate
+bazel test //:org_fast                       # cheap org contract checks (CI default)
+bazel test //:org_full                       # full org gate, incl. every native gate
+bazel test //:native_gates                   # run all child repos' native gates
+bazel test //:examples_pretag_native_gate    # head-mode (CI shape)
 bazel test //:site_pretag_native_gate
-bazel fetch //:org_full     # refresh Bazel external state after pin bumps
+bazel test //:worktree_gates                 # both gates against the live working tree
+bazel fetch //:org_full                      # refresh Bazel external state after pin bumps
+
+# Dev tools — materialize the coordination overlay for cross-repo iteration:
+bazel run  //:open_overlay -- --print-env examples   # rsync working trees, emit env vars
+bazel run  //:open_overlay -- --help                 # full flag list
 ```
+
+See [docs/CROSS-REPO-DEVELOPMENT.md](docs/CROSS-REPO-DEVELOPMENT.md) for the
+overlay workflow (head vs worktree source modes, cookbook recipes).
 
 Without shell activation, prefix with `mise exec --` (e.g.
 `mise exec -- bazel test //:org_full`) or use the `mise run <task>` wrappers
-(`org-fast`, `native-gates`, `org-full`, `release-candidate`, `fetch`).
+(`org-fast`, `native-gates`, `org-full`, `release-candidate`, `fetch`,
+`overlay`, `worktree-gates`, `overlay-smoke`). The `overlay` task forwards
+trailing args, e.g. `mise run overlay -- --print-env examples`.
 
 Native gates still need their own toolchains: Swift 6.3.x + SwiftPM, the
 Xcode/macOS toolchain, and Binaryen/Brotli for browser/WASI packaging. Swift and

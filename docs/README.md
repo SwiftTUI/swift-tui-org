@@ -10,6 +10,14 @@ documentation in their own `docs/` trees.
   the `0.0.1` child-repo cutover, public dependency defaults, verification
   notes, and npm follow-up.
 
+## Cross-Repo Development
+
+- [CROSS-REPO-DEVELOPMENT.md](CROSS-REPO-DEVELOPMENT.md) - the coordination
+  overlay (head vs worktree source modes), Bazel target reference for
+  `bazel run //:open_overlay` and the `*_pretag_native_gate` /
+  `*_worktree_gate` family, cookbook recipes for the common iteration loops,
+  and troubleshooting.
+
 ## Planning Documents
 
 - [plans/2026-05-22-001-github-organization-split-plan.md](plans/2026-05-22-001-github-organization-split-plan.md) -
