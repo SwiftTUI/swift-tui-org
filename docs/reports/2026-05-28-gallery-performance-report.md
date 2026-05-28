@@ -26,8 +26,11 @@
   ~1 MB/s" leak is **refuted at this SHA** (borders stores are flat). A *new*
   leak surfaced instead: the **Task Progress** tab grows `TextLayoutCache`
   unbounded (~2.9 entries/sec) during idle.
-- **Important caveat:** presentation/terminal-write cost was **not** measured
-  (stub host); see §1.
+- **Authentic-terminal cross-check (kitty) done:** presentation is **100 %
+  incremental** on a real terminal, real `present_cells` **equals** the
+  in-process `damage_cells` (the stub's `4180` was pure artifact), and
+  terminal-write cost is **negligible** (≤0.08 ms/frame). The bottleneck is the
+  **frame pipeline (CPU)**, not terminal I/O. See §6.
 
 ---
 
@@ -92,8 +95,11 @@ output. Validity was verified by reading `PerfTerminalHost`:
 
 ### Known gaps (carried to follow-up)
 
-1. **No real-terminal data** (escape-sequence/PTY cost). Deferred kitty pass
-   (Route B) fills this.
+1. ~~No real-terminal data.~~ **Resolved** by the kitty cross-check (§6):
+   terminal-write cost is negligible and `present_cells == damage_cells`, so the
+   in-process pipeline timings are representative and `damage_cells` is an
+   accurate proxy for real write size. The only in-process artifact was
+   `present_*` (stub host).
 2. **n = 1 per cell.** Single sample; treat magnitudes as indicative, rankings as
    robust (effects are large).
 3. **`cpu_per_frame_ms` for 1-frame (static) tabs is a cold-start artifact** —
@@ -172,9 +178,13 @@ previous frame (zero damage). This is wasted work along two independent axes:
   `CommitPlanner`). Hedge: confirm no animation-completion bookkeeping depends on
   those frames before changing behavior.
 
-**Why it matters most.** A zero-damage frame is the purest form of wasted CPU;
-on a real terminal it is either 274 no-op writes or (worse, with the stub's
-`fullRepaint` strategy) 274 full-screen repaints. The kitty pass will tell which.
+**Why it matters most.** A zero-damage frame is the purest form of wasted CPU.
+The kitty cross-check (§6) **resolves the open question**: on a real terminal
+these frames are `incremental` with `present_cells = 0`, `present_bytes = 0`,
+`present_ms ≈ 0.01` — i.e. **no-op writes**, not full repaints. So the terminal
+pays nothing, but the runtime still spends ~5 ms/frame (raster + commit) building
+them. The fix is therefore purely CPU-side: **skip the pipeline for frames with
+no invalidation and no damage**, not anything presentation-related.
 
 ### H2 — Per-interaction `resolve` cost **(MEDIUM)**
 
@@ -295,7 +305,44 @@ not a leak.
 
 ---
 
-## 6. Recommendations (by impact ÷ effort)
+## 6. Authentic-terminal cross-check (kitty — Route B)
+
+The real `gallery-demo` binary was built with `.profiling()` enabled (against the
+local `swift-tui`, since tag `0.0.5` lacks `SwiftTUIProfiling`) and run inside
+**kitty 0.46.2** at 110×38 with `SWIFTTUI_PROFILE="frames,cpu,memory@1s;tsv=…"`,
+idling ~12 s per tab. This exercises the *real* terminal presentation path that
+the in-memory `PerfTerminalHost` stubs out.
+
+| Tab | frames | strategy | `damage_cells` med | `present_cells` med | `present_bytes` med | `present_ms` p95 |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| animations | 390 | 100 % incremental | 0 | **0** | **0** | 0.01 ms |
+| borders-and-shapes | 321 | 100 % incremental | 70 | 70 | 1822 | 0.08 ms |
+| physics | 52 | 98 % incremental* | 15 | 15 | 232 | 0.03 ms |
+| task-progress | 307 | 100 % incremental | 4 | 4 | 109 | 0.02 ms |
+
+*physics: only the initial paint is `full`; the rest incremental.
+
+**Findings:**
+
+1. **Presentation is fully incremental.** The stub's "every frame is a 4180-cell
+   full repaint" was 100 % artifact. The real terminal repaints only the damaged
+   region.
+2. **`present_cells` == `damage_cells`.** The real terminal writes exactly the
+   damaged cells, so the in-process `damage_cells` column was an accurate proxy
+   for real write size all along — the in-process methodology holds for
+   everything except the (stubbed) `present_*` columns.
+3. **Terminal-write cost is negligible.** Even borders' 1822 bytes/frame
+   (~49 KB/s of escape sequences) presents in 0.08 ms. Versus 6–14 ms of pipeline
+   per frame, terminal I/O is <1 % of frame cost. **The Phase-4 prediction that
+   in-process under-counts real cost is refuted** — the escape-sequence cost is
+   immaterial; in-process pipeline timings are representative.
+4. **Animations writes 0 bytes for 390 frames** — confirming H1 is pure CPU
+   waste with zero terminal benefit (see H1).
+
+`present_bytes` per damaged cell varies with content (~26 B/cell for borders'
+gradients, ~15 B/cell for physics) but never approaches a bottleneck.
+
+## 7. Recommendations (by impact ÷ effort)
 
 1. **Investigate skipping zero-damage / zero-invalidation frames (H1).**
    Highest impact: directly eliminates Animations' 274 wasted frames and ~5.6
@@ -311,20 +358,22 @@ not a leak.
    `TextLayoutCache.swift` (the proposal's open question) and/or stop Task
    Progress from minting a new layout key every shimmer frame. *Effort: medium;
    impact high for long-running sessions.*
-4. **Run the deferred kitty cross-check (Route B).** Converts H1 from "274
-   zero-damage frames" into a real-terminal verdict (no-op writes vs. full
-   repaints) and supplies the presentation/byte cost this pass cannot. *Effort:
-   medium.*
+4. **✅ Done — kitty cross-check (§6).** Verdict: terminal-write cost is
+   negligible and presentation is fully incremental, so all optimization effort
+   belongs in the **frame pipeline (CPU)**, not presentation. No presentation
+   work is warranted.
 5. **(Product) Consider throttling Borders/Task-Progress animation cadence (H4).**
    Only if a lower fps is visually acceptable. *Effort: low; impact moderate but
    it is legitimate work, not waste.*
 
 ---
 
-## 7. Artifacts & reproduction
+## 8. Artifacts & reproduction
 
 - Aggregated table: `docs/perf/2026-05-28-gallery-baseline/aggregate.csv`
 - Aggregator (stdlib, header-indexed): `docs/perf/2026-05-28-gallery-baseline/aggregate.py`
+- Occupancy traces (20 s idle): `docs/perf/2026-05-28-gallery-baseline/memory/*.tsv`
+- Real-terminal (kitty) frame traces: `docs/perf/2026-05-28-gallery-baseline/kitty/*-kitty-frames.tsv`
 - Raw per-run output: `swift-tui/.perf/runs/*` (gitignored). Each dir has
   `frames.tsv`, `cpu.tsv`, `memory.tsv`, `events.tsv`, `run.json`,
   `summary.json`. The 20 s memory re-runs of animations / borders-and-shapes /
@@ -336,13 +385,32 @@ not a leak.
     run --scenario gallery-animations --modes async --iterations 1 --configuration release
   python3 ../docs/perf/2026-05-28-gallery-baseline/aggregate.py
   ```
+- Reproduce a kitty run (real terminal; opens a GUI window):
+  ```bash
+  BIN=swift-tui-examples/gallery/.build/arm64-apple-macosx/release/gallery-demo
+  SWIFTTUI_PROFILE="frames,cpu,memory@1s;tsv=/tmp/anim.tsv" \
+    kitty -o allow_remote_control=yes --listen-on unix:/tmp/k \
+    -o initial_window_width=110c -o initial_window_height=38c \
+    -e "$PWD/$BIN" --tab animations &
+  sleep 15; kitty @ --to unix:/tmp/k close-window
+  ```
 
-**Coordination-only edits (uncommitted in `swift-tui`, must NOT land in the
-public child manifest):**
-- `Tools/TermUIPerf/Package.swift` (+gallery path dep)
-- `Tools/TermUIPerf/Sources/TermUIPerf/PerfRunConfig.swift` (+scenario names)
-- `Tools/TermUIPerf/Sources/TermUIPerf/Scenarios/GalleryTabScenario.swift`
-- `Tools/TermUIPerf/Sources/TermUIPerf/Scenarios/CommandPaletteScenario.swift`
-- `Tools/TermUIPerf/Sources/TermUIPerf/Scenarios/PerfScenario.swift` (registry + memory sampling in `runWindow`)
-- `Tools/TermUIPerf/Sources/TermUIPerf/PerfMemorySampler.swift` (new)
-- `Sources/SwiftTUIProfiling/Memory/ProfiledMemoryAccess.swift` (new; `@_spi(Runners)` occupancy accessor — note: adds public-SPI surface, so it would trip `public-surface-policies` if ever committed)
+**Committed reusable tooling** (`swift-tui` local `main`, commit `589464de`,
+not pushed):
+- `Sources/SwiftTUIProfiling/Memory/ProfiledMemoryAccess.swift` — `@_spi(Runners)`
+  occupancy accessor (SPI is excluded from the public-API baseline, so the gate
+  stays green).
+- `Tools/TermUIPerf/Sources/TermUIPerf/PerfMemorySampler.swift` + the `runWindow`
+  memory-sampling wiring and `PerfScenarioRegistry.additionalScenarios` hook in
+  `Scenarios/PerfScenario.swift`.
+
+**Coordination-only edits (uncommitted; must NOT land in the public child
+manifests):**
+- `swift-tui`: `Tools/TermUIPerf/Package.swift` (+gallery path dep),
+  `…/PerfRunConfig.swift` (+scenario names), `…/Scenarios/GalleryTabScenario.swift`,
+  `…/Scenarios/CommandPaletteScenario.swift`, `…/Scenarios/GalleryScenarioRegistration.swift`,
+  `…/main.swift` (registration hook).
+- `swift-tui-examples`: `gallery/Package.swift` (local `swift-tui` path dep +
+  `SwiftTUIProfiling`), `gallery/Sources/GalleryDemo/GalleryDemoApp.swift`
+  (`.profiling()`) — needed only to build a profiling-enabled gallery binary for
+  the kitty run.
