@@ -69,11 +69,16 @@ The gaps this design closes:
   committed; they carry a path-dep on the gallery package that cannot land in
   the public `swift-tui` manifest. Only `GalleryAnimationClickScenario` and
   `LayoutScrollBurstScenario` are committed.
-- **G2 — no run-to-run variance.** `SummaryReducer.reduce` pools all iterations'
-  frames/events/CPU samples into one `PerfDistribution`. `iterationCount` is
-  metadata only. The result is robust *percentile tails* but no measure of
-  whether a summary metric (e.g. `total_cpu_seconds`) is stable run-to-run, so a
-  delta cannot be judged against noise.
+- **G2 — no run-to-run variance, and iterations don't even run.** `runWindow`
+  executes each scenario **exactly once**; `--iterations` (default 20) is stamped
+  into `PerfRunMetadata.iterationCount` as a label but drives **no repetition**
+  (verified: `RunCommand` calls `scenario.run` once per mode; the scenario calls
+  `runWindow` once; there is no loop). `SummaryReducer.reduce` pools the *frames
+  within that single run* into one `PerfDistribution` (robust percentile tails),
+  but there is no run-to-run sample at all — so a summary metric like
+  `total_cpu_seconds` has no variance and a delta cannot be judged against noise.
+  The report's "n = 1" was therefore not a sampling choice; the harness cannot
+  yet do n > 1.
 - **G3 — profiler perturbation.** `diagnosticsRequireFullRecord` →
   `.diagnosticsFullRecord` is inserted into the blocker set in
   `RunLoop+FrameDropBlockerDerivation.swift:40-42`, forcing a commit. Profiling
@@ -104,12 +109,18 @@ The gaps this design closes:
 
 ## Phase G2 — run-to-run variance (harness only)
 
-**Change the aggregation unit from "pooled frames" to "per-iteration summary."**
+**Execute N iterations, then aggregate per-iteration summaries.** (`runWindow`
+currently runs once and `--iterations` is unused — see Background. So G2 must
+*implement* multi-iteration execution, not merely re-aggregate.)
 
-- The scenario runner retains per-iteration boundaries and produces **N
-  per-iteration `PerfSummary`s** (run `SummaryReducer.reduce` once per iteration)
-  rather than one summary over concatenated frames. The pooled within-run
-  distribution remains available as a secondary view.
+- Add a thin orchestration layer above the scenario that invokes the existing
+  single-run primitive (`runWindow`, via `scenario.run(options:)`) **N times**,
+  collecting N `PerfScenarioRunResult`s — each already writes its own run
+  directory and `PerfSummary`. `runWindow` is reused **unchanged** as the
+  one-iteration primitive; no surgery inside it.
+- New pure `AggregateReducer.reduce(summaries:) -> PerfAggregateSummary` produces
+  the cross-iteration stats below. The per-iteration within-run percentile
+  distributions remain available unchanged.
 - New `PerfAggregateSummary` over the N per-iteration summaries computes, for the
   headline metrics — `total_cpu_seconds`, `committed_frame_count`,
   `cpu_seconds_per_committed_frame`, `input_to_present_latency_ms` p95,
