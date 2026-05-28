@@ -170,22 +170,60 @@ previous frame (zero damage). This is wasted work along two independent axes:
 2. **Runtime:** the run loop **commits frames that have neither invalidation nor
    damage** rather than short-circuiting them.
 
-**Files / hypotheses.**
-- `swift-tui-examples/gallery/Sources/GalleryDemoViews/AnimationsTab.swift` —
-  audit which animations remain active at idle (PhaseAnimator auto-cycle
-  sections); confirm whether their visual output actually changes.
-- Runtime: investigate a **"skip commit when `invalidated == 0 && damage == 0`"**
-  fast path in the frame tail / commit (`SwiftTUIRuntime/RunLoop/` +
-  `CommitPlanner`). Hedge: confirm no animation-completion bookkeeping depends on
-  those frames before changing behavior.
+**Files (confirmed by the spike below).**
+- `swift-tui-examples/gallery/Sources/GalleryDemoViews/AnimationsTab.swift:327` —
+  the off-screen auto-cycling `PhaseAnimator` (section 7) is the driver.
+- `swift-tui/Sources/SwiftTUIRuntime/Lifecycle/AnimationController.swift` +
+  `RunLoop/RunLoop+FrameDropBlockerDerivation.swift` — where the
+  commit-vs-drop decision and its animation blockers live.
 
 **Why it matters most.** A zero-damage frame is the purest form of wasted CPU.
 The kitty cross-check (§6) **resolves the open question**: on a real terminal
 these frames are `incremental` with `present_cells = 0`, `present_bytes = 0`,
 `present_ms ≈ 0.01` — i.e. **no-op writes**, not full repaints. So the terminal
 pays nothing, but the runtime still spends ~5 ms/frame (raster + commit) building
-them. The fix is therefore purely CPU-side: **skip the pipeline for frames with
-no invalidation and no damage**, not anything presentation-related.
+them.
+
+**Spike — root cause confirmed (2026-05-28); fix is NOT clear/safe.**
+
+- **Cause.** `AnimationsTab` is a `ScrollView` of 9 sections; only section 7
+  (`phaseAnimatorSection`, `PhaseAnimator([.red,.yellow,.green,.cyan])`)
+  auto-cycles — the rest are trigger-driven. At 110×38 it sits below the fold.
+  The off-screen PhaseAnimator keeps `internalAnimationController` active
+  (`anim_active = 2`, cycling 0→2→0→2…), so the run loop wakes on the **animation
+  deadline** (`causes = deadline`) ~28×/sec, runs the full pipeline, and produces
+  **zero visible damage** (off-screen).
+- **Why the frames aren't dropped.** The runtime *already* has drop logic
+  (`FrameDropEligibility` → `.mustCommit(blockers)` vs `.canDropVisualOnly`,
+  `RunLoop+FrameDropBlockerDerivation.swift`). The `drop_blockers` column shows
+  every deadline frame is blocked by
+  `animationCompletion + animationTransition + handlerInstallations`
+  (+ `diagnosticsFullRecord`). These come from
+  `AnimationController.frameDropEligibilityBlockers` and are **correctness
+  motivated** — a frame carrying a completion callback or an active transition
+  *must* commit (AnimationsTab §9 is literally a `withAnimation` completion-callback
+  demo). The frames commit by design.
+- **Why a naive fix is unsafe.** Eliding these frames requires either off-screen
+  animation culling (visibility analysis feeding the animation scheduler) or a
+  cheap pre-tail "will this tick change visible output?" oracle. Neither exists.
+  And the drop decision is made *after* the tail, so even the existing
+  `.canDropVisualOnly` path would not save the raster+commit cost — only present,
+  which is already a 0-byte no-op. A real fix must preserve completion-callback
+  delivery and transition fidelity. **This is scoped follow-up design work, not a
+  minimal patch.**
+- **Measurement perturbation.** `diagnosticsFullRecord` is itself a drop-blocker
+  (`RunLoop+FrameDropBlockerDerivation.swift:40`), so **profiling inflates the
+  committed-frame count.** The waste is real without profiling (the animation
+  blockers remain), but the exact counts (274/345/390) overstate a non-profiled
+  build. A clean measurement would require a non-`diagnosticsFullRecord` sink or
+  counting drop-eligible frames.
+
+**Recommended follow-up (own plan):** "off-screen / zero-damage animation frame
+elision" — let `AnimationController.frameDropEligibilityBlockers` (and the tail
+scheduler) treat a transition whose damage is empty as drop-eligible *while still
+delivering completion callbacks*, or cull animation-deadline wakeups for content
+that doesn't reach the visible surface. Both need design + careful tests
+(`AnimationRepeatForeverGrowthTests` is the nearest existing coverage).
 
 ### H2 — Per-interaction `resolve` cost **(MEDIUM)**
 
@@ -348,11 +386,14 @@ gradients, ~15 B/cell for physics) but never approaches a bottleneck.
 
 ## 7. Recommendations (by impact ÷ effort)
 
-1. **Investigate skipping zero-damage / zero-invalidation frames (H1).**
-   Highest impact: directly eliminates Animations' 274 wasted frames and ~5.6
-   CPU-s/10 s, and helps any perpetually-active animation. Start by confirming the
-   AnimationsTab idle animations should be active at all; then assess a runtime
-   commit short-circuit. *Effort: medium (runtime change needs care).*
+1. **Elide off-screen / zero-damage animation frames (H1).** Highest impact
+   (~5.6 CPU-s/10 s on animations; helps any perpetually-active animation). The
+   spike (§4 H1) confirmed the cause (off-screen PhaseAnimator + correctness drop
+   blockers) and that **there is no minimal patch**: the runtime commits these
+   frames by design to deliver completion callbacks / transitions. Needs its own
+   plan — make zero-damage transitions drop-eligible while still firing
+   completions, or cull deadline wakeups for off-screen animations. *Effort:
+   medium-high (runtime + animation-scheduler change; correctness-sensitive).*
 2. **Profile the `resolve` hot path on a Calculator click (H2/H3).**
    13.9 ms resolve for a 2-cell change is the clearest single-interaction
    inefficiency and exercises the fixed cost that affects every tab. Check
