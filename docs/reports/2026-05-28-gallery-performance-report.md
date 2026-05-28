@@ -23,9 +23,10 @@
   event-driven); **Physics** correctly **stops rendering when the ball settles**;
   the command palette causes **no focus-sync storm**.
 - **Memory:** the occupancy signal is now wired in. The historical "borders pane
-  ~1 MB/s" leak is **refuted at this SHA** (borders stores are flat). A *new*
-  leak surfaced instead: the **Task Progress** tab grows `TextLayoutCache`
-  unbounded (~2.9 entries/sec) during idle.
+  ~1 MB/s" leak is **refuted at this SHA** (borders stores are flat). An earlier
+  draft of this report flagged a Task Progress `TextLayoutCache` leak; that was a
+  **false alarm** — the cache is LRU-bounded at 256 and the 20 s sample was too
+  short to see the plateau. **No memory leak found.** (See H5, corrected.)
 - **Authentic-terminal cross-check (kitty) done:** presentation is **100 %
   incremental** on a real terminal, real `present_cells` **equals** the
   in-process `damage_cells` (the stub's `4180` was pure artifact), and
@@ -119,7 +120,7 @@ Predictions P1–P7 were frozen before the run (plan §Phase 4).
 | P1 | Life = highest steady CPU & raster | **Refuted** | Life is mid-pack (1.07 CPU-s); Animations is the CPU leader (5.58 s). Life `raster_ms` is low (0.78); its cost is in `resolve` (9.1 ms). |
 | P2 | Physics = small damage, settles | **Confirmed** | `damage_cells` 15–21 (the ball); 31 % of frames zero-damage as it comes to rest, then stops. Well-behaved. |
 | P3 | Task Progress = worst idle tab | **Partial** | High (239 frames) but second to Animations (274). Damage is tiny+real (4 cells). |
-| P4 | Borders = continuous repaint + leak | **Repaint confirmed; leak refuted** | Continuous repaint **confirmed** (258 frames, 70 real cells/frame). Leak **refuted**: borders occupancy is flat over 20 s (`ViewGraph` 307→307, `TextLayoutCache` 145→145). The real leak is in **Task Progress** — see H5. |
+| P4 | Borders = continuous repaint + leak | **Repaint confirmed; leak refuted** | Continuous repaint **confirmed** (258 frames, 70 real cells/frame). Leak **refuted**: borders occupancy is flat over 20 s (`ViewGraph` 307→307, `TextLayoutCache` 145→145). No leak anywhere — Task Progress was a false alarm (see H5, corrected). |
 | P5 | Animations = transient spikes | **Refuted → Surprise** | Not transient: 274 continuous **zero-damage** frames, highest CPU. See H1. |
 | P6 | Static tabs idle-quiet | **Confirmed** | Forms, Todo, Navigation, Text Input, Popovers, Presentation Lab, Focus Context, File Drop, Pointer Lab → **1 frame each** (no idle frames). |
 | P7 | Palette = focus-sync storm | **Refuted** | `focus_syncs_sum` = 1–2; palette open = one ~180-cell overlay draw. No storm. |
@@ -259,31 +260,34 @@ re-run with a **20 s** idle window (`async`). Eight providers report:
 `ImageAssetRepository.decodedImages`, and the synthetic
 `MemoryMetricRegistry.providerCount`.
 
-### H5 — Task Progress grows `TextLayoutCache` unbounded **(HIGH — leak)**
+### H5 — Task Progress `TextLayoutCache` growth **(NOT a leak — corrected 2026-05-28)**
 
-**Evidence.** Over a 20 s idle window, `TextLayoutCache.entries` climbs
-**monotonically 104 → 162** (`104, 114, 120, 128, 132, 140, 146, 150, 156, 160…`,
-≈ **2.9 entries/sec**, no plateau) while every other store stays flat
-(`ViewGraph` 203→204, `MeasurementCache` ~310–315, `providerCount` 6→6). No
-eviction or plateau is observed within the window.
+**Original (incorrect) observation.** Over a 20 s idle window,
+`TextLayoutCache.entries` climbed **monotonically 104 → 162** (≈ 2.9 entries/sec,
+no plateau) while every other store stayed flat. An earlier draft concluded this
+was an unbounded leak.
 
-**Interpretation.** The shimmer-gradient title + rotating spinner + advancing
-subtask text produce a *new text-layout key every frame* (~28 fps), each cached
-in `TextLayoutCache` and never evicted. By contrast, **Animations** holds
-`TextLayoutCache` flat at 163 — it animates *color* (same layout keys), so its
-274 frames add nothing to the cache. The growth is specific to content that
-changes *text/layout*, not color. Extrapolated, a 10-minute Task Progress
-session would accrue ~1,700 entries.
+**Correction.** This was a **false alarm caused by too short an observation
+window.** `TextLayoutCache` is an **LRU cache bounded at capacity 256**
+(`TextLayoutCache.swift:84`, `evictIfNeeded` at `:211`, access-log compaction at
+`:195`). The shimmer/spinner mints a new layout key every frame (~28 fps cache
+misses), so entries fill *toward* 256 at ~2.9/sec — reaching the cap at ~52 s,
+well past the 20 s sample. Beyond 256 the cache LRU-evicts and entries plateau.
 
-**Files / hypotheses.**
-- `swift-tui/Sources/SwiftTUICore/Content/TextLayoutCache.swift` — confirm
-  whether the cache (and its `order` buffer) has an eviction bound. This matches
-  the open question flagged in the profiling-product proposal
-  ("`TextLayoutCache.order` exact bound … disagreed on whether `order` has a
-  compaction guard"). The data says: **no bound is taking effect for this
-  workload.**
-- `swift-tui-examples/gallery/Sources/GalleryDemoViews/TaskProgressTab.swift` —
-  the shimmer/spinner content generating ever-new keys.
+**Verification.** Code inspection plus tests:
+`Tests/SwiftTUITests/TextLayoutCacheTests.swift` —
+`evictionKeepsMostRecentlyUsedEntry` proves the cap, and a new
+`uniqueKeyChurnStaysBoundedAtCapacity` reproduces this exact scenario (5000
+unique-key "frames" at capacity 16 → entries plateau at 16, evictions = 4984,
+access log bounded). The borders-pane access-log leak this cache once had was
+already fixed (commit `e4d96c1`; see the `warmCacheHitsKeepAccessLogBounded`
+test).
+
+**Residual note (minor, not actionable).** Animated-*text* content (Task
+Progress) gets ~0 cache benefit — every frame misses, stores, and evicts — so it
+pays the full `uncachedTextLayout` cost each frame plus eviction bookkeeping.
+Animated-*color* content (Animations) holds the cache flat (same layout keys).
+Memory is bounded either way; this is a CPU footnote subsumed by H1, not a leak.
 
 ### Borders & Animations: no leak (P4 refuted)
 
@@ -353,11 +357,10 @@ gradients, ~15 B/cell for physics) but never approaches a bottleneck.
    13.9 ms resolve for a 2-cell change is the clearest single-interaction
    inefficiency and exercises the fixed cost that affects every tab. Check
    invalidation scope first (cheap), then the resolve path. *Effort: low to start.*
-3. **Bound `TextLayoutCache` / fix the Task Progress leak (H5).** Real unbounded
-   growth (~2.9 entries/sec). Confirm the cache eviction policy in
-   `TextLayoutCache.swift` (the proposal's open question) and/or stop Task
-   Progress from minting a new layout key every shimmer frame. *Effort: medium;
-   impact high for long-running sessions.*
+3. ~~Bound `TextLayoutCache` / fix the Task Progress leak (H5).~~ **Withdrawn —
+   not a leak (H5, corrected).** The cache is already LRU-bounded at 256; no
+   action needed. (Optional CPU micro-opt: skip the cache store for content that
+   changes every frame, but this is subsumed by H1.)
 4. **✅ Done — kitty cross-check (§6).** Verdict: terminal-write cost is
    negligible and presentation is fully incremental, so all optimization effort
    belongs in the **frame pipeline (CPU)**, not presentation. No presentation
