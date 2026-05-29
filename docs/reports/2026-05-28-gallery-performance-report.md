@@ -197,12 +197,15 @@ them.
   (`FrameDropEligibility` → `.mustCommit(blockers)` vs `.canDropVisualOnly`,
   `RunLoop+FrameDropBlockerDerivation.swift`). The `drop_blockers` column shows
   every deadline frame is blocked by
-  `animationCompletion + animationTransition + handlerInstallations`
-  (+ `diagnosticsFullRecord`). These come from
-  `AnimationController.frameDropEligibilityBlockers` and are **correctness
-  motivated** — a frame carrying a completion callback or an active transition
-  *must* commit (AnimationsTab §9 is literally a `withAnimation` completion-callback
-  demo). The frames commit by design.
+  `animationCompletion + animationTransition + handlerInstallations`. These come
+  from `AnimationController.frameDropEligibilityBlockers` (fed into the **real**
+  decision via `completedFrameAdditionalDropBlockers`,
+  `RunLoop+FrameAcquisitionOutcome.swift`) and are **correctness motivated** — a
+  frame carrying a completion callback or an active transition *must* commit
+  (AnimationsTab §9 is literally a `withAnimation` completion-callback demo). The
+  frames commit by design. (The `drop_blockers` column also showed
+  `diagnosticsFullRecord`, but that one is a **post-hoc recording artifact** that
+  never gates presentation — see the corrected measurement note below.)
 - **Why a naive fix is unsafe.** Eliding these frames requires either off-screen
   animation culling (visibility analysis feeding the animation scheduler) or a
   cheap pre-tail "will this tick change visible output?" oracle. Neither exists.
@@ -211,12 +214,22 @@ them.
   which is already a 0-byte no-op. A real fix must preserve completion-callback
   delivery and transition fidelity. **This is scoped follow-up design work, not a
   minimal patch.**
-- **Measurement perturbation.** `diagnosticsFullRecord` is itself a drop-blocker
-  (`RunLoop+FrameDropBlockerDerivation.swift:40`), so **profiling inflates the
-  committed-frame count.** The waste is real without profiling (the animation
-  blockers remain), but the exact counts (274/345/390) overstate a non-profiled
-  build. A clean measurement would require a non-`diagnosticsFullRecord` sink or
-  counting drop-eligible frames.
+- **Measurement perturbation — CORRECTED (2026-05-29).** An earlier draft claimed
+  `diagnosticsFullRecord` is a drop-blocker so **profiling inflates the
+  committed-frame count** (the 274/345/390 spread). **That was wrong.** A
+  code-trace of the real decision path (`DefaultRenderer.resolveCompletedFrameCandidate`
+  → `completedFrameAdditionalDropBlockers`, `RunLoop+FrameAcquisitionOutcome.swift:88-106`)
+  shows the commit/drop/present decision **never reads the frame sink and never
+  inserts `.diagnosticsFullRecord`**. That blocker is added only in
+  `emitCommittedFrameSample`, which runs *after* the frame already presented and
+  writes to the `drop_blockers` diagnostic column only — it does **not** gate
+  presentation, so profiling does **not** change how many frames commit. The
+  274/345/390 differences are window-length (10 s / 20 s / ~12 s) + run-to-run +
+  harness variance, not a profiling artifact. (Follow-up: the misleading
+  `diagnosticsFullRecord` entry was removed from the recorded `drop_blockers`
+  column so the column reflects the real shipping-build decision; the genuine,
+  smaller profiling cost is the CPU of record-assembly + TSV writes, which inflates
+  `total_cpu_seconds`, not the frame count.)
 
 **Recommended follow-up (own plan):** "off-screen / zero-damage animation frame
 elision" — let `AnimationController.frameDropEligibilityBlockers` (and the tail

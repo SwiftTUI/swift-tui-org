@@ -79,12 +79,24 @@ The gaps this design closes:
   `total_cpu_seconds` has no variance and a delta cannot be judged against noise.
   The report's "n = 1" was therefore not a sampling choice; the harness cannot
   yet do n > 1.
-- **G3 — profiler perturbation.** `diagnosticsRequireFullRecord` →
-  `.diagnosticsFullRecord` is inserted into the blocker set in
-  `RunLoop+FrameDropBlockerDerivation.swift:40-42`, forcing a commit. Profiling
-  therefore inflates the committed-frame count vs. a shipping build. It is
-  *additive* on top of the genuine animation blockers, so it does not explain
-  the whole H1 count — only the profiler's own contribution.
+- **G3 — profiler perturbation (PREMISE DISPROVEN — corrected 2026-05-29).**
+  The original premise: `diagnosticsRequireFullRecord` →
+  `.diagnosticsFullRecord` (inserted in `RunLoop+FrameDropBlockerDerivation.swift:40-42`)
+  forces a commit, so profiling inflates the committed-frame count vs. a shipping
+  build. **This is false.** A code-trace of the real decision path
+  (`DefaultRenderer.resolveCompletedFrameCandidate` →
+  `completedFrameAdditionalDropBlockers`, `RunLoop+FrameAcquisitionOutcome.swift:88-106`)
+  shows the commit/drop/present decision **never reads `frameSink` and never
+  inserts `.diagnosticsFullRecord`**. The blocker is inserted only in
+  `emitCommittedFrameSample`, which runs **after** the frame already presented
+  (behind `guard let frameSink else { return }`) and is written solely to the
+  `drop_blockers` *diagnostic column* — it never gates presentation. Sink
+  presence affects only (a) whether that post-hoc record is written and (b)
+  whether a `ContinuousClock` times presentation; neither changes the count. The
+  gallery report's "274/345/390 overstate a non-profiled build" was a misreading
+  of that post-hoc column; those differences are window-length + run-to-run +
+  harness variance — the variance **G2 now quantifies.** See the report's
+  corrected §4-H1 measurement note.
 - **G4 — memory signal thinner than frame/CPU.** Byte weight is best-effort and
   absent for most providers; the idle-window/sample interval was ad-hoc (5/10/20
   s across runs); the leak signal (monotonic count with no plateau) was
@@ -97,8 +109,11 @@ The gaps this design closes:
 - **G2 first** because it is pure harness work with zero runtime risk and is the
   foundation: until "this delta exceeds the noise band" is answerable, no later
   phase can be *validated*.
-- **G3 second** because, with variance in hand, the de-perturbed counts can be
-  shown stable across runs before anyone trusts them.
+- **G3 second** — but G3's premise (frame-count perturbation) was disproven on
+  contact with the code (VERDICT B), collapsing it to a small `drop_blockers`
+  recording cleanup + doc corrections. Investigating it *after* G2 was itself
+  validating: G2's variance machinery explains the frame-count "discrepancies"
+  G3 was meant to correct.
 - **G1 third** because the harness hardening (G2/G3) can be developed and tested
   against the already-committed synthetic scenarios; G1 is what lets the hardened
   tooling re-run the *real* 18-tab workload.
@@ -146,37 +161,38 @@ tabs. The aggregate-over-iterations view is what makes A/B trustworthy.
 
 ---
 
-## Phase G3 — de-perturb frame counts (runtime; zero behavior change)
+## Phase G3 — WITHDRAWN, re-scoped to a recording cleanup (2026-05-29)
 
-**Record a derived shipping-build count; do not alter the real drop decision.**
+**The original G3 (a derived `committed_excluding_diagnostics` count) is
+withdrawn:** the perturbation it would correct does not exist (see the corrected
+G3 Background bullet — VERDICT B). A derived shipping-count would be definitionally
+equal to `committed_frame_count` on every frame, so building it adds an
+always-equal column for no information.
 
-- In the run-loop drop derivation, compute the eligibility a second time with
-  `.diagnosticsFullRecord` excluded from the blocker set, and record a per-frame
-  `wouldCommitWithoutDiagnostics` flag. The actual commit/drop decision is
-  untouched.
-- Implementation hook: `frameDropEligibilityBlockers(...)` already receives
-  `diagnosticsRequireFullRecord`. Derive the reduced blocker set (same inputs,
-  that flag forced `false`), run `FrameDropEligibility.classify`, and surface
-  whether the reduced decision is `.mustCommit` vs `.canDropVisualOnly`.
-- Plumb the flag: `RuntimeFrameSample` → `FrameDiagnosticRecord` → TSV/JSONL
-  columns. `SummaryReducer` reports both `committed_frame_count` and
-  `committed_excluding_diagnostics`.
-- Documented honestly as a **predicted** shipping count — exact precisely because
-  `.diagnosticsFullRecord` is the *only* excluded blocker; any frame with another
-  blocker still counts as committed.
+**What remains (the root cause of the false claim):** the recorded `drop_blockers`
+diagnostic column unconditionally lists `.diagnosticsFullRecord` for every
+committed frame, which *reads* like "diagnostics forced this commit" and is what
+misled the gallery report. The cleanup makes the recorded blockers reflect the
+real (shipping-build) decision:
 
-**Why derived (not a non-blocking mode).** Chosen for lowest risk: no behavior
-change, one additive computed field. The higher-fidelity "non-blocking
-measurement mode" (assemble/emit the record on the drop path so the shipping
-drop path is *actually* exercised) is explicitly deferred.
+- In `emitCommittedFrameSample` (`RunLoop+FrameDiagnostics.swift`), stop requesting
+  the diagnostics blocker. Since `frameDropEligibilityBlockers(...)` has exactly
+  one caller, **remove** its now-always-false `diagnosticsRequireFullRecord`
+  parameter and the `.diagnosticsFullRecord` insertion entirely (don't leave a
+  stale always-false guard). The public `.diagnosticsFullRecord` enum case and its
+  `CompletedFrameImpact` mapping stay (other classify paths and exhaustiveness).
+- No public-API-baseline change (no symbols added/removed; only the *value*
+  recorded in the existing `drop_blockers` column changes).
 
 **Tests.**
-- Diagnostics-sole-blocker scenario (zero-damage, no animation/focus blockers) →
-  `committed_excluding_diagnostics < committed_frame_count`.
-- Animation-blocker scenario (active transition/completion) → the two counts are
-  **equal**, proving G3 strips only the profiler's own contribution and leaves
-  genuine animation commits intact.
-- Disabled-path regression: with profiling off, no new per-frame cost.
+- Flip the existing assertion in `Tests/SwiftTUITests/AsyncFrameTailRenderingTests.swift`
+  (the row check that `drop_blockers` *contains* `diagnosticsFullRecord`) to assert
+  it **does not** — RED before the change, GREEN after.
+- The core `FrameDropEligibilityTests.diagnosticBlockerSignalsSurface` is
+  unaffected (it passes the blocker as direct input to `classify`).
+
+**Also corrected:** the gallery report's §4-H1 "Measurement perturbation" note,
+which asserted profiling inflates the committed-frame count.
 
 ---
 
