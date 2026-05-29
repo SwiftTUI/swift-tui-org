@@ -215,9 +215,8 @@ bazel test //:org_fast
 
 `//:org_fast` checks that submodules are initialized, the child registry is
 consistent across `.gitmodules`, `MODULE.bazel`, `BUILD.bazel`, and this README,
-the root CI workflow still runs the intended Bazel lanes, public child repos no
-longer contain sibling-checkout dependency defaults, and the submodule checkouts
-are clean at the commits pinned by the root repo.
+public child repos no longer contain sibling-checkout dependency defaults, and
+the submodule checkouts are clean at the commits pinned by the root repo.
 
 `//:org_fast` should stay cheap and coordination-local. It must not run tests
 that require SwiftPM, Bun package installs, network dependency resolution, or
@@ -229,7 +228,6 @@ Useful individual contract targets:
 bazel test //:submodule_status
 bazel test //:repo_registry_contract
 bazel test //:pin_cleanliness
-bazel test //:org_ci_workflow
 bazel test //:public_dependency_contracts
 ```
 
