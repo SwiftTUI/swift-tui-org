@@ -412,3 +412,30 @@ any sub-draft needs different handling.
    `commit()`. The `renderOneShot` executor must therefore route elision through
    `commitElided()` (not `discard()`), consistent with §7's all-three-executors
    requirement.
+
+---
+
+## Perf result (Task 9)
+
+**Measurement date:** 2026-05-29
+**Scenario:** `synthetic-offscreen-phase-animator`
+**Mode:** async
+**Iterations:** 20 per build
+**Method:** manual JSON extraction from per-run `summary.json` files (BEFORE schema lacks `elided_frames`; `termui-perf compare` confirmed working on single-run pairs)
+
+| | BEFORE (`375dbbb5`, no elision) | AFTER (`60b8c681`, with elision) |
+| --- | --- | --- |
+| Median `total_cpu_seconds` | 1.4455 s | 0.4751 s |
+| Stdev | ± 0.0457 s | ± 0.0114 s |
+| CV | 3.2 % | 2.4 % |
+| Range | [1.3543, 1.5078] | [0.4505, 0.4929] |
+
+**Absolute reduction:** 0.9704 s (67.1 % faster)
+
+**Significance:** pooled σ = 0.0471 s; Z-score = 20.6 (the gap is 20.6 σ above noise — massively significant, far beyond the 2 σ threshold)
+
+**Elision confirmed firing:** `elided` column present in AFTER `frames.tsv` (absent in BEFORE). Total elided frames across 20 AFTER runs: **2,674 / 2,857 total frames (93.6 %)**, averaging ~134 elided frames per run. BEFORE has 0 elided frames.
+
+**Environment:** Apple Silicon (arm64-apple-macosx), Swift 6.3.x (swiftly-managed), release build (`-c release`)
+
+**Verdict:** PASS — H1 off-screen frame elision delivers a large, highly significant CPU reduction (67 %) with confirmed elision firing (93.6 % of frames elided). Meets all success criteria from §2.
