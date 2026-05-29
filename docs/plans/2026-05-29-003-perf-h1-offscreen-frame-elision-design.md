@@ -203,3 +203,212 @@ only if post-H1 profiling shows residual wakeup overhead is material.
   `RunLoop+Rendering.swift:90-145`.
 - `drawnIdentities` source: `FrameTailRenderer+InlineStages.swift:100,156`;
   carried via `CommittedFrameArtifactBuilder.swift:168`.
+
+---
+
+## Reduced-commit seam decision (Task 1 spike outcome)
+
+Spike performed against `swift-tui` `main` @ `375dbbb5`. Goal: determine
+whether the four `FrameHeadTransaction` sub-drafts can commit on an
+animation-deadline-only, zero-on-screen-redraw frame that runs **no**
+`finalizeFrame` and produces **no** `placed`/raster output, and to fix the
+`commitElided()` contract plus the run-loop outcome plumbing for later tasks.
+
+### The four questions
+
+**Q1 — Are there ever NEW graph runtime registrations that must commit on an
+elided frame, and is `graphDraft.commitRuntimeRegistrations` safe to run when no
+finalizeFrame/place happens?**
+
+`commitRuntimeRegistrations` (`ViewGraphFrameDraft.swift:80-96`) does NOT depend
+on `placed` or on `finalizeFrame` having run. Its work is:
+
+1. apply the registration publication plan to the live set
+   (`.unchanged` → no-op; `.all` → `resetAll()`; `.subtrees` →
+   `removeSubtrees`), then
+2. `viewGraph.restoreCurrentFrameRuntimeRegistrations(into: liveRegistrations)`
+   (`ViewGraph.swift:984-992`), which republishes from `liveIdentities` /
+   `nodesByIdentity` — graph head state established at *resolve*, before
+   injection.
+
+The publication plan is set by `recordDirtyEvaluationPlan`
+(`ViewGraphFrameDraft.swift:31-38`) during the head resolve, which ran **before**
+injection. So whether there are "new" registrations is already decided pre-gate:
+a deadline-only redraw frame that touched no identities resolves with an empty /
+`.unchanged` plan and `restoreCurrentFrameRuntimeRegistrations` republishes the
+already-live set (idempotent). **Decision: COMMIT it.** It is safe (no
+finalize/place dependency) and committing keeps the live registration set
+authoritative and the draft's `didCommit`/`didDiscard` precondition machine
+consistent with the rest of the transaction. Skipping it would diverge the
+elided path from `commit()` for no benefit and risk a stale live set if a future
+non-empty plan ever reaches the gate. **Caveat for later tasks:** the gate
+condition (§5.1, deadline-only causes) is what *guarantees* the plan is benign;
+`commitRuntimeRegistrations` does not itself verify that. The gate predicate is
+load-bearing for this safety.
+
+**Q2 — Can `observationDraft.commit()` and `presentationPortalDraft.commit()`
+run safely WITHOUT a committed placed tree / `publishCommittedFrame`?**
+
+Both are pure draft→live publications with no `placed`/raster dependency.
+
+- `ObservationBridgeDraft.commit()` (`Observation.swift:147-151`) calls
+  `bridge.publish(self)` (`Observation.swift:108-117`), which advances
+  `currentPass`, merges `observedPasses`, and reattaches the `viewGraph` weak
+  ref. All of these were populated during head resolve via `recordObserved`
+  (`Observation.swift:139-145`). No placed/semantic/raster input. **COMMIT it.**
+- `PresentationPortalDraft.commit()` (`PresentationPortalState.swift:106-110`)
+  calls `liveState.publish(self)` (`:28-32`), a single registry pointer swap.
+  The draft's registry was populated by `reconcile`/`injectHandles` during head
+  resolve (`:89-94`, `:76-87`). No placed/raster input. **COMMIT it.**
+
+Note: `publishCommittedFrame` (`DefaultRenderer+CompletedFrameCandidates.swift:156-175`)
+is a *separate* step that stores the artifact and committed presentation-portal
+*scroll geometry / overlay snapshot for present* — it is NOT what
+`presentationPortalDraft.commit()` does. The portal *draft* commit only swaps the
+coordinator registry; the present-side `storeCommittedPresentationPortalState()`
+inside `publishCommittedFrame` is correctly skipped on the elided path (no
+present). **Decision: COMMIT both.** Discarding them would lose observation-pass
+bookkeeping and portal reconciliation that the resolve already performed, and
+would desync the bridge's `currentPass` from the next frame's tracking.
+
+**Q3 — Does `animationDraft.commit()` depend on anything finalizeFrame / the
+tail produces?**
+
+No. `AnimationFrameDraft.commit()` (`AnimationController.swift:1288-1296`):
+`controller.finishFrameHeadTransaction(...)` (drains deferred completions),
+`liveController.publishCommittedState(from: controller)`, then fires the drained
+completion closures. `publishCommittedState` (`:182-186`) is
+`restore(draftController.makeCheckpoint())` — a full controller-state copy
+(`:158-180`) including `lastTickResult` (`:176`). All of that state was advanced
+during `animationInjection` (the draft tick), strictly before the tail.
+**Confirmed: no tail/finalize/placed dependency. COMMIT it.** This is the whole
+point of the elision path (§4.2 item 1).
+
+**Important exception — `capturePlacedTree` is NOT part of the transaction
+commit.** `AnimationController.capturePlacedTree(_:)`
+(`AnimationController.swift:197-202`) seeds `previousPlacedRoot` /
+matched-geometry bookkeeping and is called by the pipeline *after `place` runs*,
+NOT from `animationDraft.commit()`. On an elided frame `place` never runs, so the
+live controller's `previousPlacedRoot` stays at the last fully-rendered frame's
+tree. For the off-screen / zero-on-screen-redraw case this is benign (nothing
+visible changed, so prior bounds remain correct) and is in fact the desired
+resync-on-reveal behavior — but it is a real, transaction-independent gap that
+the §8 "skipped `capturePlacedTree`" risk must own. The reduced commit does NOT,
+and should not, try to call `capturePlacedTree` (it has no placed tree to pass).
+
+**Q4 — New `.elided` `FrameAcquisitionOutcome` case, or reuse `.skipped`?**
+
+**ADD `.elided`. Do NOT reuse `.skipped`.** Evidence: `.skipped`
+(`RunLoop+FrameAcquisitionOutcome.swift:9-12`) means cancelled-before-start or
+dropped-completed; its handler in `renderPendingFramesAsync`
+(`RunLoop+Rendering.swift:249-253`) does `continue frameLoop` — it **abandons the
+frame** and bypasses `applyAcquiredFrame`. But `applyAcquiredFrame`
+(`RunLoop+Rendering.swift:85-182`) is exactly where the loop calls
+`requestNextAnimationFrameIfNeeded(renderer.internalAnimationController.lastTickResult)`
+(`:144-145`) off the **live** controller — i.e. the loop-liveness reschedule
+(§4.2 item 3). If elision reused `.skipped`, the deadline would never be
+rescheduled and the animation loop would stall (the very restart trap §4.2/§9
+warn about).
+
+So elision needs a path that (a) does NOT abandon the frame, (b) does NOT run
+present/`recordPresentedRasterSurface`/lifecycle-apply (the bulk of
+`applyAcquiredFrame`), but (c) STILL reaches `requestNextAnimationFrameIfNeeded`
+off the now-published live controller and (d) emits the `elided_frames`
+diagnostic and increments `renderedFrames`. None of `.skipped`'s handler shape
+fits. The `.elided` case carries no `FrameArtifacts` (there are none), so it
+cannot flow through the `.rendered` branch either. Later tasks should add a
+dedicated `.elided` branch in the `frameLoop` switch that runs the reduced commit
+result + reschedule + diagnostic, then `continue frameLoop`. Note: the
+`requestNextAnimationFrameIfNeeded` call must run **after** `commitElided()` has
+published the advanced state to the live controller, because it reads
+`renderer.internalAnimationController.lastTickResult` (the live one), which
+`publishCommittedState` updates via the checkpoint restore (`:176`).
+
+### Decided `commitElided()` contract
+
+Commit ALL FOUR sub-drafts — identical disposition to `commit()` — because each
+is independent of `finalizeFrame` / `place` / raster / present (Q1–Q3). The only
+difference from `commit()` is the **precondition that no `finalizeFrame`,
+`commitPlanner.plan`, `publishCommittedFrame`, or present runs afterward**; the
+caller (run loop `.elided` branch) is responsible for honoring that and for
+calling `requestNextAnimationFrameIfNeeded` after this returns.
+
+Note one asymmetry vs `commit()`: the normal commit path calls
+`draft.transaction.materializePreparedState()` *before* `commitFrameEffects`
+(`DefaultRenderer+CompletedFrameCandidates.swift:95`), because the tail and
+`finalizeFrame` need the prepared graph state live. The elided path runs none of
+that tail work, so `materializePreparedState()` is **not required for the four
+sub-draft commits** themselves — `commitRuntimeRegistrations` reads
+`liveIdentities`/`nodesByIdentity` and the other three publish draft-local state,
+none gated on the prepared-checkpoint having been re-materialized. Later tasks
+should VERIFY this on the abortable executor (where prepared state may have been
+suspended by `injectAnimations`' worker-snapshot branch,
+`DefaultRendererFrameHeadCoordinator.swift:126-134`); if any downstream
+consumer of the committed live graph expects prepared state materialized,
+`commitElided()` (or its caller) must `materializePreparedState()` first to
+match `commit()`. Conservative default: have the caller materialize prepared
+state before `commitElided()` exactly as the normal path does, since it is cheap
+relative to the tail it replaces and removes a subtle divergence.
+
+Proposed signature and body (lives on `FrameHeadTransaction`, mirrors `commit()`):
+
+```swift
+/// Reduced commit for an elided (off-screen / zero-on-screen-redraw,
+/// animation-deadline-only) frame. Publishes the same four sub-drafts as
+/// `commit()` — they are each independent of `finalizeFrame`/`place`/raster —
+/// so deferred animation completions fire on real-time schedule and the
+/// advanced animation-controller state reaches the live controller, WITHOUT
+/// running `finalizeFrame`, `commitPlanner.plan`, `publishCommittedFrame`, or
+/// any present work.
+///
+/// Precondition for the caller: no tail/finalize/present runs after this. The
+/// caller MUST still reschedule the animation deadline
+/// (`requestNextAnimationFrameIfNeeded`) off the now-published live controller,
+/// and `capturePlacedTree` is intentionally NOT run (no placed tree exists;
+/// the prior frame's captured tree remains current — see §8).
+package func commitElided() -> RuntimeRegistrationDiagnostics {
+  precondition(!didCommit && !didDiscard)
+  let diagnostics = graphDraft.commitRuntimeRegistrations(from: viewGraph)
+  observationDraft?.commit()
+  presentationPortalDraft.commit()
+  animationDraft.commit()
+  didCommit = true
+  return diagnostics
+}
+```
+
+This body is byte-for-byte identical to `commit()` (`FrameHeadDraftTransaction.swift:75-83`)
+today. It is given a distinct name (rather than reusing `commit()`) so the
+elision intent is explicit at the call site, so the "no finalize/present after"
+precondition has a home in documentation, and so a future divergence (e.g. an
+elision-specific diagnostic or a decision to skip `commitRuntimeRegistrations`
+when the plan is provably `.unchanged`) has a seam to land on without perturbing
+the hot render path. Behavior-wise the two are interchangeable at the spike's
+verified scope; the separation is for clarity and future-proofing, not because
+any sub-draft needs different handling.
+
+### Risks surfaced for later tasks
+
+1. **`requestNextAnimationFrameIfNeeded` reads the LIVE controller's
+   `lastTickResult`** (`RunLoop+Rendering.swift:144`). The `.elided` branch MUST
+   call `commitElided()` (→ `publishCommittedState`) *before* rescheduling, or the
+   reschedule reads stale tick state and the loop can stall. Ordering is
+   load-bearing.
+2. **`capturePlacedTree` gap** (confirmed independent of the transaction). The
+   live controller's `previousPlacedRoot` / matched-geometry bookkeeping is
+   frozen across a run of elided frames. Benign for the off-screen case but
+   exactly the §8 risk; the matched-geometry / removal test (§7) must exercise an
+   elide→reveal sequence, not just a single elided frame.
+3. **Prepared-state materialization asymmetry** vs the normal commit path
+   (see contract note above) — verify on the abortable executor; safest to have
+   the caller materialize prepared state before `commitElided()`.
+4. **Gate predicate is the safety boundary for Q1.** `commitRuntimeRegistrations`
+   will faithfully publish whatever plan the head recorded; it does not itself
+   prove the plan is empty. The deadline-only-causes gate (§5.1) is what makes the
+   committed plan benign. Do not weaken the gate without revisiting Q1.
+5. **`discard()` remains unavailable for one-shot heads** (`preconditionFailure`,
+   `FrameHeadDraftTransaction.swift:124-127`). `commitElided()` does not touch
+   checkpoints and so works for both one-shot and abortable heads, matching
+   `commit()`. The `renderOneShot` executor must therefore route elision through
+   `commitElided()` (not `discard()`), consistent with §7's all-three-executors
+   requirement.
