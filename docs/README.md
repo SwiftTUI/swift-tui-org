@@ -18,8 +18,21 @@ documentation in their own `docs/` trees.
   `*_worktree_gate` family, cookbook recipes for the common iteration loops,
   and troubleshooting.
 
+## Reports
+
+- [reports/2026-05-28-gallery-performance-report.md](reports/2026-05-28-gallery-performance-report.md) -
+  in-process performance data collection across the Gallery tabs; identifies the
+  hot spots (H1 off-screen idle frames, H2 per-interaction `resolve` cost).
+- [reports/2026-05-30-h2-resolve-reuse-findings.md](reports/2026-05-30-h2-resolve-reuse-findings.md) -
+  H2 outcome: root cause (per-frame transaction `debugSignature` defeats retained
+  reuse), the scoped-reuse fix, the measured win + scaling, and two corrections
+  (forceRootEvaluation does not disable reuse; the "animation/elision gap" was a
+  pre-existing flaky test).
+
 ## Planning Documents
 
+- [plans/2026-05-30-001-perf-h2-resolve-reuse-complete-plan.md](plans/2026-05-30-001-perf-h2-resolve-reuse-complete-plan.md) -
+  implementation plan for the H2 resolve-reuse correctness fix (scoped reuse).
 - [plans/2026-05-22-001-github-organization-split-plan.md](plans/2026-05-22-001-github-organization-split-plan.md) -
   execution plan for splitting SwiftTUI across GitHub organization repositories
   while preserving the one-package terminal/WebHost consumer path and coherent
