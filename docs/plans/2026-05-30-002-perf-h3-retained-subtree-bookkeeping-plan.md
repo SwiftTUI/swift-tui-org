@@ -1,7 +1,9 @@
 # SwiftTUI H3 — Retained-Subtree Bookkeeping (design + plan)
 
 **Date:** 2026-05-30
-**Status:** DRAFT — design + phased plan. Awaiting go-ahead to implement Phase 2.
+**Status:** SHIPPED (child branch, unpushed). Phases 0/2/3/4 done, full gate green. See
+[`docs/reports/2026-05-30-h3-retained-subtree-findings.md`](../reports/2026-05-30-h3-retained-subtree-findings.md)
+for results. Phase 5 (publish) pending user OK to push the child branch + bump the org pin.
 **Motivating report:** [`docs/reports/2026-05-28-gallery-performance-report.md`](../reports/2026-05-28-gallery-performance-report.md) (§ H2/H3 — per-interaction `resolve`; § H3 — fixed per-frame pipeline cost)
 **Predecessor:** [`docs/reports/2026-05-30-h2-resolve-reuse-findings.md`](../reports/2026-05-30-h2-resolve-reuse-findings.md) (H2 made *recompute* O(changed); flagged snapshot-assembly as an O(tree) follow-on)
 **Measurement pin:** `swift-tui` @ `93e9ea3d` (org pin `93e9ea3d`), release, `Tools/TermUIPerf`.
