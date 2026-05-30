@@ -161,3 +161,47 @@ be redundant and imply a race that does not exist.
 flake-#2 fix (`swift-tui@3f671ea3`) + org pin (`c89e3e2`) are committed but
 **unpushed** (held by decision 2026-05-30). This session's swift-tui changes stack
 on top, unpushed, pending review.
+
+> **Superseded — see Closure below. The whole batch is now pushed.**
+
+---
+
+## Closure (2026-05-30, post-investigation)
+
+This investigation is **concluded**. The following supersedes the open items above.
+
+- **Retained-reuse SEGV vector — CLOSED.** A 6-agent adversarial re-trace (workflow
+  `w1u1xkuj0`) confirmed both AND-conditions hold — the one-shot/sync commit retains a
+  live `@MainActor` `ForEachIndexedChildSource` (the snapshot conversion is gated
+  `mode == .abortable`, which one-shot skips: `injectAnimations` → reconcile →
+  `commitOneShotFrame` → `storeCommittedFrame` → `RetainedFrameIndex`), **and** a later
+  off-main worker reads it in `RetainedInvalidationSummary.init` (`source.identityRoot`)
+  on the `swift-tui.frame-tail-renderer` queue — **but the vector cannot produce #12's
+  corruption.** Every reachable off-main accessor reads immutable `let` storage
+  (`identityRoot`/`measurementSignature` under `assumeIsolated`); the sole mutator
+  (`cache[index] = …` in `child(at:)`) fires only on the *current* node's value-type
+  snapshot, never the retained live source. `computeSupportsRetainedReuse` also returns
+  `false` for any source-bearing node, so `isEquivalentFor*` never runs on a source
+  subtree. `LayoutProxyBox.cachedStates` is likewise unreachable (reuse returns cached
+  values; never calls `measureContainer`). The crash-repro build was **cancelled**, not
+  built — the dead-end was identified before any harness was written.
+- **#12 is now mechanism-unidentified.** With the current-frame offload, retained-reuse,
+  and `Boxed` COW paths all closed, static analysis has exhausted the named corruptor
+  candidates. The honest next step (if/when #12 is re-prioritized — currently
+  user-deferred) is **dynamic** instrumentation: reproduce the SEGV under load with TSan
+  + annotated `assumeIsolated`/eligibility sites. Not another static harness.
+- **Residual sweeps — CLEAN.** The two surfaces flagged "partially swept" above
+  (`Tools/TermUIPerf/Tests` perf-threshold modality, and `Platforms/Embedding/Tests`
+  terminal/PTY) were fully swept: **zero P1/P2**. TermUIPerf threshold tests run in-gate
+  but assert only on hardcoded synthetic inputs (no measured wall-clock). The
+  latent-flake hunt is comprehensively done — **1 P2 total** across the whole surface
+  (the already-fixed C-P2).
+- **Benign byproduct.** The one-shot commit path stores a live source into retained
+  state with no conversion — harmless today (off-main reuse only reads immutable
+  storage), latent only if reuse ever begins calling `child(at:)` off-main. Optional
+  defense-in-depth: snapshot-convert before `storeCommittedFrame` (weigh against
+  full-tree recursion cost per one-shot commit).
+- **Git state — PUSHED.** The whole batch is public: `swift-tui@93e9ea3d`, org pin
+  `52f3838` (both in sync with origin; `bazel //:org_fast` 4/4 green). The canonical,
+  living flake status is `swift-tui/docs/KNOWN-TEST-FLAKES.md`; this report is the
+  point-in-time investigation record.
