@@ -1,10 +1,15 @@
 # Perf — `commit_ms` Sub-Phase Instrumentation Plan (measure first, no fix)
 
 **Date:** 2026-05-30
-**Status:** READY TO EXECUTE (handed off from a session whose tool output became
+**Status:** ✅ COMPLETE (2026-05-31). Executed: the probe located the O(tree) commit
+cost (`commitRuntimeRegistrations`); see the findings report below. The optimization
+shipped separately — see [`docs/plans/2026-05-31-001-...`](2026-05-31-001-perf-commit-ms-registration-restore-fix-plan.md)
+and [`docs/reports/2026-05-31-commit-ms-registration-restore-fix-results.md`](../reports/2026-05-31-commit-ms-registration-restore-fix-results.md).
+The probe itself was **not** landed — it is archived at
+[`docs/perf/commit-ms-breakdown-probe/`](../perf/commit-ms-breakdown-probe/). Original
+hand-off note (historical): handed off from a session whose tool output became
 intermittently unreliable mid-investigation; the commit-path map below was
-cross-verified by clean `Read` + matching `grep` line numbers before hand-off,
-but the executing session should re-confirm exact line numbers, which drift).
+cross-verified by clean `Read` + matching `grep` line numbers before hand-off.
 **Predecessors:** [`docs/reports/2026-05-30-h3-retained-subtree-findings.md`](../reports/2026-05-30-h3-retained-subtree-findings.md),
 [`docs/plans/2026-05-30-002-perf-h3-retained-subtree-bookkeeping-plan.md`](2026-05-30-002-perf-h3-retained-subtree-bookkeeping-plan.md)
 **Code base:** `swift-tui` `main` @ `1526e21a` (= current org pin `8b0630a`).

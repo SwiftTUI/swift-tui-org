@@ -1,9 +1,9 @@
 # Perf — `commit_ms` Registration-Restore Fix Plan (Fix 1 + Fix 2)
 
 **Date:** 2026-05-31
-**Status:** EXECUTING
+**Status:** ✅ COMPLETE & LANDED. **Fix 2** (scope the restore) shipped — `swift-tui` `main` @ `49f2be7e`, org pin `543dfc4` (both pushed). **Fix 1** (sort cache) was implemented, measured ineffective, and reverted. Results: [`docs/reports/2026-05-31-commit-ms-registration-restore-fix-results.md`](../reports/2026-05-31-commit-ms-registration-restore-fix-results.md).
 **Predecessor (findings):** [`docs/reports/2026-05-30-commit-ms-breakdown-findings.md`](../reports/2026-05-30-commit-ms-breakdown-findings.md)
-**Code base:** `swift-tui` branch `perf/commit-ms-breakdown-instrumentation` @ `528b028e` (carries the measurement probe). Base `main` @ `1526e21a` (= org pin `8b0630a`).
+**Code base (at planning time):** branch `perf/commit-ms-breakdown-instrumentation` @ `528b028e` (carried the measurement probe). Base `main` @ `1526e21a` (= org pin `8b0630a`).
 
 ---
 

@@ -3,7 +3,7 @@
 **Date:** 2026-05-31
 **Plan:** [`docs/plans/2026-05-31-001-perf-commit-ms-registration-restore-fix-plan.md`](../plans/2026-05-31-001-perf-commit-ms-registration-restore-fix-plan.md)
 **Findings (root cause):** [`docs/reports/2026-05-30-commit-ms-breakdown-findings.md`](2026-05-30-commit-ms-breakdown-findings.md)
-**Code:** `swift-tui` branch `perf/commit-ms-breakdown-instrumentation` — `da3b0adb` (Fix 2). Base `main` @ `1526e21a` (= org pin `8b0630a`). Probe commits (`528b028e`, `8bab1fb8`) still present below the fix; revert before landing.
+**Code:** ✅ landed. **Fix 2** cherry-picked probe-free onto `swift-tui` `main` @ **`49f2be7e`** (the measurement-branch commit was `da3b0adb`, identical diff); org pin bumped to **`543dfc4`**; both pushed; `bazel //:org_fast` 4/4 green. Measured against base `main` @ `1526e21a`. The probe (`528b028e`, `8bab1fb8`) was archived, not landed — [`docs/perf/commit-ms-breakdown-probe/`](../perf/commit-ms-breakdown-probe/).
 
 ---
 
@@ -90,10 +90,18 @@ inherent initial-render startup, not per-interaction cost.
 
 ## Status / next
 
-- Both fixes executed. Fix 1 reverted (ineffective). Fix 2 on the branch (`da3b0adb`),
-  **not merged, not pinned**. The measurement probe (`TERMUI_PERF_COMMIT_BREAKDOWN`) is
-  still on the branch below the fix — revert it before landing (or keep for measuring the
-  remaining `.all`-frame startup residual).
-- Possible follow-on: the `.all` initial-render frames still do a full O(tree) restore.
-  Lower value (startup, not per-interaction) and Fix-1-style caching won't help (those
-  frames grow `liveIdentities`). Defer unless startup cost is shown to matter.
+- ✅ **Done, landed & pushed.** Fix 2 on `swift-tui` `main` @ `49f2be7e` (probe-free
+  cherry-pick); org pin `8b0630a` → `543dfc4`; `bazel //:org_fast` 4/4 green. Fix 1
+  reverted (ineffective). The probe is archived (not landed) at
+  [`docs/perf/commit-ms-breakdown-probe/`](../perf/commit-ms-breakdown-probe/).
+- **Known-flake note:** the full gate's only failure on the landing run was
+  `OffscreenFrameElisionRuntimeTests` "off-screen deadline tick…" (`:297`/`:331`) — the
+  documented intermittent load-flake, proven pre-existing on base `1526e21a` under full-gate
+  load and passing 2/2 in isolation on `49f2be7e`. Not a Fix 2 regression.
+- **Possible follow-ons (deferred, lower value):**
+  - The `.all` initial-render frames still do a full O(tree) restore (startup, not
+    per-interaction; Fix-1-style caching won't help — those frames grow `liveIdentities`).
+  - `.unchanged` frames retain the pre-existing full re-publish (untouched by Fix 2; 0 in
+    the measured scenario). Since nothing was re-evaluated, that path could simply skip the
+    restore — a small correctness/efficiency cleanup (it also avoids re-appending unchanged
+    focus candidates). Out of scope for this fix.

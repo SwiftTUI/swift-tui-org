@@ -3,8 +3,8 @@
 **Date:** 2026-05-30/31
 **Plan:** [`docs/plans/2026-05-30-003-perf-commit-ms-instrumentation-plan.md`](../plans/2026-05-30-003-perf-commit-ms-instrumentation-plan.md)
 **Predecessor:** [`docs/reports/2026-05-30-h3-retained-subtree-findings.md`](2026-05-30-h3-retained-subtree-findings.md)
-**Code:** `swift-tui` branch `perf/commit-ms-breakdown-instrumentation` — `528b028e` (instrumentation only). Base `main` @ `1526e21a` (= org pin `8b0630a`).
-**Scope:** Measurement only — this located the O(tree) commit cost. **No optimization was implemented.** The fix is a separate plan.
+**Code:** measurement probe (`528b028e`, `8bab1fb8`) — **archived, not landed** ([`docs/perf/commit-ms-breakdown-probe/`](../perf/commit-ms-breakdown-probe/)). Measured against base `main` @ `1526e21a`.
+**Scope:** Measurement only — this located the O(tree) commit cost. **No optimization was implemented here.** The fix shipped separately and is landed: see [`docs/reports/2026-05-31-commit-ms-registration-restore-fix-results.md`](2026-05-31-commit-ms-registration-restore-fix-results.md) (swift-tui `main` @ `49f2be7e`, org pin `543dfc4`).
 
 ---
 
@@ -174,7 +174,9 @@ Re-run this exact sweep (the probe is still on the branch) to measure any fix; e
 
 ## Status of the instrumentation
 
-Lives on `swift-tui` branch `perf/commit-ms-breakdown-instrumentation` (`528b028e`),
-**not** merged to `main` and **not** pinned by the org. Keep it for the fix-plan's
-before/after measurement (as H2/H3 reused their probes), then revert or land deliberately —
-do not ship half-instrumentation.
+**Archived, not landed (final).** The probe was used for the before/after measurement
+(see the fix-results report), then deliberately kept off `main` — the fix landed
+probe-free via cherry-pick (`swift-tui` `main` @ `49f2be7e`). The probe is preserved as a
+re-appliable patch + README at [`docs/perf/commit-ms-breakdown-probe/`](../perf/commit-ms-breakdown-probe/)
+(and the local tag `commit-ms-breakdown-probe-2026-05-31` / branch
+`perf/commit-ms-breakdown-instrumentation`).
