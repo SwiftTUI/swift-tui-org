@@ -49,16 +49,16 @@ repos.
 
 ## Current Public Pre-Release State
 
-All child repositories are public and tagged at `0.0.3`. Public child defaults
+All child repositories are public and tagged at `0.0.6`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.3` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.0.6` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.3` release.
-- `swift-tui-examples` uses the `swift-tui` `0.0.3` tag and the web `0.0.3`
+  the GitHub `0.0.6` release.
+- `swift-tui-examples` uses the `swift-tui` `0.0.6` tag and the web `0.0.6`
   release tarballs by default.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.3` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.6` tag.
 
 Npm publication is still a follow-up: the local npm session is not authenticated,
 so the first public web package path uses GitHub release tarballs.
