@@ -1,0 +1,51 @@
+diff --git a/Sources/SwiftTUICore/Measure/LayoutEngine+RetainedLayout.swift b/Sources/SwiftTUICore/Measure/LayoutEngine+RetainedLayout.swift
+index 10d30b48..b99f7feb 100644
+--- a/Sources/SwiftTUICore/Measure/LayoutEngine+RetainedLayout.swift
++++ b/Sources/SwiftTUICore/Measure/LayoutEngine+RetainedLayout.swift
+@@ -67,7 +67,7 @@ extension LayoutEngine {
+     // otherwise made placement reuse nearly as costly as recomputation. When
+     // only geometry matches (`.geometryReusable`), the mirrors are refreshed
+     // from the current resolved tree while preserving cached bounds.
+-    let skipMetadataSync = equivalence == .identical
++    let skipMetadataSync = equivalence == .identical && !PlacePerfProbe.disableSyncSkip
+     func reuse(_ placed: PlacedNode) -> PlacedNode {
+       skipMetadataSync
+         ? placed
+diff --git a/Sources/SwiftTUICore/Support/PlacePerfProbe.swift b/Sources/SwiftTUICore/Support/PlacePerfProbe.swift
+new file mode 100644
+index 00000000..6b726d74
+--- /dev/null
++++ b/Sources/SwiftTUICore/Support/PlacePerfProbe.swift
+@@ -0,0 +1,32 @@
++#if canImport(Darwin)
++  internal import Darwin
++#elseif canImport(Glibc)
++  internal import Glibc
++#elseif canImport(Musl)
++  internal import Musl
++#elseif canImport(WASILibc)
++  internal import WASILibc
++#endif
++
++/// TEMPORARY measurement instrumentation for the `place_ms` retained-reuse
++/// residual. NOT a feature — archived as a patch, not landed on `main`.
++///
++/// `TERMUI_PERF_PLACE_DISABLE_SYNC_SKIP` (read once, cached): force the prior
++/// behavior where a fully-identical reused subtree is still re-synced
++/// (`synchronizeRetainedPhaseMetadata`) instead of returned untouched. Sound (it
++/// is the old behavior); used to A/B the identical-subtree sync skip against the
++/// baseline in a single sweep with no machine drift.
++package enum PlacePerfProbe {
++  package static let disableSyncSkip: Bool =
++    environmentFlag(named: "TERMUI_PERF_PLACE_DISABLE_SYNC_SKIP")
++
++  private static func environmentFlag(named name: String) -> Bool {
++    unsafe name.withCString { cName in
++      guard let rawValue = unsafe getenv(cName) else {
++        return false
++      }
++      let value = unsafe String(cString: rawValue)
++      return value != "" && value != "0"
++    }
++  }
++}
