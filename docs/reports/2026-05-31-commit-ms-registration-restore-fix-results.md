@@ -91,17 +91,23 @@ inherent initial-render startup, not per-interaction cost.
 ## Status / next
 
 - ✅ **Done, landed & pushed.** Fix 2 on `swift-tui` `main` @ `49f2be7e` (probe-free
-  cherry-pick); org pin `8b0630a` → `543dfc4`; `bazel //:org_fast` 4/4 green. Fix 1
-  reverted (ineffective). The probe is archived (not landed) at
+  cherry-pick); the `.unchanged` follow-on @ `4f631436`; org pin now → `swift-tui`
+  `4f631436`; `bazel //:org_fast` 4/4 green. Fix 1 reverted (ineffective). The probe is
+  archived (not landed) at
   [`docs/perf/commit-ms-breakdown-probe/`](../perf/commit-ms-breakdown-probe/).
-- **Known-flake note:** the full gate's only failure on the landing run was
+- **`.unchanged` cleanup — LANDED (`4f631436`).** `.unchanged` frames now **skip** the
+  restore entirely instead of re-publishing the full set: nothing was re-evaluated, so the
+  live registry already holds the canonical state. This removes redundant O(tree) work and
+  fixes a pre-existing latent bug — the former full re-publish *appended* duplicate entries
+  into the order-sensitive focus lists every `.unchanged` frame (`.unchanged` does no reset).
+  Sound by induction (every commit leaves the registry canonical; the first commit is always
+  `.all`). New `RuntimeRegistrationRestoreScopingTests` case asserts an `.unchanged` commit
+  == a full rebuild (verified RED: current behavior produced `[A,B,A,B]` vs canonical
+  `[A,B]`).
+- **Known-flake note:** on both landing runs the full gate's only failure was
   `OffscreenFrameElisionRuntimeTests` "off-screen deadline tick…" (`:297`/`:331`) — the
   documented intermittent load-flake, proven pre-existing on base `1526e21a` under full-gate
-  load and passing 2/2 in isolation on `49f2be7e`. Not a Fix 2 regression.
-- **Possible follow-ons (deferred, lower value):**
-  - The `.all` initial-render frames still do a full O(tree) restore (startup, not
-    per-interaction; Fix-1-style caching won't help — those frames grow `liveIdentities`).
-  - `.unchanged` frames retain the pre-existing full re-publish (untouched by Fix 2; 0 in
-    the measured scenario). Since nothing was re-evaluated, that path could simply skip the
-    restore — a small correctness/efficiency cleanup (it also avoids re-appending unchanged
-    focus candidates). Out of scope for this fix.
+  load and passing 2/2 in isolation on the landed commits. Not a regression from this work.
+- **Remaining follow-on (deferred, lower value):** the `.all` initial-render frames still do
+  a full O(tree) restore (startup, not per-interaction; Fix-1-style caching won't help —
+  those frames grow `liveIdentities`). Defer unless startup cost is shown to matter.
