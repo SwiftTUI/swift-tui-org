@@ -7,15 +7,15 @@ Current status checked on 2026-05-31:
 
 - `SwiftTUI/swift-tui`, `SwiftTUI/swift-tui-web`,
   `SwiftTUI/swift-tui-examples`, and `SwiftTUI/swift-tui-site` are public.
-- Each child repo has a pushed `0.0.6` tag.
-- `swift-tui-web` has a public GitHub `0.0.6` pre-release with
-  `swifttui-web-0.0.6.tgz` and `swifttui-build-0.0.6.tgz` assets.
+- Each child repo has a pushed `0.0.7` tag.
+- `swift-tui-web` has a public GitHub `0.0.7` release with
+  `swifttui-web-0.0.7.tgz` and `swifttui-build-0.0.7.tgz` assets.
 - `@swifttui/web` and `@swifttui/build` are published to npm (public) at
-  `0.0.6`.
-- `swift-tui-examples` resolves `swift-tui` through the `0.0.6` HTTPS SwiftPM
-  tag and resolves web packages through the `swift-tui-web` `0.0.6` release
+  `0.0.7`.
+- `swift-tui-examples` resolves `swift-tui` through the `0.0.7` HTTPS SwiftPM
+  tag and resolves web packages through the `swift-tui-web` `0.0.7` release
   tarballs.
-- `swift-tui-site` resolves DocC from the `swift-tui` `0.0.6` tag and fetches
+- `swift-tui-site` resolves DocC from the `swift-tui` `0.0.7` tag and fetches
   tagged WebExample input into `.build/public-inputs/` by default.
 - `//:public_dependency_contracts` is wired into `//:org_fast`.
 
@@ -29,10 +29,49 @@ Current status checked on 2026-05-31:
 - Pre-tag cross-repo integration remains coordination-only through the overlay
   gates in this repo.
 
-The current `0.0.6` state satisfies the public dependency shape with both
+The current `0.0.7` state satisfies the public dependency shape with both
 published npm packages (`@swifttui/web`, `@swifttui/build`) and GitHub release
 tarballs for the web packages. Consumers may migrate from the tarball URLs to
 the npm package versions when that becomes the preferred public install path.
+
+## Updated On 2026-05-31 For 0.0.7
+
+1. Tagged and pushed all child repos at `0.0.7`.
+2. Published the `swift-tui-web` GitHub `0.0.7` release assets for
+   `@swifttui/web` and `@swifttui/build`, and published both packages to npm
+   (public) at `0.0.7`.
+3. Updated `swift-tui-examples` SwiftPM manifests, Package.resolved files, Xcode
+   package reference, README copy, Bun metadata, and WebExample tarball
+   dependencies to `0.0.7`. Also declared the previously-missing
+   `ThreeHostsDemoCoreTests` test target so the existing `three-hosts-demo`
+   test suite is discovered by the examples gate (latent gap present since
+   `0.0.6`).
+4. Updated `swift-tui-site` release metadata, DocC inputs, package metadata, and
+   visible public links to `0.0.7`.
+5. Bumped each module's declared version (`MODULE.bazel`, `package.json`) to
+   `0.0.7`.
+6. Updated this org root's Bzlmod dependency graph and submodule pins to the
+   `0.0.7` child commits.
+
+## 0.0.7 Verification Recorded
+
+- Baseline: `bazel test //:org_full` on the pre-release `0.0.6` pins passed
+  10/11; the only failure was the latent `three-hosts-demo` "no tests found"
+  gap (test file present since `0.0.6`, test target never declared), fixed in
+  the `0.0.7` examples cutover.
+- `swift-tui-web`: `bun run ci` (75 pass); `bun pm pack` for both packages;
+  `npm publish` of `@swifttui/web@0.0.7` and `@swifttui/build@0.0.7`; GitHub
+  `0.0.7` release asset upload of both tarballs.
+- `swift-tui-examples`: `swift package resolve` regenerated every
+  `Package.resolved` against the `swift-tui` `0.0.7` tag (revision
+  `933d255f`); `xcodebuild -resolvePackageDependencies` updated the shared
+  Xcode pin; `bun install` refreshed `bun.lock` against the `0.0.7` web release
+  tarballs (`--frozen-lockfile` passed); the `three-hosts-demo` test suite
+  passes; `minimal` build smoke-checked.
+- `swift-tui-site`: Website `bun test` (4 pass, incl. the `0.0.7` WebExample
+  clone-ref assertion) and `bun run check` (0 errors) passed.
+- `swift-tui-org`: `bazel fetch //:org_full`; full `bazel test //:org_full`
+  re-run against the recorded `0.0.7` submodule pins.
 
 ## Updated On 2026-05-31 For 0.0.6
 
@@ -129,7 +168,7 @@ the npm package versions when that becomes the preferred public install path.
 ## Remaining Follow-Ups
 
 - `@swifttui/web` and `@swifttui/build` are now published to npm (public) at
-  `0.0.6`. Optionally replace the GitHub release tarball URLs in consumers
+  `0.0.7`. Optionally replace the GitHub release tarball URLs in consumers
   (`swift-tui-examples` WebExample + workspace override) with npm package
   versions if that becomes the preferred public install path.
 - Run `mise exec -- bazel test //:org_full` when the longer native/pre-tag
