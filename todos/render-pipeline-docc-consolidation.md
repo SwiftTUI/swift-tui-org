@@ -13,42 +13,42 @@ developer-facing material describes only the current state of `HEAD`.
     `docs/`, and the website pipeline page.
   - Classify each surface as developer-facing, user-facing website, or internal.
 
-- [ ] Create or promote a DocC runtime pipeline article.
+- [x] Create or promote a DocC runtime pipeline article.
   - Preferred home: `swift-tui/Sources/SwiftTUIRuntime/SwiftTUIRuntime.docc/`.
   - Cover the full current callpath: app/scene entry, `RunLoop`,
     `DefaultRenderer`, `RuntimeRenderPipeline`, frame-tail work, commit,
     diagnostics, and host handoff.
   - Describe only current behavior at `HEAD`.
 
-- [ ] Keep `SwiftTUICore.docc/Rendering-Pipeline.md` focused on phase products.
+- [x] Keep `SwiftTUICore.docc/Rendering-Pipeline.md` focused on phase products.
   - Cover `resolve -> measure -> place -> semantics -> draw -> raster -> commit`.
   - Cover `FrameArtifacts` and related symbols.
   - Link to the runtime DocC article for scheduling, cancellation, run-loop, and
     host presentation details.
 
-- [ ] Remove historical context from developer-facing docs.
+- [x] Remove historical context from developer-facing docs.
   - Remove report names, H1/H2/H3/H4 labels, "recent work", "historically", and
     pre-release chronology from DocC, package README content, and website copy.
   - Preserve only current-state behavior, invariants, and diagnostics.
 
-- [ ] Convert `swift-tui/docs/RENDER-PIPELINE.md` to internal-only status.
+- [x] Convert `swift-tui/docs/RENDER-PIPELINE.md` to internal-only status.
   - Either replace it with a short internal pointer to the DocC source of truth
     or remove it after updating links.
   - Do not leave it as a parallel developer-facing implementation walkthrough.
 
-- [ ] Update discovery links.
+- [x] Update discovery links.
   - Update `swift-tui/README.md`.
   - Update `swift-tui/docs/README.md` to mark internal docs appropriately.
   - Update DocC `See Also` sections.
   - Update website links so developer detail points to DocC.
 
-- [ ] Keep host-contract ownership split clean.
+- [x] Keep host-contract ownership split clean.
   - Keep host/platform detail in `HOSTS-AND-PLATFORMS.md` or its DocC
     counterpart.
   - Keep the pipeline article focused on the runtime handoff and link out for
     host-specific details.
 
-- [ ] Verify documentation consistency.
+- [x] Verify documentation consistency.
   - Run `rg` for stale links to `docs/RENDER-PIPELINE.md`.
   - Run `rg` for historical terms in developer-facing docs.
   - Run `git diff --check`.
@@ -99,3 +99,11 @@ developer-facing material describes only the current state of `HEAD`.
   - Website snippets such as `PipelineStrip.astro`, `WhySwiftTUI.astro`, and
     `AuthoringSnippet.astro` can keep high-level pipeline wording but should link
     developer detail to DocC.
+
+## Verification
+
+- `rg -n "docs/RENDER-PIPELINE|RENDER-PIPELINE" swift-tui/README.md swift-tui/Sources swift-tui/Platforms swift-tui-site/Website/src --glob '*.md' --glob '*.astro'`: no stale developer-facing links.
+- `rg -n "recent work|historically|historical context|gallery baseline|commit breakdown|as of 20|2026-05|\bH[1-5]\b" swift-tui/README.md swift-tui/Sources swift-tui/Platforms swift-tui-site/Website/src --glob '*.md' --glob '*.astro'`: no historical markers in developer-facing docs or site copy.
+- `git -C swift-tui diff --check && git -C swift-tui-site diff --check && git diff --check`: passed.
+- `Scripts/build_docc_archive.sh --output-path .build/docc-verify --hosting-base-path docs`: passed. Existing unresolved-symbol DocC warnings remain outside the changed pipeline pages.
+- `bun install --frozen-lockfile` and `bun run build` in `swift-tui-site/Website`: passed.
