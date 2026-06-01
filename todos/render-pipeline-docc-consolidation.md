@@ -8,7 +8,7 @@ developer-facing material describes only the current state of `HEAD`.
 
 ## Todo
 
-- [ ] Inventory current pipeline-related references before editing.
+- [x] Inventory current pipeline-related references before editing.
   - Include DocC pages, `swift-tui/docs/`, `swift-tui/README.md`, root/internal
     `docs/`, and the website pipeline page.
   - Classify each surface as developer-facing, user-facing website, or internal.
@@ -57,9 +57,45 @@ developer-facing material describes only the current state of `HEAD`.
 
 ## Open Decisions
 
-- [ ] Decide whether `swift-tui/docs/RENDER-PIPELINE.md` should be deleted or kept
-  as an internal pointer.
-- [ ] Decide whether the runtime DocC article should be named
+- [x] Decide whether `swift-tui/docs/RENDER-PIPELINE.md` should be deleted or kept
+  as an internal pointer. Decision: keep it as an internal pointer so existing
+  maintainer links fail gracefully, but remove developer-facing walkthrough
+  content from it.
+- [x] Decide whether the runtime DocC article should be named
   `Render-Pipeline.md`, `Rendering-Pipeline.md`, or `Runtime-Render-Pipeline.md`.
-- [ ] Decide whether `HOSTS-AND-PLATFORMS.md` should eventually get a DocC
-  developer-facing counterpart, or remain internal for now.
+  Decision: use `Runtime-Render-Pipeline.md` to avoid colliding with the
+  `SwiftTUICore` phase-product article.
+- [x] Decide whether `HOSTS-AND-PLATFORMS.md` should eventually get a DocC
+  developer-facing counterpart, or remain internal for now. Decision: keep it
+  internal for this pass; the runtime pipeline DocC article should describe the
+  host handoff and link to `Host-Integration` for developer-facing host details.
+
+## Inventory
+
+- Developer-facing DocC:
+  - `swift-tui/Sources/SwiftTUICore/SwiftTUICore.docc/Rendering-Pipeline.md`
+    currently owns the phase-product overview and should stay short.
+  - `swift-tui/Sources/SwiftTUIRuntime/SwiftTUIRuntime.docc/Architecture.md`
+    repeats phase/stage detail and should be shortened once the runtime pipeline
+    article exists.
+  - `swift-tui/Sources/SwiftTUIRuntime/SwiftTUIRuntime.docc/Runtime.md`,
+    `Running-Apps.md`, and `Host-Integration.md` describe adjacent runtime,
+    entrypoint, and host concerns and should link to the new article.
+- Developer-facing package discovery:
+  - `swift-tui/README.md` currently links to `docs/RENDER-PIPELINE.md`; it should
+    point readers to DocC instead.
+  - `swift-tui/AGENTS.md` is agent/maintainer guidance, not public developer
+    documentation, but its links should avoid naming package markdown as the
+    canonical developer guide.
+- Internal maintainer docs:
+  - `swift-tui/docs/RENDER-PIPELINE.md`, `swift-tui/docs/ARCHITECTURE.md`,
+    `swift-tui/docs/HOSTS-AND-PLATFORMS.md`, and `swift-tui/docs/README.md` live
+    under package markdown docs and should be treated as internal/project docs.
+  - Root `docs/reports/`, `docs/plans/`, and `docs/perf/` are internal evidence
+    and planning material.
+- User-facing website:
+  - `swift-tui-site/Website/src/pages/pipeline.astro` is a public product guide,
+    not the canonical developer reference.
+  - Website snippets such as `PipelineStrip.astro`, `WhySwiftTUI.astro`, and
+    `AuthoringSnippet.astro` can keep high-level pipeline wording but should link
+    developer detail to DocC.
