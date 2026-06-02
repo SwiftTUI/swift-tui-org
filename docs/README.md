@@ -31,6 +31,11 @@ documentation in their own `docs/` trees.
 
 ## Planning Documents
 
+- [plans/2026-06-02-001-rendering-performance-optimization-proposal.md](plans/2026-06-02-001-rendering-performance-optimization-proposal.md) -
+  proposal for the next rendering-infrastructure performance wave: measurement
+  semantics, retained placement table carry-forward, scoped reuse suppression,
+  incremental semantics/draw extraction, host damage metrics, and visible
+  animation/text-churn policy.
 - [plans/2026-05-30-001-perf-h2-resolve-reuse-complete-plan.md](plans/2026-05-30-001-perf-h2-resolve-reuse-complete-plan.md) -
   implementation plan for the H2 resolve-reuse correctness fix (scoped reuse).
 - [plans/2026-05-22-001-github-organization-split-plan.md](plans/2026-05-22-001-github-organization-split-plan.md) -
