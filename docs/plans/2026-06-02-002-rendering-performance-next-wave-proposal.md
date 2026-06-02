@@ -1,12 +1,15 @@
 # Perf - Rendering Performance Next-Wave Proposal
 
 **Date:** 2026-06-02
-**Status:** Proposed
+**Status:** Implemented for P0, P1, the draw-reuse slice of P2, and the
+metric-flush slice of P4. P3 and semantic fragment reuse remain deferred.
 **Scope:** `swift-tui` frame-head elision, frame-tail retained reuse,
 incremental rasterization, retained indexes, and TermUIPerf infrastructure.
 **Baseline:** org root on `main`, child repos pinned to `0.0.10`.
-**Fresh artifacts:** local, uncommitted measurements under
+**Original proposal artifacts:** local, uncommitted measurements under
 `/tmp/swifttui-perf-0.0.10`.
+**Post-implementation artifacts:** local, uncommitted measurements under
+`/tmp/swifttui-perf-candidate-final`.
 **Predecessor:**
 [`2026-06-02-001-rendering-performance-optimization-proposal.md`](2026-06-02-001-rendering-performance-optimization-proposal.md).
 
@@ -39,6 +42,78 @@ Recommended order:
 5. Reduce retained layout validation and `LayoutPassContext` overhead.
 6. Treat visible animation cadence and text churn as lower-priority product
    policy, not the next runtime hotspot.
+
+## Current State After Implementation
+
+The working tree now reflects the accepted parts of this proposal:
+
+- **P0 landed.** Elided diagnostic rows now carry named micro-spans in
+  `frames.tsv` and TermUIPerf summaries, including graph checkpoint
+  create/restore, resolve checkpoint restore, animation tick/commit, runtime
+  registration commit, and elided commit timings. The main optimization is a
+  pre-frame-head fast path for off-screen property-animation deadline ticks:
+  when the animation controller can prove all redraw identities are off-screen
+  and there is no active frame-head transaction, transition/removal work, or
+  pending empty-batch completion, it advances live animation state and finite
+  completions without preparing a full abortable frame head.
+- **P1 landed.** `Rasterizer` now chooses an
+  `IncrementalRasterVerificationPolicy`: debug builds verify sound incremental
+  damage, release builds trust it by default, and
+  `SWIFTTUI_RASTER_VERIFY_INCREMENTAL` /
+  `SWIFTTUI_RASTER_TRUST_SOUND_DAMAGE` can force either behavior. The frame
+  tail now consumes the rasterizer's presentation damage directly when present,
+  avoiding a final full-surface diff in the trusted/verified incremental path.
+- **P2 partially landed.** `RetainedPhaseExtractionProof` supports
+  `.subtreesIdentical(Set<Identity>)`, retained frame-tail state indexes draw
+  nodes by identity, and draw extraction can reuse previous clean draw subtrees
+  when inherited background/border context does not make reuse unsound. Semantic
+  fragment reuse did not land because semantic append order is observable for
+  focus traversal, pointer hit testing, accessibility ordering, and live-region
+  behavior.
+- **P3 did not land.** A retained-index incremental constructor spike exposed
+  structural identity hazards around `.id`, duplicate identities, presentation
+  portals, and root identity paths. `RetainedFrameIndex` still rebuilds full
+  maps after commit.
+- **P4 partially landed.** Measurement and placement work-stack metrics now
+  accumulate in local `LayoutWorkMetrics` and flush once into
+  `LayoutPassContext`, reducing mutex churn. Retained layout validation, layout
+  hashing, and proposal-specific measurement caching remain open.
+
+Updated short-run measurements under `/tmp/swifttui-perf-candidate-final` show:
+
+| Scenario | Iterations | Total CPU median | Frames | Main signal |
+| --- | ---: | ---: | ---: | --- |
+| `synthetic-offscreen-phase-animator` async | 3 | 0.275s | 9 committed / 136 diagnostic / 127 elided median | P0 removed most hidden elided-head CPU; elided animation tick p50 is 0.01 ms. |
+| `synthetic-narrow-invalidation`, rows=40 async | 3 | 0.206s | 18 committed / 18 diagnostic median | CPU/frame is 11.44 ms; frame-tail phase slopes are still the main remaining cost. |
+
+Rows=40 repeated input frames still show median phase/work numbers of roughly
+`measure=1.09ms`, `place=0.55ms`, `semantics=0.73ms`, `draw=0.25ms`,
+`raster=0.63ms`, `pipeline=4.29ms`, `worker_layout_compute=1.61ms`, and
+`worker_raster_compute=2.26ms`. Those are only modestly better than the baseline
+below, so the remaining opportunities are mostly deeper retained-product,
+structural-index, raster, and layout-validation work rather than another
+off-screen elision pass.
+
+Validation completed for the implementation:
+
+```bash
+swiftly run swift test --package-path swift-tui --filter AsyncFrameTailRenderingTests
+swiftly run swift test --package-path swift-tui --filter OffscreenFrameElisionRuntimeTests
+swiftly run swift test --package-path swift-tui --filter RetainedPhaseExtractionTests
+swiftly run swift test --package-path swift-tui --filter RasterizerTests
+swiftly run swift test --package-path swift-tui --filter LayoutEngineTests
+swiftly run swift test --package-path swift-tui --filter SurfaceDamageContractTests
+swiftly run swift test --package-path swift-tui --filter PipelineContractTests
+swiftly run swift test --package-path swift-tui/Tools/TermUIPerf
+swiftly run swift package --package-path swift-tui/Tools/TermUIPerf \
+  show-dependencies --disable-automatic-resolution
+git -C swift-tui diff --check
+```
+
+Validation caveat: full-package `swiftly run swift test --package-path swift-tui`
+and a `--no-parallel` rerun both crashed `swiftpm-testing-helper` with signal 11
+before reporting a failing assertion. Treat that as a separate validation gap,
+not as proof of a runtime assertion failure in this performance patch.
 
 ## Infrastructure Check
 
@@ -79,10 +154,10 @@ Infrastructure issues found:
   Perf runs should stay sequential or use separate build paths.
 - Initial SwiftPM resolution updated `Tools/TermUIPerf/Package.resolved`; it was
   restored, and subsequent commands used `--disable-automatic-resolution`.
-- `docs/perf/README.md` is stale for the historical real-gallery overlay path:
-  it says gallery scenarios live in `swift-tui` `stash@{0}`, but current
-  committed scenarios have moved forward. This should be cleaned up separately
-  before relying on real-gallery overlay measurements.
+- The historical real-gallery overlay path was not durable when it depended on a
+  fixed local `git stash@{0}`. `docs/perf/README.md` now treats full-gallery
+  measurement as an overlay reconstruction path from the baseline report, and
+  keeps the committed framework-only scenarios as the everyday path.
 
 Effective dependency graph after restore:
 
@@ -538,7 +613,7 @@ Focused correctness suites should include:
 
 - Reverting async rendering to sync rendering.
 - Optimizing visible animation cadence without explicit authored policy.
-- Treating the stale real-gallery stash instructions as current until they are
-  reconstructed or replaced.
+- Treating a fixed local real-gallery stash reference as current measurement
+  infrastructure.
 - Replacing the phase-product model wholesale before measuring the smaller
   retained-product and raster-trust changes.

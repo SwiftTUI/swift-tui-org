@@ -4,7 +4,7 @@ Two ways to reproduce SwiftTUI's performance hot-spots, plus a real-terminal
 cross-check. The hot-spots themselves are documented in
 [`../reports/2026-05-28-gallery-performance-report.md`](../reports/2026-05-28-gallery-performance-report.md).
 
-## Tier 1 — Everyday: committed synthetic scenarios (no overlay)
+## Tier 1 — Everyday: committed scenarios (no overlay)
 
 Framework-only scenarios in `swift-tui/Tools/TermUIPerf` that reproduce the
 *shapes* of the hot gallery tabs. They depend on nothing but `SwiftTUI`, so they
@@ -12,7 +12,10 @@ run from a clean `swift-tui` checkout with no coordination overlay:
 
 | Scenario (`--scenario`) | Reproduces | Shape (verified) |
 | --- | --- | --- |
+| `gallery-animation-click` | H1/H4 representative gallery interaction | framework-only approximation of clicking into an animated gallery surface |
+| `layout-scroll-burst` | layout invalidation under bursty input | short scroll/input burst that exercises coalescing and retained layout |
 | `synthetic-offscreen-phase-animator` | H1 | perpetual off-screen `PhaseAnimator` → many committed frames at `damage_cells = 0` |
+| `synthetic-narrow-invalidation` | H2/H3 | one small state change in a retained tree; resolve reuse should stay flat while tail work exposes scaling |
 | `synthetic-continuous-animation` | H4 (borders) | continuous `Spinner` repaint → committed frames at `damage_cells = 1` every tick |
 | `synthetic-text-shimmer` | H4 (task-progress) / H5 | `TimelineView(.animation)` changing text → fresh `TextLayoutCache` key per tick |
 
@@ -34,38 +37,38 @@ These scenarios are auto-covered by `ScenarioSmokeTests` (it iterates
 ## Tier 2 — Full fidelity: the real 18-tab gallery (overlay)
 
 The real `GalleryView` scenarios depend on the `swift-tui-examples/gallery`
-package, so they **cannot** be committed to the public `swift-tui` manifest (that
-would couple a public child to a sibling repo). They live as coordination-only
-edits held in `swift-tui`'s **`git stash@{0}`** — `GalleryTabScenario`,
-`CommandPaletteScenario`, `GalleryScenarioRegistration`, the `main.swift`
-registration hook, and the `Package.swift` (+gallery path-dep) /
-`PerfRunConfig.swift` (+19 gallery scenario names) additions.
+package, so they **cannot** be committed to the public `swift-tui` manifest. A
+fixed local stash index is not a durable source of truth for these scenarios;
+current stashes may point to unrelated work.
 
-To run the real gallery for full-fidelity numbers:
+The durable artifacts are:
+
+- [`2026-05-28-gallery-baseline/`](2026-05-28-gallery-baseline/) — the captured
+  full-gallery baseline data.
+- [`../reports/2026-05-28-gallery-performance-report.md`](../reports/2026-05-28-gallery-performance-report.md) —
+  the scenario design, cross-repo dependency shape, and reconstruction notes.
+- [`../CROSS-REPO-DEVELOPMENT.md`](../CROSS-REPO-DEVELOPMENT.md) — how to
+  materialize a throwaway coordination overlay.
+
+To take new full-fidelity gallery measurements, first materialize an overlay and
+reconstruct the coordination-only `TermUIPerf` gallery scenario files inside
+that overlay from the report. The overlay copy may add a temporary
+`swift-tui-examples/gallery` path dependency to `Tools/TermUIPerf/Package.swift`;
+the public `swift-tui` checkout must not.
 
 ```bash
 cd swift-tui-org
-# Materialize a throwaway overlay of the working trees + env vars:
 eval "$(bazel run //:open_overlay -- --print-env examples 2>/dev/null)"
-# Apply the coordination-only gallery scenarios INTO the overlay copy only:
-git -C swift-tui stash show -p stash@{0} | git -C "$SWIFTTUI_CHECKOUT" apply
-# Run a gallery tab from the overlay (its Package.swift carries the gallery
-# path-dep; the committed swift-tui one never does):
 cd "$SWIFTTUI_CHECKOUT"
+# Reconstruct/apply the GalleryTabScenario and registration changes here.
 swiftly run swift run -c release --package-path Tools/TermUIPerf termui-perf \
   run --scenario gallery-animations --modes async --iterations 1 --configuration release
 ```
 
-Notes:
-- The overlay is a throwaway copy; edits inside it are not carried back to the
-  child repos. Re-run `open_overlay` to refresh. See
-  [`../CROSS-REPO-DEVELOPMENT.md`](../CROSS-REPO-DEVELOPMENT.md).
-- Verify the stash before relying on it: `git -C swift-tui stash show --stat stash@{0}`
-  should list `GalleryTabScenario.swift` et al. If the stash index has shifted,
-  adjust `stash@{0}` accordingly; if it is gone, the scenarios can be
-  reconstructed from §8 of the baseline report.
-- **Never commit the gallery `Package.swift`/`PerfRunConfig.swift` additions into
-  the public `swift-tui` repo** — they are coordination-only.
+The overlay is a throwaway copy; edits inside it are not carried back to the
+child repos. Re-run `open_overlay` to refresh. **Never commit the gallery
+`Package.swift` / `PerfRunConfig.swift` additions into the public `swift-tui`
+repo**; they are coordination-only.
 
 ## Tier 3 — Authentic terminal (kitty)
 
