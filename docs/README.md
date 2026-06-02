@@ -78,3 +78,15 @@ documentation in their own `docs/` trees.
   migration plan for making the batteries-included `SwiftTUI.App` protocol
   conform to `SwiftTUICommand` while keeping `SwiftTUIRuntime.App` independent
   from command-line parsing.
+
+## Proposals
+
+Investigated design proposals (not yet implemented).
+
+- [proposals/COMMAND_PALETTE_OPEN_PERFORMANCE.md](proposals/COMMAND_PALETTE_OPEN_PERFORMANCE.md) -
+  why presenting an overlay (e.g. the command palette) re-resolves the whole
+  host subtree on `isPresented` toggle, the measured evidence, and three
+  framework-level options (dependency-aware reuse, portal-host-scoped
+  invalidation, opt-in memoized view boundary) to make open/close cheap.
+- [proposals/IMAGE_BLEND_MODE.md](proposals/IMAGE_BLEND_MODE.md) -
+  proposal for image blend-mode compositing support.
