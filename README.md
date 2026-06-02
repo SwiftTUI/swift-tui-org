@@ -49,19 +49,22 @@ repos.
 
 ## Current Public Pre-Release State
 
-All child repositories are public and tagged at `0.0.8`. Public child defaults
+All child repositories are public and tagged at `0.0.9`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.8` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.0.9` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.8` release.
-- `swift-tui-examples` uses the `swift-tui` `0.0.8` tag and the web `0.0.8`
+  the GitHub `0.0.9` release.
+- `swift-tui-examples` uses the `swift-tui` `0.0.9` tag and the web `0.0.9`
   release tarballs by default.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.8` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.9` tag.
 
-Npm publication is still a follow-up: the local npm session is not authenticated,
-so the first public web package path uses GitHub release tarballs.
+As of `0.0.9`, `@swifttui/web` and `@swifttui/build` are published to npm and
+also attached to the GitHub release as tarballs. In-org consumers
+(`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
+release tarball URLs; external consumers can install the npm package names
+directly.
 
 For cross-repo development before the next tag, the org root materializes a
 **coordination overlay** under `.build/coordination/`. The overlay is a
@@ -342,7 +345,7 @@ bazel test //:org_full
 
 ## Bumping the Org Version
 
-The release version (currently `0.0.8`) is denormalized across every child:
+The release version (currently `0.0.9`) is denormalized across every child:
 `package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
 `exactVersion`, GitHub release tarball URLs, `tree`/`blob`/`tag` links, site
 display strings, and the canonical `swift-tui-site/docs/releases.yml` manifest.
@@ -353,9 +356,9 @@ It is **dry-run by default** — it prints a unified diff and a release runbook 
 changes nothing until you pass `--write`:
 
 ```sh
-mise run bump -- 0.0.8            # preview the full diff (dry run)
-mise run bump -- 0.0.8 --write    # apply, then review `git -C <submodule> diff`
-bazel run //:bump_version -- 0.0.8 # same, via Bazel
+mise run bump -- 0.0.9            # preview the full diff (dry run)
+mise run bump -- 0.0.9 --write    # apply, then review `git -C <submodule> diff`
+bazel run //:bump_version -- 0.0.9 # same, via Bazel
 ```
 
 What it deliberately does **not** do — these stay maintainer-owned:
