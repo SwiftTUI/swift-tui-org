@@ -73,7 +73,7 @@ repo's authored version sites. Lockstep: swiftTUI, web, and examplesRef all move
 to <new-version> together (the model the org ships under today).
 
 Arguments:
-  <new-version>   Target semver, e.g. 0.0.9 (also accepts pre-release suffixes,
+  <new-version>   Target semver, e.g. 0.0.10 (also accepts pre-release suffixes,
                   e.g. 0.1.0-rc.1).
 
 Options:
@@ -99,9 +99,9 @@ What it never touches (you regenerate / publish these yourself):
     docs/PUBLIC-REPO-READINESS.md  -> reported as skipped, never rewritten
 
 Examples:
-  mise run bump -- 0.0.9                 # preview the full diff
-  mise run bump -- 0.0.9 --write         # apply, then review `git diff` per repo
-  bazel run //:bump_version -- 0.0.9     # same, via Bazel
+  mise run bump -- 0.0.10                 # preview the full diff
+  mise run bump -- 0.0.10 --write         # apply, then review `git diff` per repo
+  bazel run //:bump_version -- 0.0.10     # same, via Bazel
 EOF
 }
 
