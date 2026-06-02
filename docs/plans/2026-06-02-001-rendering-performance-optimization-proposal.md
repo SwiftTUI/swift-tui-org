@@ -1,8 +1,8 @@
 # Perf - Rendering Infrastructure Optimization Proposal
 
 **Date:** 2026-06-02
-**Status:** PROPOSED. Measurement-summary hardening has been implemented in the
-working tree; runtime optimizations below are proposed follow-up work.
+**Status:** IMPLEMENTED for P0-P4 and the P5 text-cache admission slice. The
+P5 visible-animation cadence policy remains explicit product work.
 **Scope:** `swift-tui` rendering pipeline, TermUIPerf measurement infrastructure,
 and host presentation paths.
 **Predecessors:**
@@ -39,6 +39,33 @@ Recommended order:
 4. Add retained/incremental semantics and draw extraction.
 5. Make host damage metrics and browser dirty-rect handling first-class.
 6. Treat visible continuous animation and text churn as policy/admission work.
+
+## Implementation progress
+
+Implemented on 2026-06-02:
+
+- P0 measurement semantics: TermUIPerf summaries now reduce over parsed
+  `frames.tsv` diagnostics, expose distinct committed/elided/cancelled/drop
+  counts, and avoid idle-event negative latency.
+- P1 retained placed-frame table carry-forward: retained placement carries
+  placed-frame fragments instead of rewalking unchanged subtrees.
+- P2 scoped retained-reuse suppression: focus, pressed, runtime focus-state
+  readers, and active property-animation identities suppress retained reuse only
+  for affected subtrees, with conservative full-frame fallback for unknown
+  active animation cases.
+- P3 retained semantics/draw extraction: previous committed semantic and draw
+  products are retained and reused when the current effective placed tree,
+  proposal, and overlay state prove the whole tree is identical. The broader
+  mixed-subtree fragment cache remains future work because ordering and
+  context-sensitive projections need a stronger fragment proof.
+- P4 host damage metrics and browser dirty-region handling: `PerfTerminalHost`
+  consumes semantic host frames with raster damage, and the browser canvas
+  consumes damage through row/range-indexed dirty regions instead of per-cell
+  `dirtyRects.some(...)` scans.
+- P5 text churn admission: `TextLayoutCache` bypasses storage for one-shot keys
+  once full, while admitting a repeated new key on its second sighting. Visible
+  animation cadence limiting remains unimplemented by design until there is an
+  explicit authored policy.
 
 ## Current model
 
@@ -398,4 +425,3 @@ Additional targeted scenarios:
   dominant.
 - Silently reducing visible animation cadence without an explicit product
   policy.
-
