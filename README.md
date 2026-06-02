@@ -109,9 +109,18 @@ available.
 
 ## Planning Documents
 
-Organization-level plans live in [docs/README.md](docs/README.md). These plans
-can span multiple child repositories, so they are tracked in the orchestration
-root rather than in a single package's docs tree.
+All planning, proposal, and design docs live **solely** in this orchestration
+root's [docs/](docs/README.md) tree (`docs/plans/`, `docs/proposals/`,
+`docs/reports/`). They are forward-looking and can span multiple child
+repositories, so they are tracked here rather than in any single package's docs
+tree. Do not add or leave planning/proposal docs in a child repo.
+
+Child-repository `docs/` are **hard-limited to documentation that describes the
+state of `HEAD`** in that repo — architecture as built, the public-API surface,
+the build/test/release process, known flakes, and the in-source DocC catalogs.
+The **single exception** is each child's `VISION-GAP.md` (the code-vs-intent gap
+register), which may remain in the child repo. Anything else that is aspirational
+or not-yet-true belongs in this root's `docs/`.
 
 ## Hard Invariants
 

@@ -35,6 +35,16 @@ child repo remains the source of truth for its own manifests and release tags.
   consumes another repo's untagged commit belong only in this coordination repo.
 - Bazel is coordination tooling. Do not make a public child repo require Bazel
   or this root checkout for its default build.
+- **All planning, proposal, and design docs live *solely* in this root repo's
+  `docs/`** (`docs/plans/`, `docs/proposals/`, `docs/reports/`). They are
+  forward-looking and may span child repos, so the coordination root owns them.
+  Do not add or leave planning/proposal docs in a child repo.
+- **Child-repo `docs/` are hard-limited to documentation that describes the
+  state of `HEAD`** in that repo (architecture as built, public-API surface,
+  development/build/release process, known flakes, in-source DocC). The *single*
+  exception is each child's `VISION-GAP.md` (the code-vs-intent gap register),
+  which is allowed to remain in the child repo. Anything else aspirational or
+  not-yet-true belongs in this root's `docs/`.
 
 ## Build & test commands
 
@@ -98,4 +108,6 @@ Xcode are intentionally **not** installed by mise.
 
 - Agent guidance uses `AGENTS.md` as the real file; `CLAUDE.md` is a symlink to
   it. Edit `AGENTS.md`.
-- Org-level plans live in [`docs/`](docs/README.md) (they can span child repos).
+- All planning, proposal, and design docs live solely in this root's
+  [`docs/`](docs/README.md); child-repo docs describe `HEAD` only, except each
+  child's `VISION-GAP.md`. See **Public vs coordination contracts** above.
