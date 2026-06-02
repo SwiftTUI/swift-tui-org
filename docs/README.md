@@ -31,6 +31,11 @@ documentation in their own `docs/` trees.
 
 ## Planning Documents
 
+- [plans/2026-06-02-002-rendering-performance-next-wave-proposal.md](plans/2026-06-02-002-rendering-performance-next-wave-proposal.md) -
+  fresh `0.0.10` performance proposal after the first optimization wave:
+  infrastructure findings, TermUIPerf measurements, hidden elided-frame CPU,
+  retained frame-tail residuals, raster trust, subtree semantic/draw reuse, and
+  retained-index follow-ups.
 - [plans/2026-06-02-001-rendering-performance-optimization-proposal.md](plans/2026-06-02-001-rendering-performance-optimization-proposal.md) -
   proposal for the next rendering-infrastructure performance wave: measurement
   semantics, retained placement table carry-forward, scoped reuse suppression,
