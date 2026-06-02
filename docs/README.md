@@ -31,6 +31,17 @@ documentation in their own `docs/` trees.
 
 ## Planning Documents
 
+- [plans/2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md](plans/2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md) -
+  execution proposal building out Opportunity 1 of the remaining-opportunities
+  register: a persistent, patchable `RetainedFrameIndex` backed by stored
+  structural adjacency. Sequenced as L1 structural-adjacency maps (correctness),
+  L2 subtree signatures + debug equality oracle, L3 fragment-based patchable
+  index (the perf win), and a deferred L4 arena representation. Includes a
+  6-tracer/4-verifier source trace resolving Open Question #1: the place phase
+  does not reparent and portals are hoisted at resolve, so a single canonical
+  adjacency relation suffices (per-phase/redirect L3.5 dropped); the residual
+  hazards are transient removal-overlay insert/prune churn and the lazy-stack
+  `indexedChildSource` viewport-subset barrier, plus duplicate-identity stance.
 - [plans/2026-06-02-003-rendering-performance-remaining-opportunities-proposal.md](plans/2026-06-02-003-rendering-performance-remaining-opportunities-proposal.md) -
   post-implementation opportunity register for the remaining rendering
   performance work: retained indexes, ordered semantic fragments, raster
