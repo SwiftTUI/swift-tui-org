@@ -35,6 +35,10 @@ run = "bazel test //:release_candidate"
 description = "Run the compatibility alias for the full SwiftTUI organization target"
 run = "bazel test //:org"
 
+[tasks.bump]
+description = "Preview an org-wide version bump (dry run). Append --write to apply. Usage: mise run bump -- <new-version> [--write]"
+run = "tools/coordination/bump_version.sh"
+
 [tasks.overlay]
 description = "Materialize the coordination overlay (forwards args after `--` to open_overlay)"
 run = "bazel run //:open_overlay --"

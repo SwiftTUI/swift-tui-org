@@ -49,16 +49,16 @@ repos.
 
 ## Current Public Pre-Release State
 
-All child repositories are public and tagged at `0.0.7`. Public child defaults
+All child repositories are public and tagged at `0.0.8`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.7` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.0.8` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.7` release.
-- `swift-tui-examples` uses the `swift-tui` `0.0.7` tag and the web `0.0.7`
+  the GitHub `0.0.8` release.
+- `swift-tui-examples` uses the `swift-tui` `0.0.8` tag and the web `0.0.8`
   release tarballs by default.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.7` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.8` tag.
 
 Npm publication is still a follow-up: the local npm session is not authenticated,
 so the first public web package path uses GitHub release tarballs.
@@ -339,6 +339,39 @@ bazel fetch //:org_full
 bazel test //:org_fast
 bazel test //:org_full
 ```
+
+## Bumping the Org Version
+
+The release version (currently `0.0.8`) is denormalized across every child:
+`package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
+`exactVersion`, GitHub release tarball URLs, `tree`/`blob`/`tag` links, site
+display strings, and the canonical `swift-tui-site/docs/releases.yml` manifest.
+
+`tools/coordination/bump_version.sh` rewrites all of those authored sites in one
+pass. The current version is read from `releases.yml` (override with `--from`).
+It is **dry-run by default** — it prints a unified diff and a release runbook and
+changes nothing until you pass `--write`:
+
+```sh
+mise run bump -- 0.0.8            # preview the full diff (dry run)
+mise run bump -- 0.0.8 --write    # apply, then review `git -C <submodule> diff`
+bazel run //:bump_version -- 0.0.8 # same, via Bazel
+```
+
+What it deliberately does **not** do — these stay maintainer-owned:
+
+- It never commits, tags, pushes, or publishes npm/GitHub release artifacts.
+- It never edits generated lockfiles (`Package.resolved`, `bun.lock`,
+  `MODULE.bazel.lock`) — those encode the new tag's git SHA / integrity hashes
+  and unrelated registry-module versions, so they are regenerated (the tool
+  prints the exact `swift package resolve` / `bun install` / `bazel fetch`
+  commands) only **after** the new tags are published.
+- It leaves dated history (`docs/plans`, `docs/reports`, `PUBLIC-REPO-READINESS.md`,
+  `VISION*.md`) as a record, reporting them as skipped.
+
+Run order is web → swift-tui → examples → site → record pins here, because the
+web release tarballs are the artifact leaf the other repos consume. The tool
+prints this runbook; finish with `bazel test //:release_candidate`.
 
 ## Editing Child Repositories
 

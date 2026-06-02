@@ -20,6 +20,13 @@ sh_binary(
     srcs = ["tools/coordination/materialize_pretag_overlay.sh"],
 )
 
+# Org-wide version bump helper. `bazel run //:bump_version -- <new-version>`
+# previews the rewrite; append --write to apply. See mise task `bump`.
+sh_binary(
+    name = "bump_version",
+    srcs = ["tools/coordination/bump_version.sh"],
+)
+
 sh_test(
     name = "submodule_status",
     srcs = ["tools/bazel/submodule_status.sh"],
