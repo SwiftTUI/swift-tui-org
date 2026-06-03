@@ -75,6 +75,15 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
   **Stage 6.** The `EntityIdentity → ViewNodeID` routing table (StateTree's `LSID`
   lesson); `@State` re-rooted onto `ViewNodeID`; state/animation/focus survive
   identity-changing moves. The one intentional semantic change. (Option C, part 2.)
+- [plans/2026-06-03-008-structural-identity-migration-gap-remediation-plan.md](plans/2026-06-03-008-structural-identity-migration-gap-remediation-plan.md) -
+  **Audit + gap-remediation plan.** Post-implementation review of stages 0–6 at
+  pin `f2cc53fa`: all four axes landed and integrated (package + tests compile,
+  57/57 named tests pass), but the rigor obligations are the shortfall — the Stage 5
+  cross-version golden oracle was never built, Stage 1's `FrameMetrics` invalidation
+  engine was never repointed and its "patchable" index still rebuilds (vacuous
+  oracle), Stage 4's typed edge carriers are stored but never consumed, and Stage 0's
+  evidence harness never ran over a real corpus. Prioritized G1–G16 remediation,
+  recommended `VISION-GAP.md` entries, and corrections the plan docs need.
 
 ### Other planning documents
 
