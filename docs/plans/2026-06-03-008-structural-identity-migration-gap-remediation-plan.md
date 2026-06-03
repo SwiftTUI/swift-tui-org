@@ -116,6 +116,57 @@ Ordered by value. The branch is clean; resume with `git checkout structural-iden
 7. **Close-out.** `bazel test //:org_full`, then commit+push the child branch and record
    the new submodule pin in the org root.
 
+### Performance tooling — `TermUIPerf` (what exists, how to use it, the missing gate)
+
+The perf harness is **not missing** — `swift-tui/Tools/TermUIPerf` is a standalone Swift
+CLI package (its own `Package.swift`, already built) with the right shape. Three
+subcommands (parsed by `PerfCommandParser`; check it for exact flags):
+
+- **`list-scenarios`** — prints `PerfScenarioName.allNames`. Includes
+  `synthetic-narrow-invalidation` (the resolve-heavy one this plan measured),
+  gallery-animation-click, layout-scroll-burst, and the synthetic phase-animator /
+  repeat-forever / shimmer scenarios.
+- **`run <scenario>`** — runs N iterations across render modes, writing the per-frame
+  diagnostics TSVs (this is the `.perf/**/frames.tsv` data the G3 measurement used) plus
+  an `aggregate-<scenario>-<mode>.json` per mode.
+- **`compare <baseline-aggregate> <candidate-aggregate>`** — reports, per metric
+  (`resolve_ms`, `commit_ms`, …): `base → candidate`, the delta, and a **`verdict`** of
+  `.real` / `.withinNoise` / `.inconclusive`, where `.real` means the median delta exceeds
+  a **noise band of N standard deviations**. It is already *variance-aware* — the
+  significance check that makes a delta trustworthy is built in
+  (`AggregateComparison.compareAggregates`).
+
+**What is genuinely missing / why this plan did not lean on it:**
+
+1. **The pass/fail *budget* (the literal "gate").** `compare` *reports* significance; nothing
+   *enforces* a threshold and fails. This matches `swift-tui/docs/VISION-GAP.md`
+   ("Performance": *"comparative measurements, not a gate"*). So there is no automated
+   "this change regressed `resolve_ms` — reject it."
+2. **Trustworthy measurement *conditions*.** Correct use is a heavyweight, load-sensitive
+   workflow — build the pre-change binary and `run` ~20 iters, build the post-change binary
+   and `run` ~20 iters, `compare`, and believe only a `.real` verdict. Run-to-run variance
+   is a known hazard here (see `2026-05-28-004-perf-g2-run-to-run-variance-plan.md`), so a
+   single ad-hoc run amid concurrent builds is noise. That is why the only perf change landed
+   this session was **behavior-identical** (the conflict-scan short-circuit, safe without a
+   measurement), and the two real wins (`conflictsWithInvalidation` removal;
+   `structuralInvalidationIntersects` reduction) were left flagged-but-unmeasured.
+
+**The right first perf step — turn the harness into a gate (small, self-contained):** make
+`compare` exit non-zero when a tracked metric regresses beyond its noise band (and/or assert a
+`.real` *improvement* for a claimed win). Then perf wins become *provable* and regressions
+*catchable* in CI, and steps 2/5 above (`resolve_ms`, the patcher) can be done behind it
+instead of by eye. Do this **before** chasing `resolve_ms` wins.
+
+Measurement recipe for a `resolve_ms` change (on a quiet machine, from `Tools/TermUIPerf`):
+
+```bash
+swift run TermUIPerf list-scenarios
+# baseline = pre-change build, candidate = post-change build:
+swift run TermUIPerf run     synthetic-narrow-invalidation   # ~20 iters; ×2 builds, distinct artifact roots
+swift run TermUIPerf compare <baseline-aggregate.json> <candidate-aggregate.json>
+# accept the change only if the resolve_ms verdict is .real and the delta is favorable
+```
+
 ## How this audit was run
 
 - **Empirical baseline.** `swift build --build-tests` is green (38s, 0 warnings):
