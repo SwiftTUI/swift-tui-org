@@ -34,10 +34,11 @@ memo table keyed by a relation that can lie about containment.
 This proposal builds the approach out in four sequenced layers, ordered so that
 **correctness lands before any performance claim**:
 
-1. **L1 — Structural adjacency (correctness, no perf claim).** Record the real
-   parent/child edges during the walk that already happens, and replace the
-   `Identity.parent` string-walk in invalidation classification with a
-   structural walk.
+1. **L1 — Structural adjacency (correctness, no perf claim).** Assign
+   deterministic per-frame `StructuralNodeKey`s during the walk that already
+   happens, record the real parent/child edges plus an `Identity` multimap, and
+   replace the `Identity.parent` string-walk in invalidation classification with
+   a structural walk.
 2. **L2 — Subtree signatures + debug equality oracle.** Add a fold-up subtree
    signature next to the existing `subtreeNodeCount`, and a debug mode that
    builds both a patched and a fully-rebuilt index and asserts byte-equivalence.
@@ -180,41 +181,73 @@ Two real constraints replace the (non-existent) portal-reparent hazard:
 **Goal:** store the real edges so containment queries follow structure, not
 string paths. No performance claim.
 
-**Representation.** Extend `RetainedFrameIndex` with sidecar maps populated in
-the existing recursive walk (zero extra traversal — every parent→child edge is
-already visited at `RetainedFrameQueries.swift:86-130`):
+**Representation.** Extend `RetainedFrameIndex` with a structural sidecar
+populated in the existing recursive walk (zero extra traversal — every
+parent→child edge is already visited at `RetainedFrameQueries.swift:86-130`).
+Use structural node keys as the authoritative graph keys and keep runtime
+`Identity` as an attribute/multimap, not as the structural key:
 
 ```swift
+package struct StructuralNodeKey: Hashable, Sendable {
+  package let rawValue: UInt64
+}
+
+package struct StructuralFrameIndex: Sendable {
+  package let root: StructuralNodeKey?
+  package let parentByNode: [StructuralNodeKey: StructuralNodeKey]
+  package let childrenByNode: [StructuralNodeKey: [StructuralNodeKey]]
+  package let runtimeIdentityByNode: [StructuralNodeKey: Identity]
+  package let nodeByRuntimeIdentity: [Identity: [StructuralNodeKey]]
+  package let subtreeRangeByNode: [StructuralNodeKey: Range<Int>]
+  package let postorder: [StructuralNodeKey]
+}
+
 package struct RetainedFrameIndex: Sendable {
   // existing flat maps unchanged …
   // new — structural, derived from real `children` edges:
-  package let structuralParent:   [Identity: Identity]
-  package let structuralChildren: [Identity: [Identity]]   // preserves sibling order
+  package let structuralFrame: StructuralFrameIndex
 }
 ```
 
+**Key assignment and cross-frame correspondence.** `StructuralNodeKey`s are
+assigned per frame in deterministic walk order; they are values local to one
+frame and are *not* stable across frames. The patcher (L3) therefore
+re-establishes "same node as last frame" by **structural position** — the
+stable structural locator/path plus sibling ordinal — gated by
+`subtreeSignature` for the reuse decision, never by raw `StructuralNodeKey` value
+and never by `Identity` alone. This is what keeps the cross-frame anchor
+well-defined precisely in the duplicate-identity case, where two siblings share
+an `Identity` but occupy distinct sibling ordinals and so cannot be matched by
+`Identity`.
+
 **Use it.** Replace the `identity.parent` string-walk in
 `RetainedInvalidationSummary` (`RetainedFrameQueries.swift:167-177`) with a walk
-over `structuralParent`. This is the parent register's requirement #2 ("track
-subtree identity sets from structural adjacency, not only from identity path
-conventions"). The synthetic-ancestor classification stops being a path-prefix
-guess and becomes exact across `.id`, portals, and overlays.
+over `structuralFrame.parentByNode`. This is the parent register's requirement
+#2 ("track subtree identity sets from structural adjacency, not only from
+identity path conventions"). The synthetic-ancestor classification stops being a
+path-prefix guess and becomes exact across `.id`, portals, and overlays.
 
-**Duplicate-identity decision (must be made here).** A `[Identity: Node]` map is
-already last-writer-wins on duplicate identities — a latent collision in the
-current index. `structuralParent` keyed by `Identity` inherits it. L1 must pick
-one stance and document it:
+Callers that start from an `Identity` first consult
+`nodeByRuntimeIdentity[identity]`. If it yields exactly one structural node, the
+query can proceed normally. If it yields multiple nodes, the query must use the
+smallest conservative structural scope that covers those occurrences (or fall
+back to full rebuild for that affected parent/root). It must never silently pick
+one occurrence by dictionary overwrite.
 
-- **(a) Forbid + diagnose:** assert uniqueness while indexing, emit a duplicate
-  diagnostic, and dedupe upstream. Keeps `Identity` as the index key.
-- **(b) Slot key:** key adjacency by a per-frame structural slot id and demote
-  `Identity` to a non-unique attribute.
+**Duplicate-identity policy (made explicit here).** Existing product maps such
+as `[Identity: Node]` are already last-writer-wins on duplicate identities — a
+latent collision in the current index. L1 does **not** preserve that behavior in
+the structural layer. Instead:
 
-Recommendation for L1: **(a)**, because the index is *already* effectively
-assuming uniqueness; making that assumption explicit and instrumented is lower
-risk than introducing a parallel slot-id space before it is needed. Revisit (b)
-only if real content legitimately commits duplicate identities. Capture the
-chosen stance next to the new fields.
+- structural adjacency is keyed by `StructuralNodeKey`;
+- `nodeByRuntimeIdentity` is a multimap;
+- duplicate runtime identities emit a deterministic debug/test diagnostic; and
+- retained reuse for an ambiguous identity falls back conservatively until a
+  later occurrence-keyed product lookup is justified.
+
+This keeps L1 low risk while aligning it with the first-class structural identity
+architecture. It also avoids introducing a full `ViewNodeID`/lifetime split
+before retained-frame evidence proves one is needed.
 
 **Scope barriers carried forward unchanged:** `indexedChildSource` roots keep
 their existing special-case (`RetainedFrameQueries.swift:180-191`). Note (per the
@@ -244,10 +277,12 @@ maintained exactly like `subtreeNodeCount` is today:
   recomputes.
 
 The signature must cover whatever the index's correctness depends on
-(identity + child identities + the per-phase payload fields the retained reader
-actually consumes). Reuse the existing signature family rather than inventing a
-new hashing convention — extend the `RetainedPhaseExtractionSignature` /
-custom-layout-signature approach already in use.
+(stable structural locator/path assignment, runtime identity, child structural
+order, child runtime identities, and the per-phase payload fields the retained
+reader actually consumes). Reuse the existing signature family rather than
+inventing a new hashing convention — extend the
+`RetainedPhaseExtractionSignature` / custom-layout-signature approach already in
+use.
 
 **Debug equality oracle.** This is the parent register's required debug
 comparison. Gate it on a debug build (mirroring the release-trusts /
@@ -262,8 +297,11 @@ assert(patched.isByteEquivalent(to: rebuilt), "persistent index diverged from re
 ```
 
 The nodes are all `Equatable`, so the oracle has a correctness reference for
-free. L2 can ship the oracle while still using `rebuilt` in release, so it adds
-verification with no behavior change.
+free. The comparison must also prove structural sidecar equivalence:
+`parentByNode`, ordered `childrenByNode`, `runtimeIdentityByNode`,
+`nodeByRuntimeIdentity`, subtree ranges, and postorder must match the full
+rebuild. L2 can ship the oracle while still using `rebuilt` in release, so it
+adds verification with no behavior change.
 
 ## Layer 3 - Patchable Index (the performance win)
 
@@ -271,14 +309,14 @@ verification with no behavior change.
 signature; reuse unchanged fragments, re-index only changed roots, prune removed
 roots. Parent register requirement #4.
 
-**Storage shift: ranges → fragments.** The current placed-frame table keys
-contiguous `Range<Int>` slices per identity
+**Storage shift: ranges → structural fragments.** The current placed-frame table
+keys contiguous `Range<Int>` slices per identity
 (`RetainedFrameQueries.swift:29-30,77-84,112-129`). Ranges are read-friendly but
 patch-hostile: inserting one entry shifts every later range. L3 moves to
-**per-root fragment storage** (a dict of small arrays / sub-indexes), optionally
-materializing the contiguous flat form lazily only when a downstream reader needs
-it. Each retained fragment records the identity set it covers and its
-`subtreeSignature`.
+**per-structural-root fragment storage** (a dict of small arrays / sub-indexes),
+optionally materializing the contiguous flat form lazily only when a downstream
+reader needs it. Each retained fragment records the structural node set it covers,
+the runtime-identity multimap entries in that set, and its `subtreeSignature`.
 
 **API shift: construct-fresh → derive-next.** `FrameTailRetainedState` changes
 from `previousFrameIndex = .init(frame: indexable)`
@@ -290,12 +328,12 @@ state.previousFrameIndex =
   RetainedFrameIndex(patching: state.previousFrameIndex, with: indexable)
 ```
 
-The patch, per root identity:
+The patch, per structural root:
 
 - signature matches previous → reuse that fragment untouched (no re-walk),
 - changed / newly present → re-index just that subtree, replace its fragment,
-- absent this frame → prune its fragment and covered identity set (no stale
-  leaks).
+- absent this frame → prune its fragment plus covered structural keys and
+  identity-multimap entries (no stale leaks).
 
 Still behind the same `Mutex`, still `Sendable`, still keyed off the baseline
 placed tree. The L2 oracle wraps the patch call in debug.
@@ -324,14 +362,18 @@ placed tree. The L2 oracle wraps the patch call in debug.
   congruent structure. **No per-phase adjacency, no redirect map, and no L3
   portal barrier are required.** (L3.5 is dropped — see the execution table.)
 - **Root identity paths / `.id`.** Handled structurally once L1 lands; the patch
-  follows `structuralParent`/`structuralChildren`, not `Identity.parent`.
+  follows `parentByNode`/`childrenByNode`, not `Identity.parent`.
+- **Duplicate runtime identities.** The patcher never reuses a fragment by
+  `Identity` alone. Ambiguous `nodeByRuntimeIdentity` entries either resolve to
+  structural roots through the previous sidecar or force conservative rebuild for
+  the affected scope.
 
 ## Layer 4 - Arena / Structure-of-Arrays (deferred)
 
 Only if L3's per-fragment allocation churn shows up in measurement. Flatten the
 committed frame into one `[Node]` with integer slots, each storing `parent: Int?`
 and `childRange: Range<Int>` (or first-child/next-sibling links), with
-`Identity → slot` on the side. Structural diff and prune become index
+`Identity → [slot]` on the side. Structural diff and prune become index
 arithmetic, and it is the most cache-friendly patchable form — but it is the
 "breaking internal representation change" the parent register places last
 (its step 5). Not in scope to implement here; recorded so L3's fragment design
@@ -341,9 +383,9 @@ does not foreclose it.
 
 | Step | Lands | Primary files |
 | --- | --- | --- |
-| L1 | Structural adjacency maps; structural invalidation walk; duplicate-identity stance | `Commit/RetainedFrameQueries.swift` |
-| L2 | `subtreeSignature` fold-up; debug equality oracle | `Resolve/ResolvedNode.swift`, `Measure/MeasuredNode.swift`, `Place/PlacedNode.swift`, `Commit/RetainedFrameQueries.swift`, `Rendering/FrameTailRetainedState.swift` |
-| L3 | Fragment storage; `init(patching:with:)`; transient insert/prune handling; indexed-source barrier | `Commit/RetainedFrameQueries.swift`, `Rendering/FrameTailRetainedState.swift` |
+| L1 | `StructuralFrameIndex` sidecar keyed by `StructuralNodeKey`; `Identity` multimap; structural invalidation walk; duplicate diagnostics/conservative fallback | `Commit/RetainedFrameQueries.swift` |
+| L2 | `subtreeSignature` fold-up; structural-sidecar equality oracle | `Resolve/ResolvedNode.swift`, `Measure/MeasuredNode.swift`, `Place/PlacedNode.swift`, `Commit/RetainedFrameQueries.swift`, `Rendering/FrameTailRetainedState.swift` |
+| L3 | Structural-fragment storage; `init(patching:with:)`; transient insert/prune handling; indexed-source barrier; multimap pruning | `Commit/RetainedFrameQueries.swift`, `Rendering/FrameTailRetainedState.swift` |
 | L4 | (Deferred) arena representation | TBD |
 
 (L3.5 — per-phase / portal-redirect adjacency — is **dropped**. The 2026-06-02
@@ -362,11 +404,16 @@ Correctness (must hold from L1 onward):
   scroll cases all produce a patched index byte-equivalent to a full rebuild
   (L2 oracle, asserted in debug across the existing fixture corpus).
 - Tests where path identity and structural containment intentionally diverge
-  (`.id` boundaries, duplicate-identity diagnostics under the chosen stance,
-  portal reparents, root identity paths) — assert structural adjacency, not path
-  adjacency, drives classification.
-- Indexed-child-source and portal roots are treated as barriers in L3 (assert no
-  interior reuse is claimed across those seams).
+  (`.id` boundaries, duplicate runtime identities, portal/overlay roots, root
+  identity paths) — assert structural adjacency, not path adjacency, drives
+  classification.
+- Duplicate runtime identities populate `nodeByRuntimeIdentity` as multiple
+  structural nodes, emit the expected diagnostic, and force conservative reuse
+  fallback for ambiguous retained queries rather than overwriting an occurrence.
+- Indexed-child-source roots are treated as opaque barriers in L3 (assert no
+  interior reuse is claimed across that viewport-subset boundary). Portal roots
+  are **not** barriers; assert they remain congruent structural children of the
+  resolved `OverlayStack` path traced above.
 
 Performance (gates the L3 perf claim — do not claim a win without it):
 
@@ -391,9 +438,12 @@ Gate hygiene (per parent register Opportunity 5):
   2026-06-02 trace established a single canonical adjacency relation is correct;
   the residual risk moved to transient insert/prune churn and the lazy-stack
   `indexedChildSource` subset, both handled explicitly above.
-- **Do not** introduce a slot-id key space (duplicate-identity stance (b)) unless
-  real content commits duplicate identities; prefer the explicit
-  forbid-and-diagnose stance first.
+- **Do not** reuse `Identity` as the structural adjacency key. The structural
+  sidecar is keyed by `StructuralNodeKey`, with `Identity` retained only as a
+  runtime-identity attribute/multimap.
+- **Do not** introduce a full `ViewNodeID` / runtime-lifetime split in this wave;
+  duplicate identities should diagnose and fall back conservatively until real
+  pressure justifies that larger migration.
 - **Do not** claim a performance win from L1/L2 — they are correctness and
   verification only.
 - **Do not** start L4 (arena) until L3 fragment churn is measured to matter; it
@@ -418,6 +468,19 @@ Gate hygiene (per parent register Opportunity 5):
 3. **`setChildrenPreservingDerivedState`:** keep it signature-aware, or formally
    restrict signature consultation to shape-stable frames and document that tick
    frames never trigger a fragment-reuse decision?
-4. **Duplicate-identity reality:** is there any current content (diagnostics,
-   foreign surfaces) that legitimately commits duplicate identities today? If so,
-   stance (a) needs a defined diagnostic-vs-error policy before L1.
+4. **Duplicate-identity policy (existence resolved; policy open).** Duplicate
+   runtime identities are *confirmed reachable*, not hypothetical: any non-unique
+   `ForEach` id yields an identical runtime `Identity`, because `ForEach`
+   derives each element's identity via `context.identity.explicitID(element[keyPath: id])`
+   (`SwiftTUIViews/Collections/ForEach.swift:26-28`) and `explicitID` stringifies
+   the value with no occurrence ordinal
+   (`SwiftTUICore/Geometry/GeometryTypes.swift:625-627`). Today such collisions
+   resolve silently (last-writer-wins in the `[Identity: Node]` maps). This is
+   user error — SwiftUI likewise treats duplicate `ForEach` ids as undefined and
+   warns — not legitimate content, so the structural layer must *contain* it, not
+   lavishly model it. The open part is purely policy: in release, surface a
+   non-fatal diagnostic and fall back conservatively for the affected scope (the
+   current L1 stance); in debug/test, additionally consider a hard precondition to
+   catch the mistake at its source. A full occurrence-keyed product lookup (or
+   `ViewNodeID` split) stays deferred until evidence shows conservative fallback
+   is too costly.
