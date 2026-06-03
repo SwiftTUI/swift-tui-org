@@ -22,6 +22,12 @@ migration (stages 0–6).
 >   `indexedChildSource`, making the Stage-4 edge role a *live consumer*.
 >   Behavior-neutral. The `declarationOwnerEdge → presentation-GC` consumer is the
 >   remaining G6 half.
+> - **resolve_ms (first win)** (`8f1fb97a`) — the per-node resolve reuse decision
+>   short-circuits its redundant O(invalidated × path) identity-conflict scan when
+>   the live-graph structural check has already rejected reuse. Behavior-identical.
+>   Deeper resolve wins need TermUIPerf profiling + a perf gate (not runnable in this
+>   loop) to size and prove, so further blind optimization of the reuse-correctness
+>   path is deferred.
 > - **G15 / G4a** — **resolved as deliberate deferral** (`ce9ac36c`, recorded in
 >   `swift-tui/docs/VISION-GAP.md`): repointing per-frame registry/scope-path containment
 >   checks to `StructuralPath` the cheap way *adds a hot-path allocation per check* — a net
