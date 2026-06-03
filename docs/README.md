@@ -31,6 +31,53 @@ documentation in their own `docs/` trees.
 
 ## Planning Documents
 
+### Structural Identity Migration (7-stage plan set)
+
+A staged migration that splits SwiftTUI's overloaded `Identity` into four distinct
+axes — runtime `ViewNodeID`, `StructuralPath`, `EntityIdentity`, and
+`StateSlotIdentity` — for both rendering performance and architectural rigor.
+Breaking changes are pulled forward; each stage lands behind an oracle. Start at
+the entry point, which holds the *why* and indexes the per-stage *how*.
+
+- [plans/2026-06-03-001-first-class-structural-identity-proposal.md](plans/2026-06-03-001-first-class-structural-identity-proposal.md) -
+  **Entry point + stage index.** The overload problem, the four-axis model, the
+  StateTree `NodeID`/`FieldID`/`LSID` role mapping, the design stance (Option C is
+  the committed destination, not a contingency), the hard cases, and corrections
+  to the prior record (`isAncestor` is component-wise; `.overlay`/`.background`
+  are in-tree decorations not portals; `.fullScreenCover` does not exist;
+  `IdentityComponent`/`SurfaceCompositionRole` already exist).
+- [plans/2026-06-03-002-structural-identity-stage-0-divergence-diagnostics-plan.md](plans/2026-06-03-002-structural-identity-stage-0-divergence-diagnostics-plan.md) -
+  **Stage 0.** Read-only, debug-only divergence diagnostics harness; corpus-wide
+  report on path-vs-structural-parent disagreement, duplicate-id frequency and
+  provenance, alias and portal divergence. Produces the evidence that tunes the
+  later policy decisions. No behavior change.
+- Stage 1 — [plans/2026-06-02-004-…structural-adjacency-proposal.md](plans/2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md)
+  (the persistent retained-index execution plan, detailed in full below) is
+  **Stage 1** of this set: the `StructuralFrameIndex` sidecar and patchable
+  retained index — the first consumer and the rendering-performance win.
+- [plans/2026-06-03-003-structural-identity-stage-2-resolve-time-structural-identity-plan.md](plans/2026-06-03-003-structural-identity-stage-2-resolve-time-structural-identity-plan.md) -
+  **Stage 2.** `StructuralPath` on `ResolveContext`/`ResolvedNode`; structural
+  components emitted at the three identity primitives so `.id`/`ForEach` change
+  runtime identity without moving structure. (Option B.)
+- [plans/2026-06-03-004-structural-identity-stage-3-reconciliation-entity-identity-plan.md](plans/2026-06-03-004-structural-identity-stage-3-reconciliation-entity-identity-plan.md) -
+  **Stage 3.** `EntityIdentity` axis; reconciliation keyed on
+  `(structural slot + type + entity id)`; deterministic, diagnosed duplicate-id
+  handling via an occurrence disambiguator that never touches the runtime string.
+- [plans/2026-06-03-005-structural-identity-stage-4-portal-overlay-edge-roles-plan.md](plans/2026-06-03-005-structural-identity-stage-4-portal-overlay-edge-roles-plan.md) -
+  **Stage 4.** `StructuralEdgeRole` distinguishing declaration-owner from
+  placement-parent; cuts the `Identity.path` string fan-out behind presentation
+  ids and surface stableKeys; stages the registration-alias layer for deletion.
+- [plans/2026-06-03-006-structural-identity-stage-5-viewnodeid-lifetime-split-plan.md](plans/2026-06-03-006-structural-identity-stage-5-viewnodeid-lifetime-split-plan.md) -
+  **Stage 5.** A distinct opaque `ViewNodeID`; re-keys the ~40 runtime-lifetime
+  indexes; deletes the alias layer; redesigns string-encoded handler ids.
+  Behavior-preserving, behind the byte-equivalence oracle. (Option C, part 1.)
+- [plans/2026-06-03-007-structural-identity-stage-6-entity-routed-lifetime-plan.md](plans/2026-06-03-007-structural-identity-stage-6-entity-routed-lifetime-plan.md) -
+  **Stage 6.** The `EntityIdentity → ViewNodeID` routing table (StateTree's `LSID`
+  lesson); `@State` re-rooted onto `ViewNodeID`; state/animation/focus survive
+  identity-changing moves. The one intentional semantic change. (Option C, part 2.)
+
+### Other planning documents
+
 - [plans/2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md](plans/2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md) -
   execution proposal building out Opportunity 1 of the remaining-opportunities
   register: a persistent, patchable `RetainedFrameIndex` backed by stored

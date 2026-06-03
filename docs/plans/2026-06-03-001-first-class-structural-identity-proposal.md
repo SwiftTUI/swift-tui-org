@@ -1,767 +1,323 @@
-# First-Class Structural Identity Proposal
+# First-Class Structural Identity — Plan-Set Entry Point
 
-Status: proposal
-Date: 2026-06-03
-Scope: `swift-tui/` runtime, resolve graph, retained frame indexes, invalidation planning
+Status: proposal + plan-set index
+Date: 2026-06-03 (entry point rewritten to index the staged migration)
+Scope: `swift-tui/` runtime, resolve graph, retained frame indexes, state,
+lifecycle, presentation, and invalidation planning
+Verified against: `swift-tui` working tree at commit `a020fa55`
 
-## Summary
+> **This document is the entry point to a seven-stage migration.** It holds the
+> *why* — the problem, the model, the design stance — and indexes the per-stage
+> execution plans that hold the *how*. Read this first, then the stage that
+> concerns you.
 
-SwiftTUI currently treats `Identity` as too many things at once:
+---
 
-1. The final runtime lookup key for `ViewNode`.
-2. The path used to derive parent/child containment.
-3. The lookup key for retained resolved/measured/placed products.
-4. The public-ish debug identity seen in frame snapshots and tests.
-5. The key component that scopes state slots, handlers, dependencies, and lifecycle.
+## The plan set
+
+The migration splits SwiftTUI's overloaded `Identity` into four distinct identity
+axes and lands them in seven sequenced, independently-shippable stages. Each
+stage carries its own execution plan, validation, and oracle.
+
+| Stage | Plan | Lands | Breaking |
+| --- | --- | --- | --- |
+| **0** | [Divergence Diagnostics](2026-06-03-002-structural-identity-stage-0-divergence-diagnostics-plan.md) | Read-only, debug-only harness; corpus-wide divergence report (path-vs-structural parent, duplicate-id frequency/provenance, alias & portal divergence). Evidence that tunes Stages 3 & 5. | No |
+| **1** | [Persistent Retained Index](2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md) | `StructuralFrameIndex` sidecar + patchable retained index (L1–L4). Structural adjacency replaces `Identity.parent` in retained invalidation. The first consumer; the rendering-performance win. | Internal |
+| **2** | [Resolve-Time Structural Identity](2026-06-03-003-structural-identity-stage-2-resolve-time-structural-identity-plan.md) | `StructuralPath` on `ResolveContext` + `ResolvedNode`; structural component emitted at every child-building site; structure becomes an authored fact, not a projection of the identity string. | Internal + fixtures |
+| **3** | [Reconciliation & Entity Identity](2026-06-03-004-structural-identity-stage-3-reconciliation-entity-identity-plan.md) | `EntityIdentity` axis; reconciliation key `(structural slot + type + entity id)`; deterministic, diagnosed duplicate-id handling. | Internal + fixtures |
+| **4** | [Portal/Overlay/Alias Edge Roles](2026-06-03-005-structural-identity-stage-4-portal-overlay-edge-roles-plan.md) | `StructuralEdgeRole` (declaration-owner vs placement-parent); cut the `Identity.path` string fan-out; stage the registration-alias layer for deletion. | Internal |
+| **5** | [`ViewNodeID` Lifetime Split](2026-06-03-006-structural-identity-stage-5-viewnodeid-lifetime-split-plan.md) | A distinct opaque `ViewNodeID`; re-key the ~40 runtime-lifetime indexes; delete the alias layer; redesign string-encoded handler ids. **Behavior-preserving.** | **Yes — internal-wide** |
+| **6** | [Entity-Routed Lifetime](2026-06-03-007-structural-identity-stage-6-entity-routed-lifetime-plan.md) | The `EntityIdentity → ViewNodeID` routing table (StateTree's `LSID` lesson); `@State` re-rooted onto `ViewNodeID`; state/animation/focus survive identity-changing moves. **The only semantic change.** | **Yes — semantic** |
+
+Stages 0 and 1 are already safe to land and carry no release behavior change.
+Stage 1's execution plan (doc 004) predates this entry-point rewrite and remains
+the canonical L1–L4 spec; this document subsumes its strategic framing.
+
+## Design stance
+
+The earlier draft of this proposal hedged: "implement Option A first; only pursue
+a `ViewNodeID` split if later phases still leave real bugs." **That hedge is
+withdrawn.** The directive for this plan set is explicit, and it is the right
+call:
+
+- **The overload is the bug.** `Identity` currently means four things at once. A
+  type that means four things can be wrong four ways — and it is: the
+  registration-alias layer, the duplicate-id aliasing, and the string-encoded
+  handler ids are all scar tissue from refusing to name the four roles. The
+  end-state (`ViewNodeID` distinct from structure, entity, and state-slot) is the
+  **committed destination**, not a contingency. The staging exists to land it
+  *safely*, not to avoid it.
+- **Breaking changes now, not later.** Internal representation, internal test
+  fixtures, and the debug/snapshot identity projection are all fair game and
+  should break *now*, while the cost is bounded, rather than accreting permanent
+  compatibility bridges we will tear out anyway. No string-literal `Identity`
+  shims; no parallel legacy keying kept alive "just in case."
+- **Two boundaries hold regardless.** (1) The SwiftUI-shaped *authoring surface*
+  stays stable — `View`, `@State`, `ForEach`, controls behave as they do, and
+  `Package.swift` stays SwiftPM-consumable; the breaking changes live *below* it.
+  (2) Each stage lands behind an **oracle** — Stage 1's byte-equivalence index
+  comparison, the existing scoped-restore-equals-full-rebuild test, the checkpoint
+  totality contract — so "behavior-preserving" is *proven*, not asserted.
+- **Rigor over mediocrity.** Every claim in these plans is cited to `file:line`
+  at `a020fa55`. The reconnaissance that grounds them corrected three errors in
+  the prior record (below). A migration of this size earns trust one verified
+  fact at a time.
+
+## The problem: `Identity` is overloaded
+
+SwiftTUI currently treats `Identity` (`GeometryTypes.swift:585-658`) as too many
+things at once:
+
+1. The final runtime lookup key for `ViewNode` (`nodesByIdentity`,
+   `ViewGraph.swift:86`).
+2. The path used to derive parent/child containment (`Identity.parent` /
+   `isAncestor` / `isDescendant`, `:604-639`).
+3. The lookup key for retained resolved/measured/placed products
+   (`RetainedFrameQueries.swift:26-30`).
+4. The key component that scopes state slots, handlers, dependencies, lifecycle,
+   animation, focus, gestures, and tasks — roughly **40 distinct indexes**, each
+   enumerated in the Stage 5 plan.
 
 That works while `Identity.path` mirrors actual structural containment. It becomes
-fragile when identity and structure intentionally diverge: `.id`, `ForEach`,
-duplicate explicit ids, presentation portals, overlay-owned trees, registration
-aliases, and lazy/indexed child sources.
+fragile exactly where identity and structure intentionally diverge: `.id`,
+`ForEach`, duplicate explicit ids, presentation portals, registration aliases,
+and lazy/indexed child sources.
 
-The recommended direction is a phased structural-identity model:
+## The four-axis model (the spine)
 
-1. Add a structural frame sidecar first and make retained indexes/invalidation
-   consume actual structural adjacency instead of `Identity.parent`.
-2. Then thread structural ids through resolve products so child diffing,
-   retained reuse, and diagnostics can reason about structure directly.
-3. Only after those phases, decide whether SwiftTUI needs a deeper split between
-   public identity and runtime `ViewNode` lifetime.
+The whole migration is one idea: **give each of `Identity`'s four jobs its own
+key, in its correct home.** Every one of the ~40 identity-keyed indexes belongs
+to exactly one axis.
 
-Do not start by replacing all `Identity` call sites. The current identity type is
-deeply wired into state, lifecycle, dependency indexes, semantic handlers, debug
-snapshots, and tests. A sidecar-first migration gets the rendering-performance
-win while preserving current semantics.
+```text
+Runtime lifetime   = ViewNodeID          (opaque; a live node's lifetime)
+Structure          = StructuralPath      (ordered position; component-wise prefix relation)
+Entity             = EntityIdentity      (explicit user/data id; the routing key)
+State slot         = (graphScope, owner ViewNodeID, ordinal)
+```
 
-## Source Context
+| Axis | Means | Representative indexes (today, all `Identity`) |
+| --- | --- | --- |
+| Runtime | survives reuse, dies on true removal | `nodesByIdentity`, `liveIdentities`, every `Local*` registry, `NodeHandlers`, `AnimationController.*`, `TaskRunner.activeTasks`, `MeasurementCache`, `AnchorTypes`, draw/frame-tail state |
+| Structural | "is X under Y?", ordering, subtree intersection | `isAncestor`/`isDescendant` callers, `FrameMetrics` walks, `ChildDescriptor`, `indexedChildSource.identityRoot`, focus/command/drop/scroll `scopePath`s |
+| Entity | explicit identity that routes lifetime across moves | `declarativeItemsBySource`, `seenSources`, `ForEach` element key, presentation source |
+| State-slot (`StateSlotIdentity`) | stored dynamic-property slots | `StateSlotKey`, `ViewNode.stateSlots`, `stateSlotDependents` |
 
-Current SwiftTUI source areas involved:
+> Naming: `StateSlotKey = {owner: ViewNodeID, ordinal}` is the per-owner runtime
+> map key; `StateSlotIdentity = (graphScope, StateSlotKey)` is the full axis.
+> Stage 6 defines the relationship.
 
-- `swift-tui/Sources/SwiftTUICore/Geometry/GeometryTypes.swift`
-  defines `Identity` as a path of string components, including `.parent`,
-  `.child(...)`, and `.explicitID(...)`.
-- `swift-tui/Sources/SwiftTUICore/Resolve/ViewGraph.swift`
-  stores runtime nodes in `nodesByIdentity`, creates `ViewNode` instances by
-  final identity, records registration aliases, and applies child diffs.
-- `swift-tui/Sources/SwiftTUICore/Resolve/StructuralDiff.swift` and
-  `ViewGraphStructuralReconciliation.swift` diff ordered children by final
-  identity plus type information, then eagerly tear down removed children.
-- `swift-tui/Sources/SwiftTUIViews/Foundation/ViewFoundation.swift`,
-  `TupleView.swift`, `ConditionalContentView.swift`, `VariadicView.swift`, and
-  stack views assign child path components such as `VStack[0]`.
-- `swift-tui/Sources/SwiftTUIViews/State/AuthoringContext.swift` already
-  distinguishes `viewIdentity` from `structuralIdentity`.
-- `swift-tui/Sources/SwiftTUIViews/State/State.swift` keys state by
-  `viewIdentity` plus a source-location ordinal.
-- `swift-tui/Sources/SwiftTUIViews/Collections/ForEach.swift` keeps
-  `viewIdentity` owned by the enclosing authoring view while setting
-  `structuralIdentity` to the element identity.
-- `swift-tui/Sources/SwiftTUICore/Commit/RetainedFrameQueries.swift`,
-  `RetainedPhaseExtraction.swift`, `FrameTailRetainedState.swift`, and
-  `swift-tui/Sources/SwiftTUICore/Measure/LayoutEngine+RetainedLayout.swift`
-  use identity-keyed retained products and path-derived subtree tests.
-- `swift-tui/Sources/SwiftTUIViews/Presentation/Portal.swift` and
-  `swift-tui/Sources/SwiftTUICore/Runtime/PortalTypes.swift` intentionally
-  separate declaration-site ownership from portal placement.
-
-I also checked StateTree at `adam-zethraeus/StateTree` main commit
-`9a56e848081e3e30edd5f214b255147ef69ca6d0`. The useful lesson is not to copy
-the implementation directly, but to copy the separation of roles:
-
-- `NodeID`: runtime lifetime.
-- `FieldID`: stored field structure, keyed by owner node plus field offset/type.
-- `LSID`: lifetime-stable entity identity for routed/list values.
-- List routing keeps an `LSID -> NodeID` table so values can move or change
-  while preserving lifetime only when identity proves it is the same entity.
-
-SwiftTUI needs the same separation, adapted to a value-tree/result-builder
-renderer rather than a stored-object tree.
+The discipline each stage applies, index by index: *which axis is this, really?*
+An index keyed on the wrong axis is a latent bug.
 
 ## Terminology
 
-This proposal uses four names intentionally:
-
-- `RuntimeIdentity`: the key used to retrieve a live `ViewNode`. Today this is
-  `Identity`.
-- `StructuralIdentity`: the authored/rendered structural position of a node and
-  its structural parent/children.
-- `EntityIdentity`: explicit user/data identity, such as `.id(...)` or a
-  `ForEach` element id.
-- `StateSlotIdentity`: the identity of stored dynamic-property slots inside a
-  runtime owner, currently `viewIdentity + StateSlotOrdinal`.
-
-In SwiftUI discussions, "structural identity" can describe two related but
-different things:
-
-1. Stored-member identity: a member/property slot inside a parent value or node.
-   StateTree's `FieldID` is this form. SwiftTUI already has a version of this
-   for `@State`: source-location ordinals under `AuthoringContext.viewIdentity`.
-2. Builder-slot identity: a child produced by a `ViewBuilder` expansion, stack
-   child list, conditional branch, modifier role, or `ForEach` element. This is
-   the missing first-class part in SwiftTUI. Today these slots mostly become
-   string path components on final `Identity`.
-
-The proposal is primarily about builder-slot structural identity and structural
-adjacency. It should preserve the current stored-member behavior unless a later
-phase explicitly chooses to split `ViewNode` lifetime from `Identity`.
-
-## Current Setup
-
-### Resolve-Time Identity
-
-During resolve, `ResolveContext.identity` is the dominant identity. Views append
-path components for declared children:
-
-- A stack child becomes something like `.../VStack[0]`.
-- A conditional branch appends a branch component.
-- `ForEach` and `.id` append explicit-id components.
-- Portal/presentation code can resolve content under a synthetic portal root.
-
-`ResolvedNode.identity` carries the resulting final identity. `ViewGraph` then
-uses that identity to find or create a `ViewNode`.
-
-### Authoring Context
-
-`AuthoringContext` already has an important split:
-
-- `viewIdentity` is the owner for state, invalidation, callbacks, and dynamic
-  property resolution.
-- `structuralIdentity` is the current authoring position for identity-deriving
-  modifiers.
-
-Most code sets both to the same value. `ForEach` deliberately diverges them:
-the element body keeps the outer `viewIdentity` as owner, while
-`structuralIdentity` is set to the element's explicit identity. This is why
-identity-deriving modifiers such as `.panel()` can see distinct positions inside
-a repeated element without accidentally moving every closure-owned state slot to
-each element.
-
-This is a useful partial model, but it is not a structural graph:
-
-- It is not attached to every `ResolvedNode`.
-- It is not used by retained frame indexes.
-- It does not define authoritative parent/child containment.
-- It does not survive portals and aliases as a separate adjacency model.
-
-### Retained Frame Reuse
-
-Retained frame state currently builds flat dictionaries by final identity:
-
-- `resolvedByIdentity`
-- `measuredByIdentity`
-- `placedByIdentity`
-
-Invalidation and reuse queries infer ancestry with `Identity.parent` and
-descendant path-prefix checks. That means the retained layer assumes string path
-containment is equivalent to structural containment.
-
-The performance plan in
-`docs/plans/2026-06-02-003-rendering-performance-remaining-opportunities-proposal.md`
-already identifies this as the blocker for persistent retained indexes:
-structural containment must be explicit before old indexes can be incrementally
-patched safely.
-
-## Requirements
-
-A first-class structural identity model should satisfy these invariants:
-
-1. Structural adjacency is authoritative for subtree membership. `Identity.parent`
-   is no longer used as proof of containment when a structural index is present.
-2. A runtime lifetime is preserved only when reconciliation proves the same
-   structural slot, compatible type, and compatible entity identity.
-3. `.id(...)` changes entity identity under a structural slot. It must not be the
-   only representation of structural parentage.
-4. `ForEach` reorder should preserve entity lifetime while changing ordered
-   structural edges.
-5. Static insertion/removal should preserve SwiftUI-like structural behavior:
-   unkeyed sibling slots after an insertion are different structural slots unless
-   the renderer has a more specific key.
-6. Duplicate explicit ids need a defined policy: diagnose, preserve occurrence
-   identity, or intentionally fall back to conservative rebuild.
-7. Portal and presentation content must model both declaration owner and
-   placement parent, or explicitly classify the edge as teleported.
-8. Lazy/indexed children must be represented without forcing all rows to resolve.
-9. State slot ownership must remain stable for the current supported surface.
-   This proposal should not accidentally move closure-owned `@State` into each
-   `ForEach` element.
-10. Debug mode must be able to compare a retained structural update against full
-    rebuild results while the migration is in progress.
-
-## Design Options
-
-### Option A: Structural Frame Sidecar
-
-Add a structural index beside committed frame products while leaving `Identity`
-as the runtime `ViewNode` key.
-
-The new sidecar would record actual graph edges observed during commit:
-
-```swift
-struct StructuralNodeKey: Hashable, Sendable {
-    let rawValue: UInt64
-}
-
-struct StructuralEdge: Hashable, Sendable {
-    let parent: StructuralNodeKey?
-    let child: StructuralNodeKey
-    let runtimeIdentity: Identity
-    let role: StructuralRole
-    let typeIdentity: String
-    let explicitID: String?
-}
-
-struct StructuralFrameIndex {
-    var parentByNode: [StructuralNodeKey: StructuralNodeKey]
-    var childrenByNode: [StructuralNodeKey: [StructuralNodeKey]]
-    var identityByNode: [StructuralNodeKey: Identity]
-    var nodesByIdentity: [Identity: [StructuralNodeKey]]
-    var subtreeRanges: [StructuralNodeKey: Range<Int>]
-}
-```
-
-The first implementation can assign structural keys deterministically during
-frame indexing from actual `ResolvedNode.children` traversal. It does not need
-to expose structural keys to authoring code yet.
-
-Use it first in:
-
-- `RetainedFrameIndex`, to retain products by structural adjacency.
-- `RetainedInvalidationSummary`, to compute ancestors and descendants from the
-  previous structural index instead of path prefixes.
-- Persistent retained-index experiments, where insert/remove/patch operations
-  need exact old subtree sets.
-
-Pros:
-
-- Lowest blast radius.
-- Directly unblocks the "persistent retained indexes" opportunity.
-- Preserves state, lifecycle, dependency, and handler semantics.
-- Can be introduced behind debug assertions and feature flags.
-
-Cons:
-
-- It is first-class only after resolve, not during authoring.
-- It does not fix all identity overloading.
-- Duplicate final identities still need multimap handling.
-- `.id` still changes the final runtime key before reconciliation.
-
-This is the recommended first phase.
-
-### Option B: Resolve-Time Structural Identity
-
-Thread an explicit structural context through resolve:
-
-```swift
-struct ResolveContext {
-    var identity: Identity              // current runtime/public identity
-    var structuralPath: StructuralPath  // current authored slot path
-    ...
-}
-
-struct ResolvedNode {
-    var identity: Identity
-    var structuralID: StructuralNodeKey
-    var structuralPath: StructuralPath
-    ...
-}
-```
-
-Child-building APIs would advance `structuralPath` separately from `identity`:
-
-- `TupleView` children get tuple/member slot components.
-- Stack children get container-child slot components.
-- Conditionals get branch components.
-- `ForEach` gets collection-root plus element entity components.
-- `.id(...)` changes `EntityIdentity` and final runtime identity, but the
-  structural parent remains the same builder/modifier slot.
-- Presentation portals get explicit declaration and placement roles.
-
-`ChildDescriptor` can then compare:
-
-- structural slot
-- type identity
-- type discriminator
-- entity identity
-- final runtime identity, only where relevant
-
-Pros:
-
-- Makes structural identity available throughout resolve, diffing, and retained
-  products.
-- More closely matches the StateTree split between field structure and entity
-  identity.
-- Gives better diagnostics for aliases, portals, and duplicate ids.
-- Gives future lazy rendering a stable vocabulary for source roots versus
-  materialized rows.
-
-Cons:
-
-- Higher migration cost.
-- Many tests currently assert final identity paths.
-- Needs a compatibility bridge for registration aliases.
-- Still leaves the deeper question of whether `ViewNode` lifetime should remain
-  keyed by final `Identity`.
-
-This is the recommended second phase.
-
-### Option C: Split Runtime ViewNode Lifetime From Identity
-
-Introduce a new internal `ViewNodeID` and use reconciliation to map structural
-slots and entity ids to runtime lifetimes:
-
-```swift
-struct ViewNodeID: Hashable, Sendable {
-    let rawValue: UInt64
-}
-
-struct RuntimeReconciliationKey: Hashable, Sendable {
-    let structuralID: StructuralNodeKey
-    let typeIdentity: String
-    let entityID: EntityIdentity?
-}
-```
-
-`Identity` would become a semantic/debug/public identity, while `ViewGraph`
-storage would move toward:
-
-- `nodesByNodeID`
-- `nodeIDByRuntimeIdentity`
-- `runtimeIdentitiesByNodeID`
-- dependency/state/lifecycle indexes keyed by `ViewNodeID` where appropriate
-
-`@State` would eventually become `ViewNodeID + StateSlotOrdinal` instead of
-`Identity + StateSlotOrdinal`.
-
-Pros:
-
-- Closest to SwiftUI's likely internal model and StateTree's `NodeID`.
-- Best long-term answer for duplicates, aliases, moves, and portals.
-- Lets public identity and runtime lifetime evolve independently.
-
-Cons:
-
-- Largest blast radius.
-- Touches state, dynamic properties, observation, lifecycle, gestures,
-  environment dependency maps, semantic handlers, debug snapshots, and tests.
-- Easy to introduce subtle lifetime bugs.
-- Not required to unblock retained-frame performance work.
-
-This should not be the initial implementation. It should be treated as a later
-decision after Options A and B expose real remaining pressure.
-
-## Recommended Architecture
-
-Adopt a layered model:
-
-```text
-State slot identity     = runtime owner + authored member/source ordinal
-Runtime identity        = current ViewNode lookup key, initially Identity
-Entity identity         = explicit .id / ForEach id / routed semantic key
-Structural identity     = explicit ordered graph position and containment
-```
-
-The immediate new production type should be a structural frame index:
-
-```swift
-struct StructuralFrameIndex {
-    let root: StructuralNodeKey?
-    let parentByNode: [StructuralNodeKey: StructuralNodeKey]
-    let childrenByNode: [StructuralNodeKey: [StructuralNodeKey]]
-    let nodeByRuntimeIdentity: [Identity: [StructuralNodeKey]]
-    let runtimeIdentityByNode: [StructuralNodeKey: Identity]
-    let subtreeRangeByNode: [StructuralNodeKey: Range<Int>]
-    let postorder: [StructuralNodeKey]
-}
-```
-
-Important detail: `nodeByRuntimeIdentity` must be a multimap, not a dictionary.
-Even if duplicate final identities are invalid or discouraged, the structural
-layer must not silently overwrite them. It should either:
-
-- report a deterministic diagnostic and rebuild conservatively, or
-- carry occurrence identities so the rest of the frame can still be reasoned
-  about.
-
-The structural index should be part of committed frame artifacts, not just
-`ViewGraph`, because retained layout compares previous committed products
-against the current frame draft.
-
-## Mechanics
-
-### Phase 0: Diagnostics Without Behavior Change
-
-Add a debug-only structural snapshot builder that walks committed
-`ResolvedNode.children` and records:
-
-- actual parent/child edges
-- final identities
-- child order
-- kind/type discriminator
-- explicit id, where parsable
-- transient/portal/overlay roles
-
-Then add diagnostics that compare:
-
-- path-derived parent from `Identity.parent`
-- structural parent from the snapshot
-- duplicate identities in a frame
-- identities whose registration alias differs from the committed identity
-- portal/presentation roots whose path containment differs from placement
-
-This phase should not affect rendering. It exists to produce evidence and to
-protect later migrations.
-
-### Phase 1: Structural Invalidation And Retained Queries
-
-Teach retained frame code to answer subtree questions through
-`StructuralFrameIndex`:
-
-- `containsDescendant(of:)`
-- `ancestors(of:)`
-- `subtreeNodes(of:)`
-- `intersectsSubtree(at:)`
-- `subtreeProductSet(at:)`
-
-When a previous structural index is available, retained invalidation should use
-that index. When it is absent, fall back to the current path-based logic.
-
-This directly replaces the weakest assumption in retained reuse:
-
-```text
-old assumption:
-  identity path prefix == subtree membership
-
-new assumption:
-  previous committed structural adjacency == subtree membership
-```
-
-Expected code areas:
-
-- `RetainedFrameQueries.swift`
-- `RetainedPhaseExtraction.swift`
-- `FrameTailRetainedState.swift`
-- `LayoutEngine+RetainedLayout.swift`
-- frame metrics invalidation summaries
-
-This is also where persistent retained indexes become viable: a changed subtree
-can be removed by structural range, and new products can be inserted from the
-new frame without rebuilding every flat dictionary.
-
-### Phase 2: Resolve-Time Structural IDs
-
-After the sidecar is stable, move structural capture earlier:
-
-- Add `StructuralPath` or `StructuralNodeKey` to `ResolveContext`.
-- Assign structural components in `indexedChild(kind:index:)` and related child
-  APIs.
-- Attach `structuralID` or `structuralPath` to `ResolvedNode`.
-- Include structural identity in debug snapshots and `ChildDescriptor`.
-
-Suggested structural components:
-
-```swift
-enum StructuralComponent: Hashable, Sendable {
-    case root
-    case tupleChild(Int)
-    case containerChild(kind: String, index: Int)
-    case conditionalBranch(String)
-    case modifier(role: String, ordinal: Int)
-    case variadicChild(Int)
-    case collectionElement(source: String, entity: EntityIdentity)
-    case lazyMaterializedChild(index: Int)
-    case portalHost(String)
-    case portalEntry(String)
-    case portalBody
-}
-```
-
-This enum is illustrative, not final API. The important constraint is that
-components represent structure and roles, not merely display strings.
-
-### Phase 3: Reconciliation Keys
-
-Once `ResolvedNode` carries structural identity, reconciliation can use a richer
-key:
-
-```text
-same lifetime if:
-  same compatible structural slot
-  same compatible view type/discriminator
-  same explicit entity identity, when present
-```
-
-This does not require `ViewNodeID` yet. It can still return final `Identity` as
-the lookup key in phase 3. The important shift is that diffing no longer has to
-infer everything from final identity strings.
-
-`ForEach` reorder semantics should become explicit:
-
-- The collection root stays structurally under the same parent.
-- Each element has an entity key.
-- Order changes update sibling edge order.
-- The element runtime lifetime is preserved because entity identity matches.
-
-Static sibling insertion semantics should remain structural:
-
-- If unkeyed child slots are ordinal, inserting before a sibling changes that
-  sibling's slot.
-- This is expected for static builder output unless a keying construct says
-  otherwise.
-
-### Phase 4: Optional ViewNodeID Split
-
-Only pursue a separate `ViewNodeID` if phase 3 still leaves real bugs or
-unacceptable constraints.
-
-Signals that justify this phase:
-
-- final `Identity` duplicates are legitimate and common
-- aliases keep forcing special cases
-- portal placement cannot be modeled safely with final identity keys
-- state/lifecycle needs to survive transformations that change final identity
-  but preserve runtime lifetime
-
-If that happens, introduce `ViewNodeID` behind adapter APIs and migrate one
-index at a time.
-
-## Hard Cases
+- **RuntimeIdentity / `ViewNodeID`**: the key to a live `ViewNode`. Today
+  `Identity`; after Stage 5 a distinct opaque handle.
+- **StructuralIdentity / `StructuralPath`**: the authored/rendered ordered
+  position and its parent/child containment. Built from `IdentityComponent`
+  (which already exists — `.named`/`.indexed`, `GeometryTypes.swift:560-583`).
+- **EntityIdentity**: explicit user/data identity — `.id(...)`, a `ForEach`
+  element id, a routed presentation source.
+- **StateSlotIdentity**: the identity of a stored dynamic-property slot —
+  `(graphScope, owner, ordinal)`.
+
+This proposal is primarily about **builder-slot structural identity** (children
+produced by a `ViewBuilder`, stack child list, conditional branch, modifier role,
+or `ForEach` collection slot) and structural adjacency. Stored-member identity
+(`@State` source-location ordinals) is preserved until Stage 6 deliberately
+re-roots it.
+
+## The StateTree lesson
+
+StateTree (`adam-zethraeus/StateTree`, main `9a56e848…`) separates the same roles
+and is the model for the end-state — not to copy the implementation, but the role
+split:
+
+- `NodeID`: runtime lifetime → our `ViewNodeID` (Stage 5).
+- `FieldID`: stored-field structure → our `StateSlotIdentity` (Stage 6).
+- `LSID`: lifetime-stable entity identity for routed/list values → our
+  `EntityIdentity` (Stage 3) plus the `EntityIdentity → ViewNodeID` routing table
+  (Stage 6).
+- The `LSID → NodeID` table that preserves lifetime only when identity proves the
+  same entity → our `EntityRoutingTable` (Stage 6). Recon confirmed SwiftTUI has
+  **no such table today** — `Identity` equality through
+  `CollectionDifference.inferringMoves()` *is* the routing.
+
+## How the conceptual options map to the stages
+
+The prior proposal framed three options as alternatives. They are not alternatives
+— they are conceptual layers, and the plan set lands all three:
+
+- **Option A — Structural sidecar.** A structural index beside committed frame
+  products. → **Stage 1** (the retained index), with **Stage 0** as its
+  evidence precursor.
+- **Option B — Resolve-time structural identity.** Thread structural identity
+  through resolve and reconciliation. → **Stages 2–4**.
+- **Option C — Split runtime lifetime from identity.** A distinct `ViewNodeID`. →
+  **Stages 5–6**.
+
+## What is already built (the migration is not greenfield)
+
+Reconnaissance found SwiftTUI half-built for this, which de-risks the work and is
+why the stages are tractable:
+
+- **`IdentityComponent`** (`.named`/`.indexed(kind:index:)`,
+  `GeometryTypes.swift:560-583`) is the structural-component vocabulary Stage 2
+  would otherwise invent.
+- **`AuthoringContext`** already carries the conceptual split — `viewIdentity`
+  (owner) vs `structuralIdentity` (position), `AuthoringContext.swift:29-65` —
+  with only **two** readers of `structuralIdentity` (`.panel()`,
+  `Panel.swift:101`; implicit `NavigationStack`, `NavigationStack.swift:71`). A
+  small, enumerable seam.
+- **`SurfaceCompositionRole`** already enumerates six cases — `.normal`, four
+  placement-side edge kinds
+  (`stackingContext`/`detachedOverlayRoot`/`detachedOverlayHost`/`detachedOverlayEntry`),
+  and `.isolatedCompositingGroup` (`SurfaceCompositionMetadata.swift:95-125`);
+  Stage 4 unifies these and adds one more (a distinct role for the post-resolve
+  animation removal-overlay teleport).
+- **`PortalEntryID{sourceIdentity, token}`** (`PortalTypes.swift:2-17`) and
+  `PortalContentPayload` (`Portal.swift:8-22`) already model declaration-owner
+  ownership — "build at the declaration site so captured bindings keep pointing at
+  their original owner; resolve later at the portal destination."
+- **Oracles already exist**: `RuntimeRegistrationRestoreScopingTests` asserts a
+  scoped restore is byte-identical to a full rebuild; `ViewGraphCheckpointTotalityTests`
+  enforces the checkpoint totality contract; the reuse-invariant suites compare
+  reused vs recomputed. Stages extend these rather than invent oracles.
+
+## Hard cases (with corrections to the prior record)
 
 ### `.id(...)`
-
-Current behavior replaces the context identity with
-`context.identity.explicitID(id)`. In the new model:
-
-- structural parent remains the authored child/modifier slot
-- entity identity becomes `id`
-- final runtime identity can remain `Identity.explicitID(id)` for compatibility
-
-This lets invalidation still say "this node is structurally under its parent"
-even when the runtime identity path contains an explicit id suffix.
+Structural parent remains the authored child/modifier slot; entity identity
+becomes the id; runtime identity keeps its `Identity.explicitID(id)` form for
+compatibility. (Stages 2–3.) `.id` is the *only* common producer of registration
+aliases (`RegistrationAliasFindingsTests.swift:155-182`).
 
 ### `ForEach`
+The conceptual split already exists: closure/state ownership stays with the outer
+`viewIdentity`; each element diverges `structuralIdentity`
+(`ForEach.swift:36-44`). The migration formalizes it into three axes (structural
+slot for `.panel()`, owner for `@State`, entity for lifetime) instead of one
+overloaded string. (Stage 3.)
 
-Current `ForEach` already contains the right conceptual split:
+### Duplicate explicit ids
+**Confirmed reachable, not hypothetical.** `ForEach` derives identity via
+`explicitID(element[keyPath: id])` with no occurrence ordinal
+(`ForEach.swift:26-28`); `explicitID` stringifies `String(reflecting:)` with no
+disambiguator (`GeometryTypes.swift:625-627`). Today duplicates silently
+last-writer-win and alias **every** identity-keyed map. Policy: contain, don't
+model — Stage 3 disambiguates on the entity axis (occurrence) without touching the
+runtime string; Stage 5 gives each a distinct `ViewNodeID`; Stage 6 routes each
+independently. Stage 0 measures the real frequency and proves provenance is
+user-supplied ids only.
 
-- closure/state ownership remains with the outer `viewIdentity`
-- each element gets a distinct `structuralIdentity`
-- explicit element identity drives child identity
+### Portals and presentation — **corrected**
+A source sweep corrected three claims the prior portal discussion carried:
+1. **`.overlay`/`.background` are NOT portals** — they resolve as in-place
+   decoration siblings (`layoutBehavior .decoration(...)`,
+   `ViewLayoutModifierTypes.swift:348-371/410-433`), not via `OverlayStack`.
+2. **`.fullScreenCover` does not exist** here. The coordinator-backed modals are
+   exactly `.sheet`/`.popover`/`.alert`/`.confirmationDialog`/`.toast`/`.menu`.
+3. **Two distinct teleport mechanisms** exist and must not be conflated:
+   resolve-time portal hoist (modals, into an `OverlayStack` branch) and
+   post-resolve animation removal-overlay injection
+   (`AnimationTransitionOverlay.swift:46-65`). Both keep placed-parent ==
+   resolved-parent, by different means. (Stage 4 gives each its own edge role.)
+The core finding stands: presented content is hoisted at *resolve*, so a single
+canonical placement-adjacency relation suffices for the retained index (Stage 1).
+The *ownership* edge (declaration owner) is separate and gets a first-class role
+in Stage 4.
 
-The structural model should formalize this rather than undo it.
+### Registration aliases
+`registrationAliasesByIdentity`/`Targets` (`ViewGraph.swift:101-102`) exist solely
+to reconcile structural identity with resolved runtime identity. Once both are
+first-class (Stages 2 + 5), the alias layer is redundant and is **deleted** in
+Stage 5 (after confirming the custom-`ResolvableView` caveat in Stage 4).
 
-A `ForEach` element should be represented as:
+### Lazy/indexed children
+`indexedChildSource` roots are where placed children are a viewport-clipped subset
+of source children (`supportsRetainedReuse == false`, `ResolvedNode.swift:287-295`).
+Structural identity exists for all source children; runtime nodes are allocated
+lazily for the placed subset (Stages 4 + 5). Must not force all rows to resolve.
 
-```text
-structural parent: collection source slot
-entity identity:   element id
-runtime identity:  compatibility Identity, initially explicitID(element id)
-owner identity:    current AuthoringContext.viewIdentity unless explicitly changed
-```
+## A correction to the containment relation itself
 
-Lazy/indexed `ForEach` should record a source root plus materialized element
-edges. It must not need every element resolved to know the source exists.
+The prior proposal (and Stage 1's draft) described `Identity.isAncestor`/
+`isDescendant` as "string-prefix checks." That is imprecise and *understates* the
+current code: they are length-guarded **component-wise** prefix checks
+(`zip(components, other.components).allSatisfy(==)`, `GeometryTypes.swift:629-639`),
+which already avoid the classic `"/foo"`-prefixes-`"/foobar"` bug. (`Comparable`'s
+`<` does compare `path` lexically, `:641-643`, but ancestry does not.) The
+divergence the migration targets is *genuine structural* divergence (`.id`,
+`ForEach`, portals, duplicates), not naive string aliasing. The plans state this
+honestly so we do not over-claim the problem.
 
-### Duplicate Explicit IDs
+## Cross-cutting invariants
 
-The structural index should never use `[Identity: Node]` as the only map.
-Duplicate explicit ids should produce one of these deterministic outcomes:
+1. Structural adjacency (`StructuralPath`) is authoritative for subtree
+   membership wherever it is available; `Identity.parent` is not proof of
+   containment.
+2. A runtime lifetime (`ViewNodeID`) is preserved only when reconciliation proves
+   the same structural slot, compatible type, and compatible entity identity —
+   and, from Stage 6, when the entity routing table proves the same entity across
+   a move.
+3. `.id` changes entity identity under a structural slot; it is never the only
+   representation of structural parentage.
+4. Duplicate explicit ids are contained (distinct lifetimes + diagnostic), never
+   aliased.
+5. Portal/presentation content models both declaration owner and placement
+   parent, as distinct typed edges.
+6. State-slot ownership stays stable for the supported surface: the migration must
+   never accidentally move closure-owned `@State` into each `ForEach` element.
+7. Debug mode can compare a retained/structural update against a full rebuild
+   while the migration is in progress (the oracle, per stage).
 
-1. Debug diagnostic plus conservative rebuild for the affected parent subtree.
-2. Occurrence-based internal keys while preserving a diagnostic.
-3. Hard precondition failure in internal-only debug configurations.
+## Non-goals
 
-The first option is safest for production behavior.
+- Do **not** change the public SwiftUI-shaped authoring API.
+- Do **not** make child repos depend on the org root or Bazel.
+- Do **not** require all lazy rows to resolve to build a structural index.
+- Do **not** claim SwiftUI compatibility beyond the behavior covered by tests.
+- Do **not** keep permanent compatibility bridges (string-literal `Identity`
+  shims, parallel legacy keying). Break internal representation now.
 
-### Portals And Presentation
+## Cross-cutting open questions
 
-Portals need two relationships:
+Per-stage open questions live in the stage plans. The questions that span stages:
 
-- declaration owner: where closures, bindings, and dynamic-property authoring
-  were captured
-- placement parent: where the content is rendered in the terminal/presentation
-  tree
-
-A structural model should not pretend there is only one parent unless the edge
-role is explicit. Suggested representation:
-
-```swift
-enum StructuralEdgeRole {
-    case normal
-    case overlayEntry
-    case portalDeclaration
-    case portalPlacement
-    case presentationContentRoot
-}
-```
-
-Retained layout usually cares about placement structure. State and callback
-ownership usually care about declaration owner. Keeping those separate prevents
-portal fixes from becoming identity-path special cases.
-
-### Registration Aliases
-
-`ViewGraph` already allows `ViewNode.committed.identity` to differ from the
-node's registration identity. The structural model should make this visible in
-diagnostics and indexes:
-
-```text
-registration identity -> runtime node
-committed identity     -> resolved product
-structural node        -> actual frame position
-```
-
-Phase 1 can keep existing alias behavior and simply record it. Phase 2 can use
-structural ids to reduce reliance on alias repair.
-
-## Tests
-
-Add focused tests before enabling structural indexes for behavior:
-
-1. Static child insertion/removal
-   - unkeyed slots after an insertion reset as expected
-   - structural subtree ranges match committed children
-2. `.id` under a parent
-   - structural parent remains the parent slot
-   - runtime identity changes with `.id`
-   - parent invalidation removes or rebuilds the child structurally
-3. `ForEach` reorder
-   - element lifetimes are preserved by entity id
-   - sibling order changes are recorded as structural edge order changes
-4. Duplicate explicit ids
-   - no dictionary overwrite
-   - deterministic diagnostic or conservative rebuild
-5. `AnyView` and `Group`
-   - transparent wrappers keep expected structural behavior
-   - type-discriminator tests still pass
-6. Presentation/portal content
-   - declaration owner and placement parent are both represented
-   - invalidating the declaration owner cannot leave stale placed content
-7. Lazy indexed children
-   - source root exists without resolving all rows
-   - materialized child identity is stable across viewport shifts where expected
-8. Retained-frame equivalence
-   - structural retained update matches full rebuild products in debug mode
-
-Existing focused suites likely to extend:
-
-- `StructuralDiffTests`
-- `ChildDescriptorTests`
-- `RegistrationAliasFindingsTests`
-- `PanelTests`
-- `SwiftUISurfaceTests`
-- `AnyViewResilienceTests`
-- `RetainedSubtreeReuseTests`
-- `RetainedPhaseExtractionTests`
-- `RetainedReuseInvariantTests`
-- `PresentationContinuityTests`
-
-## Validation
-
-Recommended validation commands from the org root or child package:
-
-```bash
-swift test --package-path swift-tui --filter StructuralDiffTests
-swift test --package-path swift-tui --filter ChildDescriptorTests
-swift test --package-path swift-tui --filter RegistrationAliasFindingsTests
-swift test --package-path swift-tui --filter PanelTests
-swift test --package-path swift-tui --filter SwiftUISurfaceTests
-swift test --package-path swift-tui --filter AnyViewResilienceTests
-swift test --package-path swift-tui --filter RetainedSubtreeReuseTests
-swift test --package-path swift-tui --filter RetainedPhaseExtractionTests
-swift test --package-path swift-tui --filter RetainedReuseInvariantTests
-swift test --package-path swift-tui --filter PresentationContinuityTests
-bazel test //:org_fast
-```
-
-For performance validation, use the retained-rendering scenarios from
-`docs/perf/README.md`, especially narrow invalidation cases at multiple row
-counts. The expected result of Phase 1 is not necessarily lower frame time by
-itself; the expected result is that persistent retained indexes can be
-implemented without unsafe path-containment assumptions.
-
-## Rollout Plan
-
-### Step 1: Structural Snapshot Diagnostics
-
-- Add `StructuralFrameSnapshot` behind debug/test-only APIs.
-- Build it from committed `ResolvedNode.children`.
-- Record duplicate identities, alias differences, portal roles, and path-parent
-  mismatches.
-- Add tests proving current ordinary views have path/structure agreement.
-- Add tests proving known hard cases are detected rather than hidden.
-
-### Step 2: StructuralFrameIndex In Committed Frame State
-
-- Store `StructuralFrameIndex` with retained frame state.
-- Keep existing identity dictionaries for product lookup.
-- Add structural subtree query APIs.
-- Keep path-based retained invalidation as fallback.
-
-### Step 3: Retained Invalidation Uses Structural Queries
-
-- Replace path-prefix subtree queries in retained invalidation summaries with
-  structural queries when a previous structural index exists.
-- Add debug comparison against full rebuild.
-- Add production fallback for duplicate/ambiguous structural maps.
-
-### Step 4: Persistent Retained Indexes
-
-- Implement incremental retained-index patching from structural subtree ranges.
-- Keep a debug mode that periodically rebuilds full indexes and compares.
-- Measure narrow invalidation scenarios.
-
-### Step 5: Resolve-Time Structural Context
-
-- Add `StructuralPath` to `ResolveContext`.
-- Attach structural identity to `ResolvedNode`.
-- Thread it through builder, stack, conditional, `ForEach`, `.id`, lazy, and
-  portal paths.
-- Update `ChildDescriptor` and structural reconciliation to use the new fields.
-
-### Step 6: Decide On ViewNodeID
-
-- Audit remaining identity alias and duplicate-id pressure.
-- If needed, propose a separate `ViewNodeID` migration.
-- If not needed, keep `Identity` as runtime key and document the boundary.
-
-## Non-Goals
-
-- Do not change public SwiftTUI API as part of Phase 1.
-- Do not change `@State` ownership semantics in the sidecar phase.
-- Do not make child repos depend on the org root or Bazel.
-- Do not require all lazy rows to resolve just to build a structural index.
-- Do not claim SwiftUI compatibility beyond the behavior covered by tests.
-
-## Open Questions
-
-1. Should duplicate explicit ids be a debug diagnostic with conservative rebuild
-   or a hard failure in internal test configurations?
-2. Should structural keys be deterministic paths, compact integer ids, or both?
-   A compact id is faster for indexes, while a path is better for diagnostics.
-3. How much of `AuthoringContext.structuralIdentity` should be replaced by the
-   new structural path versus kept as a compatibility surface for modifiers?
-4. Should portal declaration and placement edges live in one structural graph
-   with edge roles, or two separate graphs linked by portal ids?
-5. Once structural ids exist on `ResolvedNode`, should retained products be
-   keyed primarily by structural id, runtime identity, or a composite key?
+1. **Compact key vs path.** `ResolvedNode` carries the full `StructuralPath`
+   (the cross-frame anchor) and derives a compact frame-local `StructuralNodeKey`
+   in Stage 1's indexer. (Stage 2 OQ#1.)
+2. **Does `Identity` survive?** Yes — as the serialized public/debug projection
+   only (snapshots, accessibility bridge, fixtures). No runtime index keys on it
+   after Stage 5; `@State` stops after Stage 6. (Stage 5 OQ#2.)
+3. **Routing vs `inferringMoves`.** Entity routing handles keyed lifetime;
+   `inferringMoves` handles unkeyed positional ordering. They coexist. (Stage 6
+   OQ#3.)
+4. **`ViewNodeID` scope.** Graph-scoped `(scope, counter)` composes with
+   `__SwiftTUIStateGraph` isolation. (Stage 5 OQ#1.)
 
 ## Recommendation
 
-Implement Option A first, with types named and shaped so Option B can reuse
-them. This gives SwiftTUI the missing first-class structural adjacency model
-needed by retained rendering without destabilizing state and lifecycle.
+Land the stages in order: **0 → 1 → 2 → 3 → 4 → 5 → 6.** Stages 0–1 are safe
+today. Stages 2–4 build the structural and entity axes. Stage 5 splits runtime
+lifetime (behavior-preserving, behind the byte-equivalence oracle). Stage 6 routes
+entity lifetime (the one semantic change, behind characterization tests).
 
-The critical shift is conceptual and mechanical:
+The critical shift, stated once:
 
 ```text
 Today:
-  final Identity path implies structure, lifetime, and retained containment
+  one Identity string implies structure, lifetime, entity, and state scope
 
-Proposed:
-  structural graph proves containment
-  entity identity influences reuse
-  runtime identity keeps current ViewNode compatibility
-  state slots remain owned by authoring/runtime identity
+Destination:
+  StructuralPath proves containment
+  EntityIdentity routes lifetime across moves
+  ViewNodeID is the runtime lifetime
+  StateSlotIdentity scopes stored state
+  Identity is a public/debug projection, and nothing more
 ```
 
 That model matches the useful part of StateTree's design while respecting
-SwiftTUI's existing value-view and result-builder architecture.
+SwiftTUI's value-view, result-builder architecture — and it retires the overload
+that every current identity bug traces back to.

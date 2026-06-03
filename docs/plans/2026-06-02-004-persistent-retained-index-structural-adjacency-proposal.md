@@ -12,6 +12,9 @@ reparenting) resolved 2026-06-02 by a 6-tracer / 4-verifier source trace — see
 — Opportunity 1 (Persistent Retained Indexes).
 **Predecessor wave:**
 [`2026-06-02-002-rendering-performance-next-wave-proposal.md`](2026-06-02-002-rendering-performance-next-wave-proposal.md).
+**Plan set:** This is **Stage 1** of the structural-identity migration. Entry
+point and stage index:
+[`2026-06-03-001-first-class-structural-identity-proposal.md`](2026-06-03-001-first-class-structural-identity-proposal.md).
 
 ---
 
@@ -128,15 +131,24 @@ What the trace established:
   zero portal/hoist/reparent logic
   (`SwiftTUICore/Place/LayoutEngine+PlacementRequests.swift:21-51`,
   `LayoutEngine+Placement.swift:16`, `PlacedNode.swift:242`).
-- **Portals are hoisted at *resolve*, not reparented at *place*.** Presented
-  content (`.sheet`/`.popover`/`.alert`/`.fullScreenCover`/`.overlay`/
-  `.background`) is composed into an `OverlayStack` branch during resolve by
+- **Portals are hoisted at *resolve*, not reparented at *place*.** Coordinator-
+  backed modal content (`.sheet`/`.popover`/`.alert`/`.confirmationDialog`/
+  `.toast`/`.menu`) is composed into an `OverlayStack` branch during resolve by
   `composeOverlayStackTree` (`SwiftTUIViews/Presentation/OverlayStack.swift:32-84`)
   / `composePresentationPortalTree`
   (`SwiftTUIViews/Presentation/PresentationCoordinator.swift:287-321`). Overlay
   entries resolve under a `PortalHost/overlays` identity that *descends from* the
   `OverlayStack` root, so the presented content's resolved parent and its placed
   parent are the same node.
+  > **Correction (2026-06-03 sweep at `a020fa55`):** an earlier draft of this
+  > bullet listed `.fullScreenCover`/`.overlay`/`.background` among the hoisted
+  > set. That is wrong. `.fullScreenCover` does not exist in this codebase, and
+  > `.overlay`/`.background` resolve as *in-place decoration siblings*
+  > (`layoutBehavior .decoration(...)`,
+  > `SwiftTUIViews/Modifiers/ViewLayoutModifierTypes.swift:348-371/410-433`), not
+  > via `OverlayStack`. They satisfy placed-parent == resolved-parent trivially,
+  > by being in-tree. The single-canonical-adjacency conclusion is unaffected;
+  > Stage 4 gives each teleport mechanism its own edge role.
 - **Correction to this proposal's prior assumption: presentation portals DO
   reach the index.** `renderPipelineTree` strips the wrapper *only* when the
   graph root is the no-overlay `PresentationPortalRoot` single-child shape
@@ -163,8 +175,10 @@ What the trace established:
 Two real constraints replace the (non-existent) portal-reparent hazard:
 
 1. **The index is not transient-filtered.** `RetainedFrameIndex.init(frame:)`
-   walks and indexes every child unconditionally, including `isTransient` removal
-   nodes (`RetainedFrameQueries.swift:86-130`). Resolved-level removal-overlay
+   walks and indexes every child unconditionally — the static `index(...)`
+   recursion helpers at `RetainedFrameQueries.swift:86-130` never filter, so
+   `isTransient` removal nodes (the flag itself lives on `ResolvedNode.swift:134`,
+   not in this file) are indexed by consequence. Resolved-level removal-overlay
    frames therefore legitimately *insert and prune* transient identities
    frame-to-frame, at their authored parent. L3's signature diff must treat these
    as ordinary insert/prune, not anomalies. The `OverlayStack` root's
@@ -220,12 +234,28 @@ well-defined precisely in the duplicate-identity case, where two siblings share
 an `Identity` but occupy distinct sibling ordinals and so cannot be matched by
 `Identity`.
 
+> **Plan-set note.** This "stable structural locator/path" is reconstructed
+> per-frame here in Stage 1. Stage 2 formalizes it as the resolve-time
+> `StructuralPath` carried on `ResolvedNode`, at which point this index derives
+> its `StructuralNodeKey` from that carrier instead of rebuilding adjacency from
+> the children walk. Stages 0 and 2 are this doc's plan-set neighbors; see the
+> [entry point](2026-06-03-001-first-class-structural-identity-proposal.md).
+
 **Use it.** Replace the `identity.parent` string-walk in
 `RetainedInvalidationSummary` (`RetainedFrameQueries.swift:167-177`) with a walk
 over `structuralFrame.parentByNode`. This is the parent register's requirement
 #2 ("track subtree identity sets from structural adjacency, not only from
 identity path conventions"). The synthetic-ancestor classification stops being a
 path-prefix guess and becomes exact across `.id`, portals, and overlays.
+
+**Also migrate the real structural-prefix engine.** A 2026-06-03 sweep found that
+`RetainedInvalidationSummary` is only the *wrapper*: the actual
+ancestor/descendant walk lives in `InvalidationSummary`
+(`Commit/FrameMetrics.swift:33-89` — init ancestor-walk `:42-50`,
+`hasInvalidatedAncestor` `:69-80`, `intersectsSubtree` `:82-88`), which the
+original draft of this plan did not cite. L1 must repoint *this* engine at
+`structuralFrame.parentByNode` as well, or the migration will leave the primary
+`Identity.parent` walk untouched. The two files move together.
 
 Callers that start from an `Identity` first consult
 `nodeByRuntimeIdentity[identity]`. If it yields exactly one structural node, the
@@ -305,6 +335,16 @@ adds verification with no behavior change.
 
 ## Layer 3 - Patchable Index (the performance win)
 
+> **Gate:** L3 is **blocked on closing Open Question #1's residual** (matched-
+> geometry placement). The "single canonical adjacency relation suffices"
+> conclusion is what makes the patch sound; matched-geometry
+> (`ResolvedNode.matchedGeometry`) was strongly indicated to be placed-only/
+> post-baseline but was *not* exhaustively traced to where it influences
+> placement. Before L3 ships, either prove matched-geometry never produces a
+> baseline-tree placed edge that disagrees with the resolved edge, or treat
+> matched-geometry roots as an opaque barrier like `indexedChildSource`. Do not
+> ship L3's patchable index while this exception is open. (L1/L2 are unaffected.)
+
 **Goal:** stop rebuilding. Diff the new frame against the retained index by
 signature; reuse unchanged fragments, re-index only changed roots, prune removed
 roots. Parent register requirement #4.
@@ -383,7 +423,7 @@ does not foreclose it.
 
 | Step | Lands | Primary files |
 | --- | --- | --- |
-| L1 | `StructuralFrameIndex` sidecar keyed by `StructuralNodeKey`; `Identity` multimap; structural invalidation walk; duplicate diagnostics/conservative fallback | `Commit/RetainedFrameQueries.swift` |
+| L1 | `StructuralFrameIndex` sidecar keyed by `StructuralNodeKey`; `Identity` multimap; structural invalidation walk; duplicate diagnostics/conservative fallback | `Commit/RetainedFrameQueries.swift`, `Commit/FrameMetrics.swift` |
 | L2 | `subtreeSignature` fold-up; structural-sidecar equality oracle | `Resolve/ResolvedNode.swift`, `Measure/MeasuredNode.swift`, `Place/PlacedNode.swift`, `Commit/RetainedFrameQueries.swift`, `Rendering/FrameTailRetainedState.swift` |
 | L3 | Structural-fragment storage; `init(patching:with:)`; transient insert/prune handling; indexed-source barrier; multimap pruning | `Commit/RetainedFrameQueries.swift`, `Rendering/FrameTailRetainedState.swift` |
 | L4 | (Deferred) arena representation | TBD |
