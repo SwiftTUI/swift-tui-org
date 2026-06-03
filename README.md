@@ -60,11 +60,10 @@ now resolve through public release artifacts:
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
   `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.12` tag.
 
-As of `0.0.12`, `@swifttui/web` and `@swifttui/build` are published to npm and
-also attached to the GitHub release as tarballs. In-org consumers
-(`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
-release tarball URLs; external consumers can install the npm package names
-directly.
+As of `0.0.12`, `@swifttui/web` and `@swifttui/build` are attached to the
+GitHub release as tarballs. In-org consumers (`swift-tui-examples`,
+`swift-tui-site`) resolve the web packages through those release tarball URLs;
+npm publication remains a credentialed release follow-up.
 
 For cross-repo development before the next tag, the org root materializes a
 **coordination overlay** under `.build/coordination/`. The overlay is a
