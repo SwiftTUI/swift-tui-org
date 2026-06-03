@@ -1,8 +1,9 @@
 # Structural Identity — Migration Audit & Gap-Remediation Plan
 
 **Date:** 2026-06-03
-**Status:** Audit complete + remediation **in progress** on branch
-`structural-identity-completion` (scope: *purity + redirect perf*).
+**Status:** Audit complete + remediation **paused at a clean checkpoint** on branch
+`structural-identity-completion` (10 commits; tree clean; scope this session:
+*purity + redirect perf*).
 **Stage:** Post-implementation gap register for the seven-stage structural-identity
 migration (stages 0–6).
 
@@ -27,18 +28,29 @@ migration (stages 0–6).
 >   the live-graph structural check has already rejected reuse. Behavior-identical.
 >   Deeper resolve wins need TermUIPerf profiling + a perf gate (not runnable in this
 >   loop) to size and prove, so further blind optimization of the reuse-correctness
->   path is deferred.
-> - **G13 — CONFIRMED GAP, not just a missing test** (`0cb63d27`, `f4b30d87`). A probe
+>   path is deferred. A second, larger win is *identified and documented in code*
+>   (`5e383a49`): `conflictsWithInvalidation` recomputes the same predicate as
+>   `identityIntersectsInvalidation` via a linear `isDescendant` sweep instead of the
+>   O(1) precomputed summary — safely removable once the "summary built from this
+>   identity set" invariant is enforced; left as a profiling-gated next step rather
+>   than coupling reuse correctness to an unenforced invariant.
+> - **G13 — CONFIRMED GAP, not just a missing test** (`0cb63d27`, `f4b30d87`, `8d02f9f4`). A probe
 >   (`ForEach([7, 7])` via `DefaultRenderer`) shows same-collection duplicate ids
 >   **alias to one `ViewNode`/`@State` slot**, contradicting the Stages 5–6 "distinct
 >   `ViewNodeID`, never aliased" claim. Root cause: `ViewGraph.nodeForIdentity` keys
 >   find-or-create on `Identity` (`nodeIDByIdentity` is 1:1); the second duplicate
 >   finds the first's node at the shared `Identity`, sees a different
->   `EntityIdentity.occurrence`, and `removeSubtree`s it — so the siblings cannot
->   coexist. Stage 3's occurrence disambiguation never reaches the node-allocation
->   key. **Recorded in `swift-tui/docs/VISION-GAP.md`.** Fixing it (occurrence-aware
->   `nodeForIdentity` / 1:many identity map) is a core Stage-5/6 node-store change —
->   deferred to a fresh session with full headroom, not attempted blind.
+>   `EntityIdentity.occurrence`, and (when the entity is not yet bound) **reuses** it
+>   — so the siblings cannot coexist. Stage 3's occurrence disambiguation never reaches
+>   the node-allocation key. **Recorded in `swift-tui/docs/VISION-GAP.md` and pinned as
+>   an executable, self-removing `withKnownIssue` test** (`8d02f9f4`,
+>   `EntityRoutingTests.duplicateIDsShouldResolveToDistinctViewNodeIDs`): it asserts the
+>   correct end-state (two distinct `ViewNodeID`s), passes today (recording the bug),
+>   and fails loudly the moment `nodeForIdentity` is made occurrence-aware — prompting
+>   removal of the wrapper. The fix itself (occurrence-aware allocation / 1:many
+>   identity map) is a core Stage-5/6 node-store change with a real orphan-leak risk
+>   in the naive form, so it was **not attempted blind**; see *Next steps* for the
+>   investigated approach.
 > - **G15 / G4a** — **resolved as deliberate deferral** (`ce9ac36c`, recorded in
 >   `swift-tui/docs/VISION-GAP.md`): repointing per-frame registry/scope-path containment
 >   checks to `StructuralPath` the cheap way *adds a hot-path allocation per check* — a net
@@ -64,6 +76,45 @@ current org-root pin. Plans were authored against `a020fa55` (pre-migration).
 > the gaps. It does **not** restate the design — read 001 for that.
 
 ---
+
+## Next steps (resume here)
+
+Ordered by value. The branch is clean; resume with `git checkout structural-identity-completion`.
+
+1. **G13 — fix the duplicate-id node-store aliasing (highest value; now a concrete,
+   mechanism-known bug with an executable marker).** `ViewGraph.nodeForIdentity`
+   (`Resolve/ViewGraph.swift:1379-1427`) collapses same-id siblings because
+   `nodeIDByIdentity` is `[Identity: ViewNodeID]` (1:1). The investigated minimal
+   patch — "when `entityIdentity.occurrence > 0` and the identity-existing node has no
+   bound entity, mint a fresh node instead of reusing it" — makes the two siblings
+   distinct **but** the occurrence-1 node then can't live in the 1:1
+   `nodeIDByIdentity` (occurrence-0 owns the key), so it is reachable only via the
+   `EntityRoutingTable`. That risks an **orphan leak** on teardown if any teardown
+   path finds the node by `Identity` rather than entity. So the correct fix is one of:
+   (a) make `nodeIDByIdentity` 1:many (`[Identity: [ViewNodeID]]`) and update the ~40
+   lookup/teardown sites to disambiguate by entity/structural slot; or (b) route all
+   *keyed*-entity node allocation through the `EntityRoutingTable` and make teardown
+   entity-based for those nodes. Either is a real Stage-5/6 change — do it behind the
+   full suite **+** the `withKnownIssue` marker (flips to failing when fixed) **+** the
+   `routingTableReleasesGoneEntities` churn/leak test (must stay green). Verify no
+   orphaned registrations after a `ForEach([7,7]) → ForEach([7]) → ForEach([])` churn.
+2. **resolve_ms (deeper, performance).** Two identified wins: (i) remove
+   `conflictsWithInvalidation` once the summary-built-from-this-identity-set invariant
+   is enforced (`5e383a49` documents it in code); (ii) reduce the
+   `O(nodes × invalidated × depth)` `structuralInvalidationIntersects` work. Both need
+   the **TermUIPerf** harness + a perf gate to size and prove — start there.
+3. **G10a (architectural behavior win).** Re-key `AnimationController` property-value
+   interpolation maps onto `ViewNodeID` so property animations follow an entity across
+   a move; add the `EntityRoutingTests` Test #5 (focused/animating `.id`-keyed view
+   moved between containers keeps focus + animation continuity).
+4. **G6 (GC half).** Route presentation GC/invalidation through
+   `declarationOwnerEdge.owner` instead of the `sourceIdentity` preference set-difference.
+5. **G3a + G11 (patcher).** The incremental `RetainedFrameIndex` patcher + fold-up
+   signature. Lowest priority by the measurement (commit/index is <1% of frame).
+6. **Verification G7 / G12.** Custom-`ResolvableView` alias-deletion byte-identity test;
+   wire the duplicate-id diagnostic into the index/commit path.
+7. **Close-out.** `bazel test //:org_full`, then commit+push the child branch and record
+   the new submodule pin in the org root.
 
 ## How this audit was run
 
