@@ -60,10 +60,11 @@ now resolve through public release artifacts:
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
   `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.12` tag.
 
-As of `0.0.12`, `@swifttui/web` and `@swifttui/build` are attached to the
-GitHub release as tarballs. In-org consumers (`swift-tui-examples`,
-`swift-tui-site`) resolve the web packages through those release tarball URLs;
-npm publication remains a credentialed release follow-up.
+As of `0.0.12`, `@swifttui/web` and `@swifttui/build` are published to npm and
+also attached to the GitHub release as tarballs. In-org consumers
+(`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
+release tarball URLs; external consumers can install the npm package names
+directly.
 
 For cross-repo development before the next tag, the org root materializes a
 **coordination overlay** under `.build/coordination/`. The overlay is a
@@ -102,9 +103,8 @@ override path, troubleshooting) is in
 
 The release cutover notes are tracked in
 [docs/PUBLIC-REPO-READINESS.md](docs/PUBLIC-REPO-READINESS.md). At this point
-the public default paths and `//:org_fast` guard are in place; the main remaining
-release follow-up is publishing the web packages to npm when credentials are
-available.
+the public default paths, `//:org_fast` guard, GitHub release tarballs, and npm
+web package publication are in place.
 
 ## Planning Documents
 
