@@ -49,18 +49,18 @@ repos.
 
 ## Current Public Pre-Release State
 
-All child repositories are public and tagged at `0.0.11`. Public child defaults
+All child repositories are public and tagged at `0.0.12`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.11` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.0.12` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.11` release.
-- `swift-tui-examples` uses the `swift-tui` `0.0.11` tag and the web `0.0.11`
+  the GitHub `0.0.12` release.
+- `swift-tui-examples` uses the `swift-tui` `0.0.12` tag and the web `0.0.12`
   release tarballs by default.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.11` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.12` tag.
 
-As of `0.0.11`, `@swifttui/web` and `@swifttui/build` are published to npm and
+As of `0.0.12`, `@swifttui/web` and `@swifttui/build` are published to npm and
 also attached to the GitHub release as tarballs. In-org consumers
 (`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
 release tarball URLs; external consumers can install the npm package names
@@ -354,7 +354,7 @@ bazel test //:org_full
 
 ## Bumping the Org Version
 
-The release version (currently `0.0.11`) is denormalized across every child:
+The release version (currently `0.0.12`) is denormalized across every child:
 `package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
 `exactVersion`, GitHub release tarball URLs, `tree`/`blob`/`tag` links, site
 display strings, and the canonical `swift-tui-site/docs/releases.yml` manifest.
@@ -365,9 +365,9 @@ It is **dry-run by default** — it prints a unified diff and a release runbook 
 changes nothing until you pass `--write`:
 
 ```sh
-mise run bump -- 0.0.11            # preview the full diff (dry run)
-mise run bump -- 0.0.11 --write    # apply, then review `git -C <submodule> diff`
-bazel run //:bump_version -- 0.0.11 # same, via Bazel
+mise run bump -- 0.0.12            # preview the full diff (dry run)
+mise run bump -- 0.0.12 --write    # apply, then review `git -C <submodule> diff`
+bazel run //:bump_version -- 0.0.12 # same, via Bazel
 ```
 
 What it deliberately does **not** do — these stay maintainer-owned:
