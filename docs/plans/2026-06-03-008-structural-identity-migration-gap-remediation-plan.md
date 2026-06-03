@@ -17,6 +17,11 @@ migration (stages 0–6).
 > - **G1** (`92aa4679`) — commit-path invalidation engine (`FrameMetrics.InvalidationSummary`
 >   + retained synthetic-ancestor / `placedPath` walks) reasons over `StructuralPath`,
 >   not `Identity.parent`. Behavior-preserving.
+> - **G6 (partial)** (`e9d381df`) — `computeSupportsRetainedReuse` gates on
+>   `structuralEdgeRole == .viewportBarrier` instead of re-deriving from
+>   `indexedChildSource`, making the Stage-4 edge role a *live consumer*.
+>   Behavior-neutral. The `declarationOwnerEdge → presentation-GC` consumer is the
+>   remaining G6 half.
 > - **G15 / G4a** — **resolved as deliberate deferral** (`ce9ac36c`, recorded in
 >   `swift-tui/docs/VISION-GAP.md`): repointing per-frame registry/scope-path containment
 >   checks to `StructuralPath` the cheap way *adds a hot-path allocation per check* — a net
@@ -25,9 +30,9 @@ migration (stages 0–6).
 >   (off-hot-path) place to apply the projection.
 >
 > Still pending: **G3a** (incremental patcher) + **G11** (fold-up signature),
-> **G6** (consume Stage-4 edge carriers), **G10a** (animation/focus entity-routing +
-> teleport), **resolve_ms** perf, verification **G7 / G12 / G13**, and the submodule
-> re-pin. The full 2302-test suite is the regression net; the full `swift test` run is
+> **G6 (GC half)** (declaration-owner → presentation GC), **G10a** (animation/focus
+> entity-routing + teleport), **resolve_ms** perf, verification **G7 / G12 / G13**,
+> and the submodule re-pin. The full 2302-test suite is the regression net; the full `swift test` run is
 > subject to a known load-sensitive `swiftpm-testing-helper` SIGBUS/SIGSEGV flake
 > (`swift-tui#12`), so per-suite runs are used to validate.
 **Entry point:**
