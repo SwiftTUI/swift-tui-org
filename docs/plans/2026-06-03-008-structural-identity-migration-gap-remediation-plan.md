@@ -28,6 +28,17 @@ migration (stages 0–6).
 >   Deeper resolve wins need TermUIPerf profiling + a perf gate (not runnable in this
 >   loop) to size and prove, so further blind optimization of the reuse-correctness
 >   path is deferred.
+> - **G13 — CONFIRMED GAP, not just a missing test** (`0cb63d27`, `f4b30d87`). A probe
+>   (`ForEach([7, 7])` via `DefaultRenderer`) shows same-collection duplicate ids
+>   **alias to one `ViewNode`/`@State` slot**, contradicting the Stages 5–6 "distinct
+>   `ViewNodeID`, never aliased" claim. Root cause: `ViewGraph.nodeForIdentity` keys
+>   find-or-create on `Identity` (`nodeIDByIdentity` is 1:1); the second duplicate
+>   finds the first's node at the shared `Identity`, sees a different
+>   `EntityIdentity.occurrence`, and `removeSubtree`s it — so the siblings cannot
+>   coexist. Stage 3's occurrence disambiguation never reaches the node-allocation
+>   key. **Recorded in `swift-tui/docs/VISION-GAP.md`.** Fixing it (occurrence-aware
+>   `nodeForIdentity` / 1:many identity map) is a core Stage-5/6 node-store change —
+>   deferred to a fresh session with full headroom, not attempted blind.
 > - **G15 / G4a** — **resolved as deliberate deferral** (`ce9ac36c`, recorded in
 >   `swift-tui/docs/VISION-GAP.md`): repointing per-frame registry/scope-path containment
 >   checks to `StructuralPath` the cheap way *adds a hot-path allocation per check* — a net
