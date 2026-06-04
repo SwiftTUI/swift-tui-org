@@ -49,18 +49,18 @@ repos.
 
 ## Current Public Pre-Release State
 
-All child repositories are public and tagged at `0.0.13`. Public child defaults
+All child repositories are public and tagged at `0.0.16`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.13` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.0.16` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.13` release.
-- `swift-tui-examples` uses the `swift-tui` `0.0.13` tag and the web `0.0.13`
+  the GitHub `0.0.16` release.
+- `swift-tui-examples` uses the `swift-tui` `0.0.16` tag and the web `0.0.16`
   release tarballs by default.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.13` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.16` tag.
 
-As of `0.0.13`, `@swifttui/web` and `@swifttui/build` are published to npm and
+As of `0.0.16`, `@swifttui/web` and `@swifttui/build` are published to npm and
 also attached to the GitHub release as tarballs. In-org consumers
 (`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
 release tarball URLs; external consumers can install the npm package names
@@ -353,7 +353,7 @@ bazel test //:org_full
 
 ## Bumping the Org Version
 
-The release version (currently `0.0.13`) is denormalized across every child:
+The release version (currently `0.0.16`) is denormalized across every child:
 `package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
 `exactVersion`, GitHub release tarball URLs, `tree`/`blob`/`tag` links, site
 display strings, and the canonical `swift-tui-site/docs/releases.yml` manifest.
