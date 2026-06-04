@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SwiftTUI Rendering Pipeline Explorer</title>
+    <meta
+      name="description"
+      content="An animated, source-grounded walkthrough of the SwiftTUI rendering pipeline from authored View code to terminal presentation."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <div class="scan-grid" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="#pipeline" aria-label="SwiftTUI pipeline explorer home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="img">
+            <path d="M5 5h14v14H5z" />
+            <path d="M8 8l8 8M16 8l-8 8" />
+          </svg>
+        </span>
+        <span>SwiftTUI Pipeline Explorer</span>
+      </a>
+      <nav class="topnav" aria-label="Sections">
+        <a href="#pipeline">Pipeline</a>
+        <a href="#propagation">Propagation</a>
+        <a href="#callpath">Runtime</a>
+        <a href="#source">Source</a>
+        <a href="#handoff">Handoff</a>
+      </nav>
+      <div class="toolbar" aria-label="Playback controls">
+        <button class="icon-button" id="play-toggle" type="button" aria-label="Pause pipeline animation">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path class="pause-icon" d="M8 5v14M16 5v14" />
+            <path class="play-icon" d="M8 5l11 7-11 7z" />
+          </svg>
+        </button>
+        <button class="icon-button" id="step-button" type="button" aria-label="Step to next pipeline stage">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 5l8 7-8 7zM18 5v14" />
+          </svg>
+        </button>
+        <select id="speed-select" aria-label="Animation speed">
+          <option value="1600">1.0x</option>
+          <option value="1000">1.6x</option>
+          <option value="700">2.3x</option>
+        </select>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-shell" id="pipeline">
+        <div class="hero-intro">
+          <h1>From authored View to terminal cells.</h1>
+          <p>
+            A SwiftTUI frame is a chain of typed products and runtime scheduling
+            boundaries. This applet follows one small view through resolve,
+            measure, place, semantics, draw, raster, commit, and finally the
+            terminal presentation surface.
+          </p>
+        </div>
+
+        <div class="explorer-grid" aria-label="Rendering pipeline animation">
+          <section class="work-panel code-panel" aria-labelledby="code-title">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Swift View</p>
+                <h2 id="code-title">BuildSummary.swift</h2>
+              </div>
+              <span class="file-pill">author input</span>
+            </div>
+            <pre class="source-code" aria-label="Example SwiftTUI View code"><code id="view-code"></code></pre>
+            <div class="panel-foot">
+              <span>Lines 1-29</span>
+              <span>View body</span>
+            </div>
+          </section>
+
+          <section class="work-panel pipeline-panel" aria-labelledby="pipeline-title">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Runtime render stages</p>
+                <h2 id="pipeline-title">RuntimeRenderPipeline</h2>
+              </div>
+              <span class="file-pill">orderedComposition</span>
+            </div>
+            <div class="pipeline-stack" id="pipeline-stack"></div>
+            <div class="phase-map" aria-label="Core phase product map">
+              <span>resolve</span>
+              <span>measure</span>
+              <span>place</span>
+              <span>semantics</span>
+              <span>draw</span>
+              <span>raster</span>
+              <span>commit</span>
+            </div>
+          </section>
+
+          <section class="work-panel terminal-panel" aria-labelledby="terminal-title">
+            <div class="panel-head terminal-head">
+              <div>
+                <p class="panel-kicker">Terminal surface</p>
+                <h2 id="terminal-title">RasterPresentationSurface</h2>
+              </div>
+              <div class="window-dots" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+            <div class="terminal-stage" aria-label="Animated terminal output">
+              <div class="terminal-grid" id="terminal-grid" aria-hidden="true"></div>
+              <pre id="terminal-output" class="terminal-output" aria-label="Rendered terminal preview"></pre>
+            </div>
+            <div class="panel-foot">
+              <span>80 x 24 cells</span>
+              <span id="terminal-status">pending frame</span>
+            </div>
+          </section>
+        </div>
+
+        <section class="timeline-console" aria-label="Pipeline timeline">
+          <div class="timeline-head">
+            <div>
+              <p class="panel-kicker">Frame timeline</p>
+              <h2 id="active-stage-title">head</h2>
+            </div>
+            <p id="active-stage-summary"></p>
+          </div>
+          <div class="timeline-track" id="timeline-track"></div>
+        </section>
+      </section>
+
+      <section class="story-section" id="propagation">
+        <div class="section-marker">01</div>
+        <div class="section-copy">
+          <h2>Changes enter as invalidation intent.</h2>
+          <p>
+            State, observation, input, focus, pointer, presentation, and animation
+            all converge on the scheduler. The scheduler coalesces causes and
+            invalidated identities into a `ScheduledFrame`, then the run loop
+            consumes that frame and asks the renderer for new artifacts.
+          </p>
+        </div>
+        <div class="propagation-grid" id="propagation-grid"></div>
+      </section>
+
+      <section class="story-section" id="callpath">
+        <div class="section-marker">02</div>
+        <div class="section-copy">
+          <h2>The interactive callpath adds policy around the same products.</h2>
+          <p>
+            A one-shot `DefaultRenderer.render` returns `FrameArtifacts`. An
+            interactive session adds input pumping, invalidation coalescing,
+            async frame-tail cancellation, completed-frame disposition, focus
+            convergence, diagnostics, and presentation to a concrete surface.
+          </p>
+        </div>
+        <ol class="callpath-list" id="callpath-list"></ol>
+      </section>
+
+      <section class="source-lab" id="source">
+        <div class="section-marker">03</div>
+        <div class="source-lab-head">
+          <div>
+            <h2>Source code deep dive.</h2>
+            <p>
+              The applet follows real files from the checked-out framework. Use
+              the tabs to inspect the points where data changes shape.
+            </p>
+          </div>
+          <div class="source-tabs" id="source-tabs" aria-label="Source excerpts"></div>
+        </div>
+        <div class="source-workbench">
+          <aside class="source-index" id="source-index" aria-label="Selected source metadata"></aside>
+          <pre class="source-snippet" aria-label="Swift source excerpt"><code id="source-snippet"></code></pre>
+          <aside class="source-notes" id="source-notes" aria-label="Source explanation"></aside>
+        </div>
+      </section>
+
+      <section class="story-section artifacts-section" id="artifacts">
+        <div class="section-marker">04</div>
+        <div class="section-copy">
+          <h2>FrameArtifacts carry the product bundle.</h2>
+          <p>
+            The runtime does not hand views to the terminal. It commits a bundle
+            of typed products plus diagnostics, presentation hints, and a commit
+            plan. Each product owns a different question about the same frame.
+          </p>
+        </div>
+        <div class="artifact-board" id="artifact-board"></div>
+      </section>
+
+      <section class="story-section handoff-section" id="handoff">
+        <div class="section-marker">05</div>
+        <div class="section-copy">
+          <h2>Presentation converts committed data into host output.</h2>
+          <p>
+            `RunLoop.presentCommittedFrame` selects JSON, accessible output,
+            semantic host frames, damage-aware raster presentation, or a raw
+            raster surface. Terminal-native hosts plan repaint work and emit
+            escape sequences after the renderer has already committed artifacts.
+          </p>
+        </div>
+        <div class="handoff-flow" id="handoff-flow"></div>
+      </section>
+
+      <section class="wire-section">
+        <div class="section-marker">06</div>
+        <div class="wire-panel">
+          <div>
+            <h2>On the wire.</h2>
+            <p>
+              Terminal output is a transport detail below the frame boundary:
+              clear/move cursor, incremental row writes, synchronized-output
+              wrappers, image protocol replay, and UTF-8 text all flow through
+              the presentation surface.
+            </p>
+          </div>
+          <pre class="hex-dump" id="hex-dump" aria-label="Representative terminal byte stream"></pre>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
