@@ -58,12 +58,40 @@ migration (stages 0–6).
 >   full element-type re-key is parked until it earns its cost. G1 was the correct
 >   (off-hot-path) place to apply the projection.
 >
-> Still pending: **G3a** (incremental patcher) + **G11** (fold-up signature),
-> **G6 (GC half)** (declaration-owner → presentation GC), **G10a** (animation/focus
-> entity-routing + teleport), **resolve_ms** perf, verification **G7 / G12 / G13**,
-> and the submodule re-pin. The full 2302-test suite is the regression net; the full `swift test` run is
-> subject to a known load-sensitive `swiftpm-testing-helper` SIGBUS/SIGSEGV flake
-> (`swift-tui#12`), so per-suite runs are used to validate.
+> **Update (2026-06-04 — remediation session 2; landed on child `main`).**
+> - **G13** (`e7833547`) — duplicate-id `ForEach` siblings now get distinct
+>   `ViewNode` lifetimes; `nodeForIdentity` is occurrence-aware, and a latent
+>   deferred-removal teardown leak (stale `wasVisitedThisFrame`) was fixed. The
+>   `withKnownIssue` marker flipped to a passing assertion; a
+>   `[7,7]→[7]→[]` churn test proves no orphaned node-store/routing entries.
+> - **Perf gate** (`e91e8f69`) — `TermUIPerf compare --gate` /
+>   `--require-improvement` exits non-zero on a variance-aware regression / unmet
+>   win (the prerequisite this plan named before chasing `resolve_ms`).
+> - **G10a** (`ed2d801c`) — property animations follow their entity across an
+>   identity-changing move (interpolation keyed on `ViewNodeID`); Test #5 added.
+> - **G12 / G7** (`aadd243c`) — `RetainedFrameIndex.duplicateRuntimeIdentities`
+>   surfaces collisions from the commit path; a custom-`ResolvableView`
+>   identity-rewrite scoped-restore byte-identity gate test was added.
+> - **resolve_ms** — net outcome is the earlier behaviour-identical conflict-scan
+>   short-circuit (`8f1fb97a`) **plus** the new gate to size future wins. Win (i)
+>   (removing the identity-axis conflict scan) was attempted (`794fbf3e`) and
+>   **reverted** (`7044ce13`): the full suite proved the scan is *not* redundant
+>   — the structural-summary over-approximates divergent identities and the scan
+>   rescues valid reuse, so removing it is a reuse-rate regression. Win (ii) is a
+>   documented profiling-gated deferral.
+> - **Deliberate, documented deferrals** (in `swift-tui/docs/VISION-GAP.md`):
+>   **G6 GC-half** (`fe4ed8cb` — both Stage-4 edge carriers already have live
+>   consumers; entity-keyed presentation GC parked since continuity is preserved
+>   on the `item.id` axis), **resolve_ms win (ii)**, and **G11 + G3a**
+>   (`06b6083e` — sub-1% off-critical-path; the fold-up signature has no consumer
+>   without the patcher).
+>
+> Remaining: the submodule re-pin — push child `main` and record the pin in the
+> org root. This is outward-facing and left for a maintainer go-ahead. The full
+> `swift test` run is subject to a known load-sensitive `swiftpm-testing-helper`
+> SIGBUS/SIGSEGV flake (`swift-tui#12`), so per-target runs are used to validate
+> (this session: SwiftTUICoreTests 451, SwiftTUITests 1394, SwiftTUIViewsTests
+> 120, SwiftTUIAnimatedImageTests 5, TermUIPerf 65 — all green).
 **Entry point:**
 [`2026-06-03-001-first-class-structural-identity-proposal.md`](2026-06-03-001-first-class-structural-identity-proposal.md)
 — the plan-set index and the *why*.
@@ -78,6 +106,13 @@ current org-root pin. Plans were authored against `a020fa55` (pre-migration).
 ---
 
 ## Next steps (resume here)
+
+> **Status (2026-06-04): substantially complete.** Items 1–6 below are resolved
+> or resolved-as-documented-deferral on child `main` (see the live-progress
+> update at the top of this doc for commit ids). Item 7 (close-out) is done
+> except the outward-facing **submodule re-pin** (push child `main`, then record
+> the pin in the org root), left for a maintainer go-ahead. The historical
+> queue is kept below for provenance.
 
 Ordered by value. The branch is clean; resume with `git checkout structural-identity-completion`.
 
