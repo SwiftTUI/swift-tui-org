@@ -1,7 +1,7 @@
 # Image Blend Mode Glyph Backdrop Plan
 
 **Date:** 2026-06-06
-**Status:** Follow-on implementation plan after cache hardening.
+**Status:** Implemented in the `swift-tui` working tree on 2026-06-06.
 **Target repos:** implementation lives in the `swift-tui` submodule. Root owns
 this plan and any final submodule pin update.
 
@@ -33,11 +33,12 @@ later host-native tranche.
 Relevant `swift-tui` files:
 
 - `Sources/SwiftTUICore/Content/ImageTypes.swift`
-  - `RasterImageBackdropCell` currently stores only `backgroundColor`.
+  - `RasterImageBackdropCell` now stores background, foreground, glyph, and span
+    metadata.
 - `Sources/SwiftTUICore/Raster/Rasterizer+Paint.swift`
-  - `captureImageBackdrop` slices `RasterCell.style?.backgroundColor`.
+  - `captureImageBackdrop` slices visible `RasterCell` style and glyph metadata.
 - `Sources/SwiftTUIRuntime/Terminal/ImageBlendCompositor.swift`
-  - `backdropColor` expands one backdrop cell into a flat pixel color.
+  - `backdropPixelColor` expands captured backdrop cells into pixel colors.
 - `Sources/SwiftTUICore/Raster/RasterCell.swift`
   - contains the glyph and style data needed to represent text foreground.
 - `Sources/SwiftTUICore/Raster/Rasterizer+Sampling.swift`
@@ -234,3 +235,28 @@ mise exec -- bazel test //:org_fast
 - Empty-cell/background-only behavior remains compatible with tranche 1.
 - Public docs describe the approximation honestly.
 
+## 8. Implementation Notes
+
+The shipped tranche keeps the source-compatible
+`RasterImageBackdropCell(backgroundColor:)` initializer and adds optional
+foreground/glyph metadata plus `spanWidth` and `spanOffset`, so a visible slice
+that starts on a wide-glyph continuation cell can still resolve the lead glyph.
+A package-scoped coverage classifier is shared by the rasterizer signature and
+runtime compositor so cache identity tracks the same coverage model used for
+pixel expansion. Shaded block glyphs (`░`, `▒`, `▓`) are intentionally
+approximated as full-cell foreground in this tranche because the coverage model
+does not carry density masks.
+
+Verification performed:
+
+```bash
+cd swift-tui
+swiftly run swift test --filter SwiftTUICoreTests.RasterBackdropCoverageTests
+swiftly run swift test --filter SwiftTUITests.ImageBlendCompositorTests
+swiftly run swift test --filter SwiftTUICoreTests.RasterizerTests
+swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests
+swiftly run swift test --filter SwiftTUITests.TerminalGraphicsProtocolTests
+swiftly run swift test --filter WASISurfaceBridgeTests.WebSurfaceTransportTests
+swiftly run swift test --jobs 4
+Scripts/generate_public_api_inventory.sh --check
+```

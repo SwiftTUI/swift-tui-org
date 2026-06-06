@@ -1,15 +1,15 @@
 # Image Blend Mode Proposal
 
 Status: proposal, re-audited against current `HEAD` on 2026-06-06. The
-first-tranche implementation and cache-hardening follow-on landed in the
-`swift-tui` working tree on 2026-06-06; this proposal remains as design context
-and scope record.
+first-tranche implementation, cache-hardening follow-on, and glyph-aware
+backdrop follow-on landed in the `swift-tui` working tree on 2026-06-06; this
+proposal remains as design context and scope record.
 Implementation plan:
 [`docs/plans/2026-06-06-001-image-blend-mode-implementation-plan.md`](../plans/2026-06-06-001-image-blend-mode-implementation-plan.md).
 Completed follow-on tranches:
-[`cache hardening`](../plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md).
+[`cache hardening`](../plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md),
+[`glyph-aware backdrops`](../plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md).
 Remaining implementation tranches:
-[`glyph-aware backdrops`](../plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md),
 [`ordered layers`](../plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md),
 [`GIF blending`](../plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md),
 and [`native host replay`](../plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md).
@@ -82,9 +82,11 @@ At the time of the audit, the stale parts were narrower:
 
 The shipped behavior is deliberate: terminal graphics protocols and browser or
 native hosts can display high-fidelity images without forcing every image
-through a cell fallback. Blended variants remain first-tranche approximations:
-they blend image pixels against captured cell backgrounds, not glyph-shaped text
-pixels or overlapping image layers.
+through a cell fallback. Blended variants remain deterministic approximations:
+they blend image pixels against captured cell backgrounds plus explicit
+foreground glyph coverage for block, braille, and ordinary text. Exact terminal
+font masks, overlapping image layers, and GIF pass-through byte blending remain
+future work.
 
 ## Desired Contract
 
