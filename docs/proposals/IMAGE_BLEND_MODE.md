@@ -1,15 +1,17 @@
 # Image Blend Mode Proposal
 
-Status: proposal, re-audited against current `HEAD` on 2026-06-06.
+Status: proposal, re-audited against current `HEAD` on 2026-06-06. First-tranche
+implementation landed in the `swift-tui` working tree on 2026-06-06; this
+proposal remains as design context and scope record.
 Implementation plan:
 [`docs/plans/2026-06-06-001-image-blend-mode-implementation-plan.md`](../plans/2026-06-06-001-image-blend-mode-implementation-plan.md).
 
 ## Summary
 
-SwiftTUI currently treats blend modes as terminal-cell compositing and treats
-images as host presentation attachments. The two systems share the same
-resolve -> measure -> place -> draw -> raster pipeline, but image pixels are
-not blended by `View.blendMode(_:)`.
+Before the first implementation, SwiftTUI treated blend modes as terminal-cell
+compositing and treated images as host presentation attachments. The two
+systems shared the same resolve -> measure -> place -> draw -> raster pipeline,
+but image pixels were not blended by `View.blendMode(_:)`.
 
 This proposal scopes the work required for `Image(...).blendMode(...)` and
 `AnimatedImage(...).blendMode(...)` to affect image pixels while preserving the
@@ -17,25 +19,24 @@ current image attachment path for unblended images.
 
 ## 2026-06-06 Currency Audit
 
-The overall direction is still current: image blend modes are not implemented,
-unblended images still travel as host image attachments, and the first practical
-implementation should still precompose blended image variants instead of
+This audit was the pre-implementation check. Its direction is still the shipped
+first tranche: unblended images still travel as host image attachments, and
+blended images are precomposed as host-specific image variants instead of
 introducing a full ordered graphics scene.
 
-The stale parts are narrower:
+At the time of the audit, the stale parts were narrower:
 
-- `ResolvedImageAsset` now carries `cellPixelSize`, but
-  `RasterImageAttachment` still carries only `pixelSize`. The blend metadata
-  either needs to copy the resolved `cellPixelSize` onto the attachment or keep
-  it inside the new compositing payload.
+- `ResolvedImageAsset` carried `cellPixelSize`, but
+  `RasterImageAttachment` carried only `pixelSize`. The implementation copied
+  the resolved `cellPixelSize` onto the attachment and the compositing payload.
 - `ImageAssetRepository` already decodes PNG and JPEG into `DecodedImage` with
   RGBA pixels. A compositor can reuse those decoded pixels instead of inventing
-  a parallel decoder, but the repository is currently located in the runtime
+  a parallel decoder, but the repository was located in the runtime
   terminal cluster and should not become terminal-protocol-specific.
 - WebHost and WASI/browser now share `WebSurfaceFrameEncoder` and the
-  TypeScript `swift-tui-web` runtime. The encoder currently reads attachment
-  bytes directly and tracks `knownImageIDs`; it does not go through
-  `ImageAssetRepository`.
+  TypeScript `swift-tui-web` runtime. Before the first tranche, the encoder read
+  attachment bytes directly and tracked `knownImageIDs`; blended images now use
+  the shared compositor while unblended images keep direct byte pass-through.
 - The web surface transport advertises `png`, `jpeg`, and `gif` byte formats.
   Core/runtime still do not decode GIF through the normal `Image` resolution
   path; GIF pass-through is a web transport behavior, while animated playback
@@ -45,27 +46,31 @@ The stale parts are narrower:
   participate in attachment equality and in host replay decisions, not just in
   compositor cache keys.
 
-## Current Behavior
+## Behavior After First Tranche
 
 - `View.blendMode(_:)` and `View.compositingGroup()` lower into ordered draw
   effects. The rasterizer applies those effects when writing terminal cells.
 - `Image` resolves to an image draw payload. Rasterization records that payload
   as a `RasterImageAttachment` instead of writing pixels into the cell grid.
+- Images under an active blend mode carry `RasterImageCompositing` metadata with
+  the visible cell-background backdrop. The runtime uses that metadata to
+  precompose a blended image variant.
 - Terminal, WebHost, WASI/browser, and SwiftUI host presentation still draw
-  cells first, then draw image attachments on top. WebHost and WASI/browser
-  share the web-surface frame encoder and the `swift-tui-web` canvas runtime.
+  cells first, then draw unblended image attachments or blended image variants
+  on top. WebHost and WASI/browser share the web-surface frame encoder and the
+  `swift-tui-web` canvas runtime.
 - `SwiftTUIAnimatedImage` feeds each pre-composed frame through `Image(data:)`,
   so it inherits the same attachment behavior.
 - Terminal image presentation resolves PNG/JPEG through `ImageAssetRepository`
-  and cached render variants. Web-surface encoding currently reads attachment
-  bytes directly and hashes those bytes into `knownImageIDs`.
+  and cached render variants. Web-surface encoding still passes through
+  unblended image bytes directly, while blended images are emitted as cached PNG
+  variants keyed separately from the source asset.
 
 The shipped behavior is deliberate: terminal graphics protocols and browser or
 native hosts can display high-fidelity images without forcing every image
-through a cell fallback. The cost is that image attachments sit outside the
-cell compositor. A blended background behind an image can still matter for
-transparent image pixels, but the image pixels themselves are not multiplied,
-screened, darkened, or lightened.
+through a cell fallback. Blended variants remain first-tranche approximations:
+they blend image pixels against captured cell backgrounds, not glyph-shaped text
+pixels or overlapping image layers.
 
 ## Desired Contract
 
@@ -156,10 +161,9 @@ The exact type names can change, but the responsibilities should not:
 - The backdrop captures the cells under `visibleBounds` before the image is
   appended.
 - `cellPixelSize` lets the compositor expand the backdrop into the same pixel
-  coordinate space as the scaled image. This value now exists on
-  `ResolvedImageAsset`; the implementation should copy it into the emitted
-  attachment or the compositing payload because `RasterImageAttachment` does not
-  currently carry it.
+  coordinate space as the scaled image. The implementation copies this value
+  from `ResolvedImageAsset` into both the emitted attachment and the compositing
+  payload.
 - `backdropSignature` or equivalent stable identity participates in attachment
   equality, raster damage, host replay, and compositor cache keys.
 

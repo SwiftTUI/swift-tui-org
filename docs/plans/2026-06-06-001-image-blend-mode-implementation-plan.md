@@ -1,11 +1,13 @@
 # Image Blend Mode Implementation Plan
 
 **Date:** 2026-06-06
-**Status:** Draft implementation plan from
-[`docs/proposals/IMAGE_BLEND_MODE.md`](../proposals/IMAGE_BLEND_MODE.md).
+**Status:** First-tranche implementation completed in the `swift-tui` working
+tree on 2026-06-06. Remaining release work is child commit, root submodule pin
+update, and org-level gates.
 **Target repos:** implementation lives primarily in the `swift-tui` submodule,
-with web runtime/transport follow-up in `swift-tui-web`. The coordination root
-owns this plan and the final submodule pin update.
+with web frame encoding handled by the existing WASI/WebHost transport in that
+submodule. The coordination root owns this plan and the final submodule pin
+update.
 
 ## 1. Goal
 
@@ -25,7 +27,25 @@ backdrop blending, overlapping image-layer semantics, web GIF pass-through
 blending, and native canvas/CoreGraphics blend-mode replay remain follow-on
 work.
 
-## 2. Current Anchors
+## Implementation Result
+
+Implemented in the `swift-tui` working tree:
+
+- core `RasterImageCompositing` metadata and backdrop capture for direct image
+  blend and post-`compositingGroup()` image blend ordering;
+- shared runtime image precomposition using existing PNG/JPEG decoding and
+  `Color.composited` blend semantics;
+- terminal Kitty, Sixel, and fallback routing through backdrop-aware blended
+  image variant IDs;
+- WASI/WebHost JSON routing that emits blended PNG variants as normal cached
+  image records;
+- SwiftUI host routing that draws the same precomposed PNG variant;
+- focused tests for metadata, damage, compositor pixels, terminal replay, and
+  web image caching/cropping;
+- public API classification and regenerated public API baselines for the new
+  core compositing types.
+
+## 2. Original Anchors
 
 Core raster and metadata:
 
