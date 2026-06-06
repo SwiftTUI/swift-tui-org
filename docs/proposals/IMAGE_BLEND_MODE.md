@@ -5,6 +5,12 @@ implementation landed in the `swift-tui` working tree on 2026-06-06; this
 proposal remains as design context and scope record.
 Implementation plan:
 [`docs/plans/2026-06-06-001-image-blend-mode-implementation-plan.md`](../plans/2026-06-06-001-image-blend-mode-implementation-plan.md).
+Remaining implementation tranches:
+[`cache hardening`](../plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md),
+[`glyph-aware backdrops`](../plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md),
+[`ordered layers`](../plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md),
+[`GIF blending`](../plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md),
+and [`native host replay`](../plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md).
 
 ## Summary
 

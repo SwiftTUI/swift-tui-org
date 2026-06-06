@@ -1,9 +1,8 @@
 # Image Blend Mode Implementation Plan
 
 **Date:** 2026-06-06
-**Status:** First-tranche implementation completed in the `swift-tui` working
-tree on 2026-06-06. Remaining release work is child commit, root submodule pin
-update, and org-level gates.
+**Status:** First-tranche implementation completed in `swift-tui`, committed,
+and pinned in the coordination root on 2026-06-06 with `//:org_fast` green.
 **Target repos:** implementation lives primarily in the `swift-tui` submodule,
 with web frame encoding handled by the existing WASI/WebHost transport in that
 submodule. The coordination root owns this plan and the final submodule pin

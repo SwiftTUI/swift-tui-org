@@ -87,6 +87,27 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 
 ### Other planning documents
 
+- [plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md](plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md) -
+  later image blend-mode tranche for native host replay after ordered layers:
+  WebHost canvas and SwiftUI/CoreGraphics blend modes behind capability checks,
+  with precomposition retained as fallback.
+- [plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md](plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md) -
+  later image blend-mode tranche for GIF behavior: explicit `AnimatedImage`
+  frame blending coverage, raw GIF pass-through contract decisions, and optional
+  frame decode bridging if the package graph supports it cleanly.
+- [plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md](plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md) -
+  later image blend-mode tranche for ordered presentation layers: sidecar paint
+  order, overlapping image/cell semantics, topology-aware damage, and an
+  experimental ordered replay consumer.
+- [plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md](plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md) -
+  later image blend-mode tranche for glyph-aware backdrop fidelity: foreground
+  and glyph payload capture, block/braille/text coverage approximations, and
+  damage/replay when glyph-only content changes under a blended image.
+- [plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md](plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md) -
+  focused follow-on tranche for image blend-mode cache hardening: bounded
+  blended-variant storage, memory metrics, eviction behavior, host regression
+  coverage, and animated/background churn tests before taking on broader
+  blending fidelity.
 - [plans/2026-06-06-001-image-blend-mode-implementation-plan.md](plans/2026-06-06-001-image-blend-mode-implementation-plan.md) -
   phased implementation plan for image blend-mode compositing: core attachment
   metadata, raster backdrop capture, shared runtime precomposition, terminal and
