@@ -12,18 +12,22 @@ Implemented in `swift-tui`:
 
 - package-scoped `ImageBlendCompositorCachePolicy` defaults and test injection;
 - one unified blended-variant cache entry map shared by decoded and encoded
-  callers;
+  callers, keyed by compact source fingerprints instead of retaining embedded
+  source bytes;
 - deterministic LRU eviction bounded by entry count, decoded-pixel count, and
-  encoded PNG bytes, while retaining the current request's oversize entry;
+  encoded PNG plus retained metadata bytes, while retaining the current
+  request's oversize entry;
 - encoded-only callers no longer retain decoded blended pixels solely to emit
   PNG payload bytes;
 - package-scoped cache occupancy snapshots plus per-compositor
-  `ImageBlendCompositor.variants` memory metrics;
+  `ImageBlendCompositor.variants` memory metrics, including retained metadata
+  bytes and access generation that advances on hits and insertions;
 - focused compositor coverage for cache hits, eviction, encoded/decoded entry
-  sharing, oversize entries, memory metrics, and frame-like source/backdrop
-  churn;
-- host regression coverage through the existing terminal graphics,
-  WASI/WebHost transport, SwiftUI host, and animated-image suites.
+  sharing, embedded-source compaction, oversize entries, memory metrics, and
+  frame-like source/backdrop churn;
+- host eviction coverage for terminal Kitty replay under an injected tiny
+  compositor policy and WASI/WebHost encoding under the default process-level
+  policy, plus SwiftUI host and animated-image regression suites.
 
 ## 1. Goal
 

@@ -74,9 +74,11 @@ At the time of the audit, the stale parts were narrower:
   unblended image bytes directly, while blended images are emitted as cached PNG
   variants keyed separately from the source asset.
 - The blended-image compositor stores decoded and encoded blended variants in a
-  bounded LRU cache per compositor instance, with package-scoped policy
-  injection, occupancy snapshots, and memory metrics for entries, approximate
-  bytes, hits, misses, access generation, and evictions.
+  bounded LRU cache per compositor instance, keyed by compact source
+  fingerprints rather than retained embedded source bytes. Package-scoped policy
+  injection, occupancy snapshots, and memory metrics cover entries, decoded
+  pixels, encoded bytes, retained metadata bytes, hits, misses, access
+  generation, and evictions.
 
 The shipped behavior is deliberate: terminal graphics protocols and browser or
 native hosts can display high-fidelity images without forcing every image
