@@ -6,10 +6,26 @@ Real product bug: any animation driven by autonomous `@State` changes (e.g. a
 `.task` loop) inside a `GeometryReader` never advances on screen.
 **Severity:** High (silent — affected views render their first frame and then
 freeze until the next input/layout event).
-**Status:** Root-caused, not fixed. No clean consumer-level workaround found.
+**Status:** Fixed in the `swift-tui` working tree. No consumer-level workaround required.
 **Discovered while:** making `swift test` for the gallery example terminate
 (the gated runtime/animation suites). Gating shipped at
 `swift-tui-examples@67f24a1`; these tests run under `GALLERY_RUNTIME_TESTS=1`.
+
+---
+
+## Resolution
+
+`GeometryReader` now rebinds its deferred authoring context to the live owner
+`ViewNode` before realizing layout-dependent content, then resolves the realized
+content under that same authoring context. Parent-owned `@State` captured inside
+the `GeometryReader` closure is therefore backed by the correct graph slot, and
+autonomous `.task` mutations route through the scheduler like non-deferred
+content.
+
+The regression is covered by
+`GeometryReaderSurfaceTests.geometryReaderContentPumpsAutonomousTaskStateFrames`,
+which drives the real `RunLoop.run()` with no input until a GeometryReader-hosted
+task counter presents multiple distinct frames.
 
 ---
 
