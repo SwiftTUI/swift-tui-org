@@ -1,10 +1,29 @@
 # Image Blend Mode Cache Hardening Plan
 
 **Date:** 2026-06-06
-**Status:** Tranche 2 follow-on plan after first-tranche image blend-mode
-precomposition; should run before broader fidelity work.
+**Status:** Implemented in the `swift-tui` working tree on 2026-06-06 after the
+first-tranche image blend-mode precomposition work.
 **Target repos:** implementation lives in the `swift-tui` submodule. The
 coordination root owns this plan and any final submodule pin update.
+
+## Implementation Result
+
+Implemented in `swift-tui`:
+
+- package-scoped `ImageBlendCompositorCachePolicy` defaults and test injection;
+- one unified blended-variant cache entry map shared by decoded and encoded
+  callers;
+- deterministic LRU eviction bounded by entry count, decoded-pixel count, and
+  encoded PNG bytes, while retaining the current request's oversize entry;
+- encoded-only callers no longer retain decoded blended pixels solely to emit
+  PNG payload bytes;
+- package-scoped cache occupancy snapshots plus per-compositor
+  `ImageBlendCompositor.variants` memory metrics;
+- focused compositor coverage for cache hits, eviction, encoded/decoded entry
+  sharing, oversize entries, memory metrics, and frame-like source/backdrop
+  churn;
+- host regression coverage through the existing terminal graphics,
+  WASI/WebHost transport, SwiftUI host, and animated-image suites.
 
 ## 1. Goal
 

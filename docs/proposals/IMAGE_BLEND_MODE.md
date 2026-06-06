@@ -1,12 +1,14 @@
 # Image Blend Mode Proposal
 
-Status: proposal, re-audited against current `HEAD` on 2026-06-06. First-tranche
-implementation landed in the `swift-tui` working tree on 2026-06-06; this
-proposal remains as design context and scope record.
+Status: proposal, re-audited against current `HEAD` on 2026-06-06. The
+first-tranche implementation and cache-hardening follow-on landed in the
+`swift-tui` working tree on 2026-06-06; this proposal remains as design context
+and scope record.
 Implementation plan:
 [`docs/plans/2026-06-06-001-image-blend-mode-implementation-plan.md`](../plans/2026-06-06-001-image-blend-mode-implementation-plan.md).
+Completed follow-on tranches:
+[`cache hardening`](../plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md).
 Remaining implementation tranches:
-[`cache hardening`](../plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md),
 [`glyph-aware backdrops`](../plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md),
 [`ordered layers`](../plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md),
 [`GIF blending`](../plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md),
@@ -71,6 +73,10 @@ At the time of the audit, the stale parts were narrower:
   and cached render variants. Web-surface encoding still passes through
   unblended image bytes directly, while blended images are emitted as cached PNG
   variants keyed separately from the source asset.
+- The blended-image compositor stores decoded and encoded blended variants in a
+  bounded LRU cache per compositor instance, with package-scoped policy
+  injection, occupancy snapshots, and memory metrics for entries, approximate
+  bytes, hits, misses, access generation, and evictions.
 
 The shipped behavior is deliberate: terminal graphics protocols and browser or
 native hosts can display high-fidelity images without forcing every image
