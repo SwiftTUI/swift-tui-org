@@ -87,6 +87,11 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 
 ### Other planning documents
 
+- [plans/2026-06-06-001-image-blend-mode-implementation-plan.md](plans/2026-06-06-001-image-blend-mode-implementation-plan.md) -
+  phased implementation plan for image blend-mode compositing: core attachment
+  metadata, raster backdrop capture, shared runtime precomposition, terminal and
+  web host routing, SwiftUI host handling, animated-image coverage, docs, and
+  gates.
 - [plans/2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md](plans/2026-06-02-004-persistent-retained-index-structural-adjacency-proposal.md) -
   execution proposal building out Opportunity 1 of the remaining-opportunities
   register: a persistent, patchable `RetainedFrameIndex` backed by stored
@@ -157,4 +162,6 @@ Investigated design proposals (not yet implemented).
   framework-level options (dependency-aware reuse, portal-host-scoped
   invalidation, opt-in memoized view boundary) to make open/close cheap.
 - [proposals/IMAGE_BLEND_MODE.md](proposals/IMAGE_BLEND_MODE.md) -
-  proposal for image blend-mode compositing support.
+  proposal and current-head audit for image blend-mode compositing support; see
+  [plans/2026-06-06-001-image-blend-mode-implementation-plan.md](plans/2026-06-06-001-image-blend-mode-implementation-plan.md)
+  for the phased execution plan.
