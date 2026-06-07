@@ -29,10 +29,60 @@ Current status checked on 2026-05-31:
 - Pre-tag cross-repo integration remains coordination-only through the overlay
   gates in this repo.
 
-The current `0.0.7` state satisfies the public dependency shape with both
+The current `0.0.18` state satisfies the public dependency shape with both
 published npm packages (`@swifttui/web`, `@swifttui/build`) and GitHub release
 tarballs for the web packages. Consumers may migrate from the tarball URLs to
 the npm package versions when that becomes the preferred public install path.
+
+## Updated On 2026-06-07 For 0.0.18
+
+This release reconciled a version skew: `swift-tui` carried a solo `0.0.17` tag
+(Shape API + breaking `refactor!` Canvas/CanvasContext redesign) that the rest
+of the org never followed, and was 12 commits past it; web/examples/site/root
+were still at `0.0.16`. The lockstep target `0.0.18` is one above the highest
+existing tag (`swift-tui` `0.0.17`). The `bump_version.sh` tool was therefore
+run in two passes (`--from 0.0.16` for the bulk, `--from 0.0.17` for the
+`swift-tui` self-declarations and the already-`0.0.17` `gallery`/`gifeditor`
+example pins).
+
+1. Tagged and pushed all five repos at `0.0.18` (web `733dfb9`, swift-tui
+   `97b599ca`, examples `b80e770`, site `7f892d5`, root `e49c781`).
+2. Published the `swift-tui-web` GitHub `0.0.18` release assets for
+   `@swifttui/web` and `@swifttui/build`, and published both packages to npm
+   (public) at `0.0.18`.
+3. Updated `swift-tui-examples` SwiftPM manifests, every `Package.resolved`, the
+   shared Xcode package reference, README copy, Bun metadata, and WebExample
+   tarball dependencies to `0.0.18`.
+4. Updated `swift-tui-site` release metadata, DocC inputs, package metadata, and
+   visible public links to `0.0.18`.
+5. Bumped each module's declared version (`MODULE.bazel`, `package.json`) to
+   `0.0.18`.
+6. Updated this org root's Bzlmod dependency graph and submodule pins to the
+   `0.0.18` child commits.
+
+## 0.0.18 Verification Recorded
+
+- `swift-tui-web`: `bun run ci` (83 pass, frozen-lockfile install after the
+  `bun.lock` workspace-version sync); `bun pm pack` for both packages
+  (verified the `build` tarball resolved `@swifttui/web` to the concrete
+  `0.0.18`, not `workspace:*`); `npm publish` of `@swifttui/web@0.0.18` and
+  `@swifttui/build@0.0.18`; GitHub `0.0.18` release asset upload of both
+  tarballs (both download URLs return HTTP 200).
+- `swift-tui-examples`: `swift package resolve` regenerated every
+  `Package.resolved` against the `swift-tui` `0.0.18` tag (revision
+  `97b599ca`); the shared Xcode `Package.resolved` was hand-bumped to the same
+  revision/version; `bun install` refreshed `bun.lock` against the `0.0.18` web
+  release tarballs (`--frozen-lockfile` passed); the `bun run check` native
+  build gate was run over all examples.
+- `swift-tui-site`: Website `bun install --frozen-lockfile` passed; `bun run
+  prepare:webexample` printed `prepared swift-tui-examples 0.0.18` with no 404
+  (cloning the examples `0.0.18` tag and fetching the `0.0.18` web tarballs).
+- `swift-tui-org`: `bazel fetch //:org_full`; `bazel test //:org_fast
+  --nocache_test_results` passed 4/4 (`pin_cleanliness`,
+  `public_dependency_contracts`, `repo_registry_contract`, `submodule_status`).
+- Cross-check: `npm view` confirms `@swifttui/web` and `@swifttui/build` at
+  `0.0.18`; `git ls-remote` confirms the `0.0.18` tag on all five repos at the
+  commits above.
 
 ## Updated On 2026-05-31 For 0.0.7
 
