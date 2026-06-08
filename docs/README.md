@@ -103,9 +103,9 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
   frame blending coverage, raw GIF pass-through contract decisions, and optional
   frame decode bridging if the package graph supports it cleanly.
 - [plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md](plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md) -
-  later image blend-mode tranche for ordered presentation layers: sidecar paint
-  order, overlapping image/cell semantics, topology-aware damage, and an
-  experimental ordered replay consumer.
+  implemented image blend-mode tranche for ordered presentation layers: package
+  sidecar paint order, overlapping image/cell semantics, topology-aware damage,
+  and debug layer descriptions; host-native replay remains deferred.
 - [plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md](plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md) -
   later image blend-mode tranche for glyph-aware backdrop fidelity: foreground
   and glyph payload capture, block/braille/text coverage approximations, and

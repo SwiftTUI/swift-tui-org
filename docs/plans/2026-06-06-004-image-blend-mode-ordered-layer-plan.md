@@ -1,8 +1,8 @@
 # Image Blend Mode Ordered Layer Plan
 
 **Date:** 2026-06-06
-**Status:** Follow-on implementation plan after cache hardening and glyph-aware
-backdrops.
+**Status:** Implemented in `swift-tui` on 2026-06-08; follow-on host-native
+replay remains in the native host replay tranche.
 **Target repos:** implementation primarily in `swift-tui`, with
 `swift-tui-web` changes only if the web transport protocol changes. Root owns
 this plan and final pin updates.
@@ -34,8 +34,10 @@ The goal is a narrow ordered layer model, not a general Skia/Metal scene graph.
 
 Relevant `swift-tui` files:
 
-- `Sources/SwiftTUICore/Raster/RasterSurface.swift`
+- `Sources/SwiftTUICore/Raster/RasterTypes.swift`
   - current host boundary is final cells plus image attachments.
+- `Sources/SwiftTUICore/Raster/RasterPresentationLayerRecorder.swift`
+  - records package-scoped ordered cell/image paint events during rasterization.
 - `Sources/SwiftTUICore/Raster/Rasterizer+Paint.swift`
   - writes cells immediately and appends image attachments.
 - `Sources/SwiftTUICore/Raster/RasterSurfaceDamageDiff.swift`
@@ -69,9 +71,11 @@ public enum RasterPresentationLayerContent: Equatable, Sendable {
 }
 ```
 
-Exact public/private shape is open. If possible, keep this package/internal in
-the first ordered-layer tranche. Only expose public API if host integration
-requires it.
+The shipped shape is package-scoped. `RasterSurface` carries
+`presentationLayers` as a package-level sidecar; public initializers still
+default to the collapsed compatibility surface, and public `RasterSurface`
+equality remains scoped to final cells, attachments, image attachments, and
+metadata.
 
 ### 4.2 Compatibility Boundary
 
@@ -121,9 +125,34 @@ Recommended sequence:
 4. Only after correctness tests pass, let later host-specific tranches consume
    the ordered layers.
 
+## 4.6 Implemented Scope
+
+The 2026-06-08 implementation landed the sidecar model without switching
+production host renderers:
+
+- added package-scoped `RasterSurfaceFragment`, `RasterPresentationLayer`, and
+  `RasterPresentationLayerContent` types;
+- added a package-scoped `RasterSurface.presentationLayers` sidecar while
+  preserving public source compatibility for existing `RasterSurface`
+  initializers;
+- recorded compact cell fragments and image attachments in paint order through
+  the rasterizer, including fills, text, borders, canvas output, foreign
+  surfaces, compositing-group flattening, and active blend effects;
+- added compact `SnapshotRenderer` layer descriptions for debug inspection;
+- made `RasterSurfaceDamageDiff` treat presentation-layer topology changes as
+  dirty row signals while leaving ordinary final-cell diffs narrow;
+- kept terminal, WebHost/WASI, and SwiftUI host output on the existing collapsed
+  cells-plus-images compatibility path.
+
+The package/test-only replay consumer in Phase 4 was intentionally left for a
+later host-consumption tranche. The implemented sidecar and tests provide the
+oracle data that consumer will need.
+
 ## 5. Phased Execution
 
 ### Phase 0 - Characterization Tests
+
+Status: complete.
 
 - Add current-behavior tests for overlapping cells/images that document the
   first-tranche limitation.
@@ -141,6 +170,8 @@ swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests
 
 ### Phase 1 - Layer Sidecar Model
 
+Status: complete.
+
 - Add ordered layer types.
 - Add `RasterSurface.presentationLayers` or equivalent sidecar with a default
   empty/compatibility value.
@@ -149,6 +180,8 @@ swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests
 
 ### Phase 2 - Rasterizer Recording
 
+Status: complete.
+
 - Record ordered cell fragments and image attachments during paint.
 - Preserve final collapsed cells and existing image attachments.
 - Include compositing group boundaries/effects only to the extent needed for
@@ -156,17 +189,23 @@ swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests
 
 ### Phase 3 - Snapshot and Damage Semantics
 
+Status: complete.
+
 - Add compact ordered-layer descriptions for debugging.
 - Add topology signatures to damage comparison.
 - Ensure final-cell-only hosts still receive valid dirty rows.
 
 ### Phase 4 - Experimental Consumer
 
+Status: deferred to the host-native replay tranche.
+
 - Add a package/test-only ordered replay consumer that can compare ordered layer
   replay against final collapsed surfaces for non-overlap cases.
 - Use this as the oracle before changing production host renderers.
 
 ### Phase 5 - Docs and Gates
+
+Status: complete.
 
 - Update render-pipeline DocC to describe the sidecar and compatibility model.
 - Keep public authoring docs conservative until host-native replay ships.
@@ -185,6 +224,15 @@ cd /Users/adamz/Developer/swift-tui-org
 mise exec -- bazel test //:org_fast
 ```
 
+Completed verification on 2026-06-08:
+
+- `swiftly run swift test --filter SwiftTUICoreTests.RasterizerTests --jobs 4`
+- `swiftly run swift test --filter SwiftTUICoreTests.RasterSurfaceDamageDiffTests --jobs 4`
+- `swiftly run swift test --filter SwiftTUITests.TerminalGraphicsProtocolTests --jobs 4`
+- `./Scripts/generate_public_api_inventory.sh --check`
+- `swiftly run swift test --jobs 4`
+- `mise exec -- bazel test //:org_fast` after recording the root submodule pin
+
 ## 6. Non-Goals
 
 - Switching WebHost/SwiftUI to native blend modes in this tranche.
@@ -199,4 +247,3 @@ mise exec -- bazel test //:org_fast
 - Image/cell/image overlap cases have explicit order tests.
 - Layer topology changes participate in damage or replay decisions.
 - Existing final-surface output remains behaviorally compatible.
-

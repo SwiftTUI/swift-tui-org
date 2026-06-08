@@ -1,16 +1,17 @@
 # Image Blend Mode Proposal
 
 Status: proposal, re-audited against current `HEAD` on 2026-06-06. The
-first-tranche implementation, cache-hardening follow-on, and glyph-aware
-backdrop follow-on landed in the `swift-tui` working tree on 2026-06-06; this
-proposal remains as design context and scope record.
+first-tranche implementation, cache-hardening follow-on, glyph-aware backdrop
+follow-on, and ordered presentation-layer follow-on landed in the `swift-tui`
+working tree by 2026-06-08; this proposal remains as design context and scope
+record.
 Implementation plan:
 [`docs/plans/2026-06-06-001-image-blend-mode-implementation-plan.md`](../plans/2026-06-06-001-image-blend-mode-implementation-plan.md).
 Completed follow-on tranches:
 [`cache hardening`](../plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md),
-[`glyph-aware backdrops`](../plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md).
+[`glyph-aware backdrops`](../plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md),
+and [`ordered layers`](../plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md).
 Remaining implementation tranches:
-[`ordered layers`](../plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md),
 [`GIF blending`](../plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md),
 and [`native host replay`](../plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md).
 
@@ -54,7 +55,7 @@ At the time of the audit, the stale parts were narrower:
   participate in attachment equality and in host replay decisions, not just in
   compositor cache keys.
 
-## Behavior After First Tranche
+## Behavior After Completed Tranches
 
 - `View.blendMode(_:)` and `View.compositingGroup()` lower into ordered draw
   effects. The rasterizer applies those effects when writing terminal cells.
@@ -79,14 +80,23 @@ At the time of the audit, the stale parts were narrower:
   injection, occupancy snapshots, and memory metrics cover entries, decoded
   pixels, encoded bytes, retained metadata bytes, hits, misses, access
   generation, and evictions.
+- `RasterSurface` carries a package-scoped ordered presentation-layer sidecar
+  that records compact cell fragments and image attachments in raster paint
+  order. Existing hosts still consume the collapsed cell grid plus
+  `imageAttachments`, but package tests and future host replay work can inspect
+  image-over-image and cell/image authoring order without replacing the stable
+  host boundary.
+- Presentation damage now includes ordered-layer topology changes as dirty row
+  signals, while ordinary text/content diffs still use the final collapsed cell
+  grid and image attachment equality.
 
 The shipped behavior is deliberate: terminal graphics protocols and browser or
 native hosts can display high-fidelity images without forcing every image
 through a cell fallback. Blended variants remain deterministic approximations:
 they blend image pixels against captured cell backgrounds plus explicit
 foreground glyph coverage for block, braille, and ordinary text. Exact terminal
-font masks, overlapping image layers, and GIF pass-through byte blending remain
-future work.
+font masks, host-native ordered replay, and GIF pass-through byte blending
+remain future work.
 
 ## Desired Contract
 
