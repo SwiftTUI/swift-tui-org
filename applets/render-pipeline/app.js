@@ -1,3 +1,17 @@
+"use strict";
+
+/*
+ * SwiftTUI Render Pipeline — developer walkthrough.
+ *
+ * All content is data-first so the interactive explorer and the static diagrams
+ * cannot drift apart. Every `source` string is a repo-relative `path:line`
+ * reference into the checked-out `swift-tui` package, verified against HEAD.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Authored example                                                    */
+/* ------------------------------------------------------------------ */
+
 const viewLines = [
   "import SwiftTUI",
   "",
@@ -8,265 +22,392 @@ const viewLines = [
   "      Divider()",
   '      ProgressView("Release", value: 18, total: 24)',
   '      LabeledContent("Owner", value: "infra")',
-  '      LabeledContent("Target", value: "terminal")',
   "      Button(\"Ship\") {",
-  "        // state mutation schedules another frame",
+  "        queued += 1   // a state write — schedules a frame",
   "      }",
   "    }",
   "    .padding(1)",
-  "    .border(.terminalAccent())",
+  "    .border(.rounded)",
   "  }",
   "}",
-  "",
-  "@main",
-  "struct BuildSummaryApp: App {",
-  "  var body: some Scene {",
-  '    WindowGroup("Build Summary") {',
-  "      BuildSummary()",
-  "    }",
-  "  }",
-  "}",
-  "// SceneSession.run creates the interactive run loop.",
-  "// The terminal host presents committed frame artifacts.",
 ];
 
-const runtimeStages = [
+/* ------------------------------------------------------------------ */
+/* Phase products — the data model (owned by SwiftTUICore)             */
+/* ------------------------------------------------------------------ */
+
+const PHASES = [
   {
-    id: "head",
-    number: "1",
-    title: "head",
+    key: "resolve",
+    type: "ResolvedNode",
+    field: "resolvedTree",
+    question: "What is in the tree, and who owns it?",
+    owns:
+      "Authored bodies lowered to nodes, plus the identity projection, StructuralPath, optional entity identity, state ownership, merged environment, view metadata, and runtime registrations.",
+  },
+  {
+    key: "measure",
+    type: "MeasuredNode",
+    field: "measuredTree",
+    question: "How big does each subtree want to be?",
+    owns:
+      "Subtree sizes negotiated by LayoutEngine under a ProposedSize. No final coordinates exist yet.",
+  },
+  {
+    key: "place",
+    type: "PlacedNode",
+    field: "placedTree",
+    question: "Where does everything land?",
+    owns:
+      "Final integer-cell frames, content bounds, and placement-time metadata. This is the authority for interaction regions.",
+  },
+  {
+    key: "semantics",
+    type: "SemanticSnapshot",
+    field: "semanticSnapshot",
+    question: "How do focus, pointers, and accessibility route?",
+    owns:
+      "Focus, interaction, action, selection, scroll, named coordinate spaces, and pointer routing — derived from the placed tree.",
+  },
+  {
+    key: "draw",
+    type: "DrawNode",
+    field: "drawTree",
+    question: "What paint commands describe the frame?",
+    owns:
+      "Placed nodes lowered into draw commands: borders, backgrounds, effects, and payload paint instructions.",
+  },
+  {
+    key: "raster",
+    type: "RasterSurface",
+    field: "rasterSurface",
+    question: "What does the cell grid look like?",
+    owns:
+      "Styled terminal cells, continuation-cell handling, and image attachments. Host-neutral grid data — still not terminal bytes.",
+  },
+  {
+    key: "commit",
+    type: "CommitPlan",
+    field: "commitPlan",
+    question: "What side effects must the runtime apply?",
+    owns:
+      "Lifecycle entries, handler installations, the semantic snapshot, and transaction work the runtime applies after the products are published.",
+  },
+];
+
+const phaseIndex = Object.fromEntries(PHASES.map((p, i) => [p.key, i]));
+
+/* ------------------------------------------------------------------ */
+/* Runtime stages — the scheduling model (owned by SwiftTUIRuntime)    */
+/* ------------------------------------------------------------------ */
+
+const STAGES = [
+  {
+    key: "head",
     product: "FrameHeadDraft",
-    color: "var(--cyan)",
-    summary:
-      "DefaultRendererFrameHeadCoordinator prepares resolve inputs, evaluates the graph frontier, installs presentation portal state, and returns a FrameHeadDraft.",
-    codeLines: [3, 4, 5, 6, 7],
-    phaseIndexes: [0],
-    terminalStatus: "building frame head",
-    terminal: [
-      "FRAME 042  stage: head",
-      "",
-      "BuildSummary",
-      "  VStack",
-      "    Text(\"Deploy Queue\")",
-      "    Divider",
-      "    ProgressView",
-      "    LabeledContent",
-      "",
-      "No terminal cells exist yet.",
-    ],
+    covers: ["resolve"],
+    codeLines: [3, 4, 5, 6, 7, 8, 9],
+    actor: "main",
+    headline: "Resolve the dirty frontier into a draft.",
+    consumes: "Resolve context, proposal, environment, invalidation set, reuse policy.",
+    produces:
+      "A FrameHeadDraft: the resolved tree, frame-tail input, staged transaction, render generation, timing clock, and frame context for commit.",
+    does:
+      "Allocates a render generation, builds a FrameHeadTransaction, creates checkpoints for abortable frames, evaluates the dirty graph frontier (or the root), installs the presentation-portal evaluator, and snapshots retained frame-tail inputs from the previous committed frame.",
+    not:
+      "Does not measure, place, draw, or touch the terminal. Side effects are staged in the transaction so the frame can still be aborted cleanly.",
+    source:
+      "swift-tui/Sources/SwiftTUIRuntime/Rendering/DefaultRendererFrameHeadCoordinator.swift:26",
+    status: "resolving frontier",
   },
   {
-    id: "animationInjection",
-    number: "2",
-    title: "animationInjection",
-    product: "FrameHeadDraft",
-    color: "var(--green)",
-    summary:
-      "AnimationInjectionStage samples animation state and updates resolved metadata before downstream layout, semantics, and drawing read the tree.",
-    codeLines: [8, 9, 10, 11, 12],
-    phaseIndexes: [0],
-    terminalStatus: "sampling animation",
-    terminal: [
-      "FRAME 042  stage: animationInjection",
-      "",
-      "transaction:",
-      "  animation: inherit",
-      "  batch: none",
-      "",
-      "Resolved metadata is updated.",
-      "Frame tail can now read stable inputs.",
-    ],
+    key: "animationInjection",
+    product: "FrameHeadDraft (updated)",
+    covers: [],
+    codeLines: [10, 11, 12],
+    actor: "main",
+    headline: "Sample animation and update the draft.",
+    consumes: "The FrameHeadDraft plus the animation controller's state for this frame.",
+    produces: "The same draft with sampled animation metadata applied.",
+    does:
+      "Samples the animation controller, applies the sampled transaction, and updates resolved metadata before any downstream work reads it. Reports whether animation is still pending and whether the frame can be elided before the tail runs.",
+    not:
+      "Introduces no new phase product. It adjusts the in-flight draft — this is a scheduling stage, not a data stage.",
+    source: "swift-tui/Sources/SwiftTUIRuntime/Rendering/RuntimeRenderPipeline.swift:10",
+    status: "sampling animation",
   },
   {
-    id: "latePreferenceReconciliation",
-    number: "3",
-    title: "latePreferenceReconciliation",
-    product: "FrameTailLayoutOutput",
-    color: "var(--amber)",
-    summary:
-      "Late preference reconciliation runs layout work that may feed root-level presentation state back into the effective tail input.",
-    codeLines: [5, 8, 9, 15, 16],
-    phaseIndexes: [1, 2],
-    terminalStatus: "measuring and placing",
-    terminal: [
-      "FRAME 042  stage: layout",
-      "",
-      "proposal: 80 x 24 cells",
-      "measured:",
-      "  VStack        24 x 8",
-      "  ProgressView  22 x 1",
-      "",
-      "placed:",
-      "  origin: (1, 1)",
-      "  size:   24 x 8",
-    ],
+    key: "latePreferenceReconciliation",
+    product: "Reconciled tail input",
+    covers: [],
+    codeLines: [5, 13, 14],
+    actor: "main",
+    headline: "Let placement-dependent state settle before the tail.",
+    consumes: "The draft and any root-level presentation state that depends on placement.",
+    produces: "An effective tail input the fused tail can read consistently.",
+    does:
+      "Some authored preferences depend on placement or root presentation state. This stage updates that state before the final tail reads the effective tree, re-running the relevant work rather than publishing inconsistent artifacts.",
+    not:
+      "Also introduces no new phase product. Like animation injection, it exists to keep the data model consistent across the off-actor boundary that follows.",
+    source: "swift-tui/Sources/SwiftTUIRuntime/Rendering/LatePreferenceReconciliation.swift:44",
+    status: "reconciling preferences",
   },
   {
-    id: "fusedFrameTail",
-    number: "4",
-    title: "fusedFrameTail",
-    product: "SemanticSnapshot + DrawNode + RasterSurface",
-    color: "var(--amber)",
-    summary:
-      "The fused tail computes measure, place, semantics, draw, and raster as one scheduling node while preserving distinct typed products.",
-    codeLines: [6, 7, 8, 9, 10, 11],
-    phaseIndexes: [1, 2, 3, 4, 5],
-    terminalStatus: "raster surface ready",
-    terminal: [
-      "+------------------------+",
-      "| Deploy Queue           |",
-      "|------------------------|",
-      "| Release [#############-] |",
-      "| Owner       infra      |",
-      "| Target      terminal   |",
-      "| [ Ship ]               |",
-      "+------------------------+",
-      "",
-      "RasterSurface: styled cell grid",
-    ],
+    key: "fusedFrameTail",
+    product: "MeasuredNode → … → RasterSurface",
+    covers: ["measure", "place", "semantics", "draw", "raster"],
+    codeLines: [5, 6, 7, 8, 9, 13, 14],
+    actor: "tail",
+    headline: "Compute five products as one scheduling node.",
+    consumes: "The resolved tree and retained frame-tail inputs.",
+    produces:
+      "Five distinct products in order — measure, place, semantics, draw, raster — plus timing and reuse diagnostics.",
+    does:
+      "Runs measure → place → semantics → draw → raster. May run inline or on a frame-tail worker depending on strategy and platform. This is the performance node that can leave the main actor because every input is already resolved.",
+    not:
+      "Does not collapse the products into one type. The five values keep distinct ownership and diagnostics; only their scheduling is fused.",
+    source:
+      "swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailRenderer+InlineStages.swift:4",
+    status: "raster surface ready",
   },
   {
-    id: "commit",
-    number: "5",
-    title: "commit",
+    key: "commit",
     product: "FrameArtifacts + CommitPlan",
-    color: "var(--magenta)",
-    summary:
-      "Commit resolves completed-frame policy, publishes graph/runtime state, packages lifecycle and handlers, then RunLoop presents the committed artifacts.",
-    codeLines: [11, 12, 20, 21, 22],
-    phaseIndexes: [6],
-    terminalStatus: "presented to host",
-    terminal: [
-      "+------------------------+",
-      "| Deploy Queue           |",
-      "|------------------------|",
-      "| Release [#############-] |",
-      "| Owner       infra      |",
-      "| Target      terminal   |",
-      "| [ Ship ]               |",
-      "+------------------------+",
-      "",
-      "TerminalHost writes planned escape sequences.",
-    ],
+    covers: ["commit"],
+    codeLines: [3, 10, 11],
+    actor: "main",
+    headline: "Apply policy, publish state, hand off.",
+    consumes: "The completed draft and tail output.",
+    produces:
+      "Either committed FrameArtifacts, or a decision to drop, cancel, or elide the frame.",
+    does:
+      "Turns a completed draft into a committed candidate: packages lifecycle events, semantic handlers, runtime registrations, transaction effects, and retained tail state, then publishes graph and runtime state on the main actor.",
+    not:
+      "Does not write terminal bytes or browser frames. Presentation is owned by RunLoop after frame acquisition succeeds.",
+    source:
+      "swift-tui/Sources/SwiftTUIRuntime/Rendering/DefaultRenderer+CompletedFrameCandidates.swift:57",
+    status: "committed → RunLoop",
   },
 ];
 
-const propagationSteps = [
+/* Cumulative phase products available after each runtime stage. */
+function productsAfterStage(stageIndex) {
+  const available = new Set();
+  for (let i = 0; i <= stageIndex; i += 1) {
+    for (const phaseKey of STAGES[i].covers) available.add(phaseKey);
+  }
+  return available;
+}
+
+/* Honest, stage-by-stage product preview (no fictional pixels). */
+const stagePreview = {
+  head: [
+    "resolved tree (ResolvedNode)",
+    "  VStack #1",
+    '    Text("Deploy Queue").bold()',
+    "    Divider",
+    "    ProgressView  value 18 / 24",
+    "    LabeledContent",
+    "    Button(\"Ship\")",
+    "",
+    "no geometry yet · no cells yet",
+  ],
+  animationInjection: [
+    "transaction:",
+    "  animation: inherit",
+    "  batch: none",
+    "",
+    "resolved metadata updated",
+    "frame can be elided if off-screen only",
+    "",
+    "still no geometry · no cells",
+  ],
+  latePreferenceReconciliation: [
+    "effective tail input ready",
+    "",
+    "root presentation state settled;",
+    "placement-dependent preferences",
+    "will read a consistent tree.",
+    "",
+    "tail may now run off the main actor.",
+  ],
+  fusedFrameTail: [
+    "measure → place → semantics → draw → raster",
+    "",
+    "╭────────────────────────╮",
+    "│ Deploy Queue           │",
+    "│ ────────────────────── │",
+    "│ Release ▕███████████▏   │",
+    "│ Owner            infra │",
+    "│ [ Ship ]               │",
+    "╰────────────────────────╯",
+    "",
+    "RasterSurface: styled 26×8 cell grid",
+  ],
+  commit: [
+    "FrameArtifacts committed",
+    "  resolvedTree · measuredTree · placedTree",
+    "  semanticSnapshot · drawTree · rasterSurface",
+    "  commitPlan · diagnostics",
+    "",
+    "handed to RunLoop.presentCommittedFrame",
+    "→ host writes bytes below this line",
+  ],
+};
+
+/* ------------------------------------------------------------------ */
+/* Change propagation — the corrected invalidation story               */
+/* ------------------------------------------------------------------ */
+
+const propagation = [
   {
-    title: "State or event changes",
+    title: "A write records intent",
     body:
-      "@State writes enter State.wrappedValue, then ViewNode.setStateSlot queues graph dirtiness and asks the invalidator for a frame.",
-    color: "var(--cyan)",
-    points: [
-      ["18%", "58%"],
-      ["50%", "44%"],
-      ["78%", "58%"],
-    ],
+      "queued += 1 lands in the @State slot via ViewNode.setStateSlot. That call does two things: it marks the owning graph node dirty (queueDirtyForStateChange) and asks the invalidator for a frame. It does not render.",
+    source: "swift-tui/Sources/SwiftTUICore/Resolve/ViewNode.swift:205",
   },
   {
-    title: "Scheduler coalesces",
+    title: "The scheduler coalesces",
     body:
-      "FrameScheduler.requestInvalidation records invalidated identities, wake causes, animation request, and intent count before waking the run loop.",
-    color: "var(--green)",
-    points: [
-      ["20%", "44%"],
-      ["39%", "62%"],
-      ["60%", "38%"],
-      ["80%", "60%"],
-    ],
+      "The invalidator is a FrameScheduler. requestInvalidation(of:) inserts the .invalidation wake cause, unions the identity into the pending set, bumps an intent counter, and wakes the loop. Input, signals, external wakes, and deadlines feed the same scheduler.",
+    source: "swift-tui/Sources/SwiftTUICore/Pipeline/Scheduler.swift:135",
   },
   {
-    title: "RunLoop consumes",
+    title: "One frame is consumed",
     body:
-      "FrameScheduler.consumeReadyFrame returns one ScheduledFrame and clears pending sets, so multiple mutations can become one render intent.",
-    color: "var(--amber)",
-    points: [
-      ["22%", "62%"],
-      ["42%", "36%"],
-      ["58%", "54%"],
-      ["78%", "42%"],
-    ],
+      "consumeReadyFrame drains every pending cause and identity into a single ScheduledFrame, then resets the pending sets. Ten writes between two consume calls become one frame — and intentRequestCount records how many intents merged.",
+    source: "swift-tui/Sources/SwiftTUICore/Pipeline/Scheduler.swift:186",
   },
   {
-    title: "Dirty frontier renders",
+    title: "The dirty frontier renders",
     body:
-      "ViewGraph invalidation marks affected nodes dirty. Retained reuse can skip disjoint subtrees when the invalidation summary proves they are safe.",
-    color: "var(--magenta)",
-    points: [
-      ["18%", "38%"],
-      ["34%", "58%"],
-      ["52%", "34%"],
-      ["72%", "56%"],
-      ["86%", "39%"],
-    ],
+      "The run loop runs head with the frame's invalidatedIdentities. ViewGraph invalidates and evaluates only the affected nodes; retained reuse can skip disjoint subtrees the invalidation summary proves are safe.",
+    source: "swift-tui/Sources/SwiftTUICore/Resolve/ViewGraph.swift:635",
   },
 ];
 
-const callpath = [
+const wakeCauses = ["input", "invalidation", "signal", "external", "deadline"];
+
+/* ------------------------------------------------------------------ */
+/* Isolation                                                           */
+/* ------------------------------------------------------------------ */
+
+const isolation = {
+  main: {
+    title: "Main actor",
+    reason: "Evaluates authored bodies, mutates live runtime state, publishes user-visible effects.",
+    items: [
+      "resolve (evaluating View bodies)",
+      "graph, state, focus, lifecycle, task coordination",
+      "transaction and registration publication",
+      "the commit boundary and presentation",
+    ],
+  },
+  tail: {
+    title: "Frame-tail worker (eligible)",
+    reason: "Pure over already-resolved products, so it can move off the main actor when the strategy supports it.",
+    items: [
+      "measure",
+      "place",
+      "semantics extraction",
+      "draw lowering",
+      "raster",
+    ],
+  },
+};
+
+const invariants = [
+  "Resolve and commit stay on the main actor — they evaluate authored bodies, mutate runtime state, and publish user-visible effects.",
+  "Frame-head side effects are staged in a FrameHeadTransaction; aborting, cancelling, or dropping a frame must leak no registrations, graph changes, animation, portal, or observation state.",
+  "The frame tail may be scheduled as one fused stage, but the phase products stay distinct and ordered.",
+  "Host-facing damage is derived against the previous raster surface actually presented to that host — never against renderer-private retained state.",
+  "Presentation layers consume committed frame contracts; they do not reach into renderer-private retained state.",
+];
+
+/* ------------------------------------------------------------------ */
+/* Four fates of a frame                                               */
+/* ------------------------------------------------------------------ */
+
+const fates = [
   {
-    name: "View.body",
-    role: "authored input",
-    detail:
-      "The developer writes SwiftTUI View values. Resolver.resolve and graph evaluation lower that body into runtime products.",
-    source: "swift-tui/Sources/SwiftTUIViews/Foundation/ViewProtocols.swift:22",
+    name: "Committed",
+    body:
+      "The candidate becomes FrameArtifacts: products published, graph and runtime state advanced, ready for presentation.",
+    detail: "The normal path. Everything downstream assumes this happened.",
   },
   {
-    name: "App.main",
-    role: "launch",
-    detail:
-      "The SwiftTUI App entry point routes to a terminal or hosted launch path before scene selection begins.",
-    source: "swift-tui/Sources/SwiftTUI/App.swift:29",
+    name: "Dropped",
+    body:
+      "Completed-frame policy can discard a visual-only candidate when a newer render intent already supersedes it.",
+    detail: "Why a burst of state changes can resolve to fewer presented frames than writes.",
   },
   {
-    name: "SceneSession.run",
-    role: "session setup",
-    detail:
-      "Builds RunLoop with the root identity, presentation surface, input reader, scheduler, state container, focus tracker, environment, and root view builder.",
-    source: "swift-tui/Sources/SwiftTUIRuntime/Scenes/SceneSession.swift:242",
+    name: "Cancelled",
+    body:
+      "A queued async tail can be cancelled before it starts when a newer frame makes its output irrelevant.",
+    detail: "The cancellation points are exactly the runtime-stage boundaries.",
   },
   {
-    name: "RunLoop.run",
-    role: "interactive driver",
-    detail:
-      "Installs invalidators, enables raw mode for TUI output, requests the initial root invalidation, then renders pending frames.",
-    source: "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop.swift:783",
-  },
-  {
-    name: "renderPendingFramesAsync",
-    role: "frame coalescing",
-    detail:
-      "Consumes ready scheduled frames, handles focus convergence, acquires artifacts, and applies the committed frame.",
-    source: "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop+Rendering.swift:228",
-  },
-  {
-    name: "renderAsyncCancellableEliding",
-    role: "renderer entry",
-    detail:
-      "Creates the frame head and delegates cancellable stage execution to RuntimeRenderPipeline.",
-    source: "swift-tui/Sources/SwiftTUIRuntime/SwiftTUI.swift:293",
-  },
-  {
-    name: "RuntimeRenderPipeline.renderCancellable",
-    role: "stage executor",
-    detail:
-      "Walks head, animationInjection, latePreferenceReconciliation, fusedFrameTail, and commit in orderedComposition order.",
-    source: "swift-tui/Sources/SwiftTUIRuntime/Rendering/RuntimeRenderPipeline.swift:223",
-  },
-  {
-    name: "applyAcquiredFrame",
-    role: "post-render boundary",
-    detail:
-      "Merges lifecycle carry-forward, updates semantics, derives host-facing damage, presents the frame, applies lifecycle work, and flushes follow-up invalidations.",
-    source: "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop+Rendering.swift:105",
-  },
-  {
-    name: "presentCommittedFrame",
-    role: "host handoff",
-    detail:
-      "Presentation dispatch chooses semantic host frames, damage-aware raster presentation, or plain raster presentation below the committed-frame boundary.",
-    source: "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop+Presentation.swift:15",
+    name: "Elided",
+    body:
+      "An animation-deadline frame with no visible drawn effect commits animation state without running the tail or presenting.",
+    detail: "Animation progresses without paying for a frame nobody would see.",
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Damage + handoff                                                    */
+/* ------------------------------------------------------------------ */
+
+const damageRules = [
+  { signal: "nil damage", meaning: "Repaint the full surface — the previous surface is unavailable or incompatible." },
+  { signal: "empty damage", meaning: "Non-nil but empty: no visible raster cells changed." },
+  { signal: "row / range damage", meaning: "Relative to the previous surface actually presented to this same host." },
+];
+
+const handoff = [
+  {
+    title: "FrameArtifacts",
+    body: "Committed products leave the renderer as one immutable data bundle.",
+  },
+  {
+    title: "RunLoop.applyAcquiredFrame",
+    body: "Merges lifecycle carry-forward, updates semantics, derives host-facing damage, then presents.",
+  },
+  {
+    title: "Output mode branch",
+    body: "json and accessible modes write command-oriented output; tui and hosted modes present a raster surface.",
+  },
+  {
+    title: "SemanticHostFrame",
+    body: "A semantic host receives raster, semantics, focused identity, host-facing damage, and preferred size.",
+  },
+  {
+    title: "PresentationPlan",
+    body: "A terminal-native surface plans a full or incremental repaint from its capabilities and the damage.",
+  },
+  {
+    title: "Host bytes",
+    body: "Escape sequences, synchronized-output wrappers, image-protocol replay, and UTF-8 text reach the terminal.",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Diagnostics                                                         */
+/* ------------------------------------------------------------------ */
+
+const diagnostics = [
+  { label: "Phase timings", body: "resolve, measure, place, semantics, draw, raster, and commit durations." },
+  { label: "Worker timing", body: "frame-tail enqueue, compute, and completion; main-actor blocked and suspended time." },
+  { label: "Scheduling", body: "render and desired generation, wake causes, coalescing counts, focus-sync rerenders." },
+  { label: "Animation", body: "animation-controller active and pending state for the frame." },
+  { label: "Disposition", body: "drop eligibility and the committed-frame outcome (committed / dropped / cancelled / elided)." },
+  { label: "Presentation", body: "presentation metrics and presentation duration after handoff." },
+];
+
+/* ------------------------------------------------------------------ */
+/* Source deep-dive                                                    */
+/* ------------------------------------------------------------------ */
 
 const sourceTabs = [
   {
@@ -274,7 +415,7 @@ const sourceTabs = [
     label: "stage order",
     title: "RuntimeRenderStageName",
     file: "swift-tui/Sources/SwiftTUIRuntime/Rendering/RuntimeRenderPipeline.swift:10",
-    role: "Runtime scheduling boundary",
+    role: "The scheduling model, enforced by the type system",
     snippet: [
       "enum RuntimeRenderStageName: String, CaseIterable, Sendable {",
       "  case head",
@@ -292,19 +433,19 @@ const sourceTabs = [
       "  }",
       "}",
     ],
-    hot: [1, 2, 3, 4, 5, 7],
+    hot: [1, 2, 3, 4, 5, 8],
     notes: [
-      "The runtime pipeline is a scheduling model, not a replacement for the phase-product model.",
-      "The executor loops over orderedComposition and switches exhaustively on each stage.",
-      "Adding or reordering stages changes this enum and forces each executor path to compile against the new order.",
+      "Each render* entry point walks orderedComposition and dispatches every stage through an exhaustive switch.",
+      "Stage order is therefore a structural property of the executor loop — reordering a case forces the switches to be updated, so the order cannot drift silently.",
+      "There is no stored stage list and no canonical-order precondition to guard; the loop is the contract.",
     ],
   },
   {
     id: "head",
-    label: "frame head",
+    label: "head",
     title: "computeFrameHead",
     file: "swift-tui/Sources/SwiftTUIRuntime/Rendering/DefaultRendererFrameHeadCoordinator.swift:26",
-    role: "Resolve and draft setup",
+    role: "Where resolve happens and the draft is staged",
     snippet: [
       "func computeFrameHead<V: View>(",
       "  _ root: V,",
@@ -314,12 +455,7 @@ const sourceTabs = [
       ") -> FrameHeadDraft {",
       "  let renderGeneration = renderGenerationSequencer.next()",
       "  var resolveContext = preparedResolveContext(context)",
-      "  let registrationDraft = FrameHeadRegistrationDraft()",
-      "  let graphDraft = ViewGraphFrameDraft(...)",
-      "  let resolveInputs = storeResolveInputs(",
-      "    in: &resolveContext,",
-      "    proposal: proposal",
-      "  )",
+      "  let resolveInputs = storeResolveInputs(in: &resolveContext, proposal: proposal)",
       "  let portal = installPresentationPortalEvaluator(...)",
       "  let resolvedHead = resolveGraphHead(...)",
       "  return FrameHeadDraft(",
@@ -329,46 +465,39 @@ const sourceTabs = [
       "  )",
       "}",
     ],
-    hot: [7, 10, 11, 15, 16, 17, 18, 19],
+    hot: [7, 9, 10, 11, 12],
     notes: [
-      "The head stage allocates a generation and prepares abortable graph/checkpoint state.",
-      "Resolve happens here: authored bodies become a ResolvedNode tree plus frame-tail inputs.",
-      "The returned FrameHeadDraft carries the staged transaction that commit will later publish or abort.",
+      "A render generation is allocated up front so later stages can detect when a newer frame has superseded this one.",
+      "resolveGraphHead evaluates the dirty frontier; authored bodies become a ResolvedNode tree plus frame-tail inputs.",
+      "The returned draft carries a staged transaction that commit will later publish — or that an aborted frame discards.",
     ],
   },
   {
     id: "tail",
     label: "fused tail",
     title: "FrameTailInlineStageRenderer",
-    file: "swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailRenderer+InlineStages.swift:10",
-    role: "Measure, place, semantics, draw, raster",
+    file: "swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailRenderer+InlineStages.swift:4",
+    role: "Measure, place, semantics, draw, raster — one node, five products",
     snippet: [
       "func renderInlineLayoutStage(_ input: FrameTailInput, ...) -> FrameTailLayoutOutput {",
       "  let measured = layoutEngine.measure(",
-      "    input.resolved,",
-      "    proposal: input.proposal,",
-      "    passContext: input.layoutPassContext",
-      "  )",
+      "    input.resolved, proposal: input.proposal, passContext: input.layoutPassContext)",
       "  let placed = layoutEngine.place(",
-      "    input.resolved,",
-      "    measured: measured,",
-      "    passContext: input.layoutPassContext",
-      "  )",
+      "    input.resolved, measured: measured, passContext: input.layoutPassContext)",
       "}",
       "",
       "func renderInlineRasterTail(...) -> FrameTailOutput {",
       "  let semantics = semanticExtractor.extract(from: placed, retained: retainedInput)",
       "  let draw = drawExtractor.extract(from: placed, retained: retainedInput)",
       "  let rasterized = rasterizer.rasterizeCollectingVisibleIdentities(",
-      "    draw, previousSurface: previousSurface, damage: rasterReuseDamage",
-      "  )",
+      "    draw, previousSurface: previousSurface, damage: rasterReuseDamage)",
       "}",
     ],
-    hot: [2, 7, 15, 16, 17],
+    hot: [2, 4, 9, 10, 11],
     notes: [
-      "The fused tail is one runtime performance node over multiple typed products.",
-      "Measure and place negotiate integer-cell size and geometry before semantic routing is extracted.",
-      "Raster turns draw commands into a styled cell grid but still does not write terminal bytes.",
+      "measure and place negotiate integer-cell geometry before semantics is extracted from the placed tree.",
+      "semantics, draw, and raster each derive from the placed tree; none mutates it.",
+      "raster turns draw commands into a styled cell grid and can reuse parts of the previous surface — but still writes no terminal bytes.",
     ],
   },
   {
@@ -376,7 +505,7 @@ const sourceTabs = [
     label: "commit",
     title: "resolveCompletedFrameCandidate",
     file: "swift-tui/Sources/SwiftTUIRuntime/Rendering/DefaultRenderer+CompletedFrameCandidates.swift:57",
-    role: "Completed-frame policy and publication",
+    role: "Completed-frame policy: the four fates",
     snippet: [
       "func resolveCompletedFrameCandidate(",
       "  draft: FrameHeadDraft,",
@@ -392,89 +521,64 @@ const sourceTabs = [
       "  let artifacts = commitCompletedFrameCandidate(candidate)",
       "  return .committed(artifacts, candidate.dropDecision)",
       "}",
-      "",
-      "func commitFrameEffects(...) -> CommittedFrameEffects {",
-      "  let lifecycleEvents = viewGraph.finalizeFrame(...)",
-      "  runtimeRegistrationDiagnostics = commitFrameHeadDraftEffects(draft)",
-      "  return commitPlanner.plan(...)",
-      "}",
     ],
-    hot: [7, 8, 12, 13, 17, 18, 19],
+    hot: [7, 8, 9, 10, 12, 13],
     notes: [
-      "The runtime may drop a completed visual-only candidate when a newer render intent supersedes it.",
-      "Committed candidates publish graph/runtime state and produce FrameArtifacts.",
-      "CommitPlan packages lifecycle entries, handler installations, semantic snapshot, and transaction data.",
+      "A completed visual-only candidate can be dropped when newestDesiredGeneration shows a newer intent already supersedes it.",
+      "Committed candidates publish graph and runtime state and produce FrameArtifacts.",
+      "commitCompletedFrameCandidate packages the CommitPlan: lifecycle entries, handler installs, semantic snapshot, and transaction data.",
     ],
   },
   {
-    id: "presentation",
-    label: "handoff",
+    id: "present",
+    label: "present",
     title: "presentCommittedFrame",
     file: "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop+Presentation.swift:15",
-    role: "Host-facing presentation boundary",
+    role: "The committed-frame boundary into the host",
     snippet: [
-      "func presentCommittedFrame(",
+      "package func presentCommittedFrame(",
       "  _ artifacts: FrameArtifacts,",
       "  damage: PresentationDamage?",
       ") throws -> TerminalPresentationMetrics {",
       "  if runtimeConfiguration.output == .json { ... }",
       "  if runtimeConfiguration.output == .accessible { ... }",
       "",
-      "  if let semanticHostFrameSurface =",
-      "    presentationSurface as? any SemanticHostFramePresentationSurface {",
-      "    metrics = try semanticHostFrameSurface.present(",
-      "      SemanticHostFrame(",
-      "        raster: artifacts.rasterSurface,",
-      "        semantics: semanticSnapshotWithScrollOffsets(artifacts.semanticSnapshot),",
-      "        rasterDamage: damage",
-      "      )",
-      "    )",
-      "  } else if let damageAwareHost = presentationSurface as? any DamageAwarePresentationSurface {",
-      "    metrics = try damageAwareHost.present(artifacts.rasterSurface, damage: damage)",
+      "  if let semanticHost = presentationSurface",
+      "    as? any SemanticHostFramePresentationSurface {",
+      "    metrics = try semanticHost.present(SemanticHostFrame(",
+      "      raster: artifacts.rasterSurface,",
+      "      semantics: semanticSnapshotWithScrollOffsets(artifacts.semanticSnapshot),",
+      "      rasterDamage: damage))",
+      "  } else if let damageAware = presentationSurface",
+      "    as? any DamageAwarePresentationSurface {",
+      "    metrics = try damageAware.present(artifacts.rasterSurface, damage: damage)",
       "  }",
       "}",
     ],
-    hot: [8, 10, 11, 12, 13, 14, 17, 18],
+    hot: [5, 6, 8, 9, 10, 14, 15],
     notes: [
-      "Presentation happens after a frame has been acquired and committed by the renderer.",
-      "Semantic hosts receive raster, semantics, focused identity, host-facing damage, and preferred layout size.",
-      "Terminal-native surfaces then plan full or incremental repaint bytes based on capabilities and host-facing damage.",
+      "Presentation runs after a frame is acquired and committed — never inside the renderer.",
+      "The surface's roles decide the path: a semantic host receives raster + semantics + damage; a damage-aware host receives raster + damage.",
+      "Terminal-native surfaces then plan full or incremental repaint bytes from their capabilities and the host-facing damage.",
     ],
   },
   {
     id: "invalidation",
     label: "invalidation",
-    title: "State mutation to scheduled frame",
+    title: "setStateSlot → requestInvalidation",
     file: "swift-tui/Sources/SwiftTUICore/Resolve/ViewNode.swift:205",
-    role: "Change propagation",
+    role: "Change propagation: intent, not rendering",
     snippet: [
-      "package func setStateSlot<Value>(",
-      "  ordinal: Int,",
-      "  value: Value,",
-      "  invalidationIdentity: Identity? = nil",
-      ") {",
-      "  var slot = stateSlots[ordinal] ?? .init()",
+      "// ViewNode.swift",
+      "package func setStateSlot<Value>(ordinal: Int, value: Value, ...) {",
       "  let didChange = slot.set(value)",
-      "  stateSlots[ordinal] = slot",
       "  if didChange {",
-      "    ownerGraph?.queueDirtyForStateChange(",
-      "      .init(owner: viewNodeID, ordinal: ordinal)",
-      "    )",
-      "    let invalidationIdentity = invalidationIdentity ?? identity",
-      "    let animationRequest = AnimationContextStorage.currentRequest",
-      "    let batchID = AnimationContextStorage.currentBatchID",
-      "    if animationRequest != .inherit || batchID != nil,",
-      "      let animationAware = invalidator as? any AnimationAwareInvalidating",
-      "    {",
-      "      animationAware.requestInvalidation(",
-      "        of: [invalidationIdentity], animation: animationRequest, batchID: batchID",
-      "      )",
-      "    } else {",
-      "      invalidator?.requestInvalidation(of: [invalidationIdentity])",
-      "    }",
+      "    ownerGraph?.queueDirtyForStateChange(.init(owner: viewNodeID, ordinal: ordinal))",
+      "    invalidator?.requestInvalidation(of: [invalidationIdentity])",
       "  }",
       "}",
       "",
+      "// Scheduler.swift — the invalidator is a FrameScheduler",
       "public func requestInvalidation(of identities: Set<Identity>) {",
       "  pendingCauses.insert(.invalidation)",
       "  invalidatedIdentities.formUnion(identities)",
@@ -482,276 +586,445 @@ const sourceTabs = [
       "  notifyPendingFrameRequestWaiters()",
       "}",
     ],
-    hot: [7, 9, 10, 16, 19, 23, 28, 29, 30, 31],
+    hot: [3, 4, 5, 6, 11, 12, 13, 14],
     notes: [
-      "Mutation and input do not call rendering phases directly; they enqueue intent.",
-      "The graph marks affected dependent nodes dirty so selective evaluation has a frontier.",
-      "The scheduler coalesces identities and causes until the run loop consumes the next ready frame.",
+      "Mutation and input enqueue intent; they never call rendering phases directly.",
+      "setStateSlot marks the graph dirty AND asks the invalidator for a frame — two separate effects.",
+      "The scheduler coalesces identities and causes until consumeReadyFrame produces the next ScheduledFrame.",
     ],
   },
 ];
 
-const artifacts = [
+/* ------------------------------------------------------------------ */
+/* Code map + glossary                                                 */
+/* ------------------------------------------------------------------ */
+
+const codemap = [
   {
-    type: "ResolvedNode",
-    title: "resolve",
-    body:
-      "Authored bodies plus identity projection, StructuralPath, optional entity identity, state ownership, environment, metadata, and runtime registrations.",
-    code: "FrameArtifacts.resolvedTree",
-    color: "var(--cyan)",
+    q: "How does an app become a run loop?",
+    files: [
+      "swift-tui/Sources/SwiftTUIRuntime/Scenes/SceneSession.swift:244",
+      "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop.swift:783",
+    ],
   },
   {
-    type: "MeasuredNode",
-    title: "measure",
-    body:
-      "Subtree sizes under ProposedSize, negotiated by LayoutEngine before final coordinates exist.",
-    code: "FrameArtifacts.measuredTree",
-    color: "var(--green)",
+    q: "How does the loop decide a frame is needed?",
+    files: [
+      "swift-tui/Sources/SwiftTUICore/Pipeline/Scheduler.swift:105",
+      "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop+Rendering.swift:228",
+    ],
   },
   {
-    type: "PlacedNode",
-    title: "place",
-    body:
-      "Integer-cell frames, content bounds, and placement-time metadata used by interaction and drawing.",
-    code: "FrameArtifacts.placedTree",
-    color: "var(--amber)",
+    q: "What is the renderer entry point?",
+    files: ["swift-tui/Sources/SwiftTUIRuntime/SwiftTUI.swift:293"],
   },
   {
-    type: "SemanticSnapshot",
-    title: "semantics",
-    body:
-      "Focus, interaction, scroll, selection, coordinate-space, accessibility, and routing data.",
-    code: "FrameArtifacts.semanticSnapshot",
-    color: "var(--magenta)",
+    q: "What executes the runtime stages?",
+    files: ["swift-tui/Sources/SwiftTUIRuntime/Rendering/RuntimeRenderPipeline.swift:223"],
   },
   {
-    type: "DrawNode",
-    title: "draw",
-    body:
-      "Placed nodes lowered into draw commands, borders, backgrounds, effects, and payload paint instructions.",
-    code: "FrameArtifacts.drawTree",
-    color: "var(--cyan)",
+    q: "Where does resolve happen?",
+    files: [
+      "swift-tui/Sources/SwiftTUIRuntime/Rendering/DefaultRendererFrameHeadCoordinator.swift:26",
+      "swift-tui/Sources/SwiftTUICore/Resolve/ViewGraph.swift:635",
+    ],
   },
   {
-    type: "RasterSurface",
-    title: "raster",
-    body:
-      "Styled terminal cells and image attachments. This is host-neutral grid data, not terminal bytes.",
-    code: "FrameArtifacts.rasterSurface",
-    color: "var(--green)",
+    q: "Where do measure → raster run?",
+    files: ["swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailRenderer+InlineStages.swift:4"],
   },
   {
-    type: "CommitPlan",
-    title: "commit",
-    body:
-      "Lifecycle entries, handler installations, semantic snapshot, and transaction work applied by the runtime.",
-    code: "FrameArtifacts.commitPlan",
-    color: "var(--amber)",
+    q: "Where does commit decide a frame's fate?",
+    files: ["swift-tui/Sources/SwiftTUIRuntime/Rendering/DefaultRenderer+CompletedFrameCandidates.swift:57"],
   },
   {
-    type: "PresentationDamage",
-    title: "host damage",
-    body:
-      "Renderer artifact damage is private. Host-facing damage is re-derived against the last raster surface actually presented to that host.",
-    code: "RunLoop.presentationDamage(for:)",
-    color: "var(--magenta)",
+    q: "Where does a committed frame reach a host?",
+    files: [
+      "swift-tui/Sources/SwiftTUIRuntime/RunLoop/RunLoop+Presentation.swift:15",
+      "swift-tui/Sources/SwiftTUIRuntime/Terminal/PresentationSurface.swift:235",
+    ],
   },
 ];
 
-const handoff = [
-  {
-    title: "FrameArtifacts",
-    body: "Committed products leave the renderer as a data bundle.",
-    color: "var(--cyan)",
-    icon: "bundle",
-  },
-  {
-    title: "RunLoop",
-    body: "Merges lifecycle, focus, diagnostics, and host-facing damage.",
-    color: "var(--green)",
-    icon: "loop",
-  },
-  {
-    title: "SemanticHostFrame",
-    body: "Non-terminal hosts can consume raster, semantics, focus, and damage.",
-    color: "var(--amber)",
-    icon: "frame",
-  },
-  {
-    title: "PresentationPlan",
-    body: "Terminal hosts choose full repaint or incremental row batches.",
-    color: "var(--amber)",
-    icon: "plan",
-  },
-  {
-    title: "Escape sequences",
-    body: "Cursor moves, row writes, image protocol replay, and sync wrappers.",
-    color: "var(--magenta)",
-    icon: "wire",
-  },
-  {
-    title: "Terminal",
-    body: "The client paints UTF-8 cells and graphics into pixels.",
-    color: "var(--cyan)",
-    icon: "terminal",
-  },
+const glossary = [
+  { term: "FrameHeadDraft", def: "The output of head: resolved tree, frame-tail input, staged transaction, generation, and frame context. Abortable until commit." },
+  { term: "FrameArtifacts", def: "The committed bundle of all seven phase products plus diagnostics, presentation damage, and the commit plan." },
+  { term: "ScheduledFrame", def: "One consumed frame request: every pending wake cause, the unioned invalidated identities, deadlines, and the coalesced intent count." },
+  { term: "WakeCause", def: "Why a frame was scheduled: input, invalidation, signal, external, or deadline." },
+  { term: "FrameScheduler", def: "Coalesces invalidations, input, signals, and deadlines into frame work; consumeReadyFrame drains them into one ScheduledFrame." },
+  { term: "RenderGeneration", def: "A monotonic id allocated in head. Lets later stages detect that a newer frame supersedes this one, enabling drop and cancel." },
+  { term: "PresentationDamage", def: "Host-facing changed rows/ranges, re-derived by RunLoop against the surface last presented to that host." },
+  { term: "SemanticHostFrame", def: "The committed contract a non-terminal host consumes: raster, semantics, focused identity, damage, and preferred size." },
 ];
 
-const iconPaths = {
-  bundle:
-    '<path d="M5 7l7-4 7 4-7 4-7-4z"/><path d="M5 12l7 4 7-4"/><path d="M5 17l7 4 7-4"/>',
-  loop:
-    '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
-  frame:
-    '<path d="M4 5h16v12H4z"/><path d="M8 21h8"/><path d="M12 17v4"/>',
-  plan:
-    '<path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/><path d="M8 3v4M14 10v4M11 17v4"/>',
-  wire:
-    '<path d="M3 12c3-7 6 7 9 0s6 7 9 0"/>',
-  terminal:
-    '<path d="M4 5h16v14H4z"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/>',
-};
-
-const hexDump = [
-  "0000  1B 5B 3F 32 30 32 36 68  1B 5B 32 4A 1B 5B 48  |.[?2026h.[2J.[H|",
-  "0010  2B 2D 2D 2D 2D 2D 2D 2D  2D 2D 2D 2D 2D 2D 2D  |+---------------|",
-  "0020  44 65 70 6C 6F 79 20 51  75 65 75 65 1B 5B 6D  |Deploy Queue.[m|",
-  "0030  52 65 6C 65 61 73 65 20  5B 23 23 23 23 23 23  |Release [######|",
-  "0040  4F 77 6E 65 72 20 20 20  20 20 20 69 6E 66 72  |Owner      infr|",
-  "0050  1B 5B 3F 32 30 32 36 6C  0A 1B 5B 3F 32 35 68  |.[?2026l..[?25h|",
-];
+/* ================================================================== */
+/* Rendering                                                           */
+/* ================================================================== */
 
 let activeIndex = 0;
 let timer = null;
-let intervalMs = 1600;
-let playing = true;
+let playing = false;
+const STEP_MS = 2600;
 
 function escapeHtml(value) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
+/* --- lightweight Swift highlighting (string- and comment-safe) ---
+ * Strings and line comments are stashed behind delimited, letter-only
+ * placeholders before the keyword/type/number passes run, so those passes can
+ * neither corrupt nor re-colour protected spans. The delimiter is a private-use
+ * sentinel that survives every pass; tokens are uppercase letters (no digits,
+ * never a Swift keyword or a listed type), so the word and number passes skip
+ * them and the restore pass only matches genuine placeholders. */
 function highlightSwift(value) {
-  const stringLiterals = [];
-  const protectedLine = escapeHtml(value).replace(/"[^"]*"/g, (match) => {
-    const token = stringToken(stringLiterals.length);
-    stringLiterals.push(match);
-    return token;
+  const stashed = [];
+  const DELIM = "\uE000";
+  const stash = (html) => {
+    stashed.push(html);
+    let n = stashed.length - 1;
+    let token = "";
+    do {
+      token = String.fromCharCode(65 + (n % 26)) + token;
+      n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return DELIM + token + DELIM;
+  };
+
+  let line = escapeHtml(value)
+    .replace(/\/\/.*/g, (m) => stash('<span class="tok-com">' + m + "</span>"))
+    .replace(/"[^"]*"/g, (m) => stash('<span class="tok-str">' + m + "</span>"));
+
+  line = line
+    .replace(
+      /\b(import|struct|enum|var|let|some|func|return|case|if|else|static|package|public)\b/g,
+      '<span class="tok-kw">$1</span>'
+    )
+    .replace(
+      /\b(View|VStack|HStack|Text|Divider|ProgressView|LabeledContent|Button|BuildSummary|ResolvedNode|MeasuredNode|PlacedNode|SemanticSnapshot|DrawNode|RasterSurface|CommitPlan|FrameArtifacts|FrameHeadDraft|ScheduledFrame|FrameScheduler|Identity)\b/g,
+      '<span class="tok-type">$1</span>'
+    )
+    .replace(/\b(\d+)\b/g, '<span class="tok-num">$1</span>');
+
+  return line.replace(/\uE000([A-Z]+)\uE000/g, (_, token) => {
+    let index = 0;
+    for (const ch of token) index = index * 26 + (ch.charCodeAt(0) - 64);
+    return stashed[index - 1];
   });
-
-  return protectedLine
-    .replace(/\b(import|struct|var|some|let|func|return)\b/g, '<span class="tok-kw">$1</span>')
-    .replace(/\b(View|VStack|Text|Divider|ProgressView|LabeledContent|Button|TerminalRunner|BuildSummary|BuildSummaryApp)\b/g, '<span class="tok-type">$1</span>')
-    .replace(/\b(\d+)\b/g, '<span class="tok-num">$1</span>')
-    .replace(/@@[A-Z]+@@/g, (token) => {
-      const index = stringTokenIndex(token);
-      return `<span class="tok-str">${stringLiterals[index] ?? token}</span>`;
-    });
-}
-
-function stringToken(index) {
-  let n = index;
-  let token = "";
-  do {
-    token = String.fromCharCode(65 + (n % 26)) + token;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return `@@${token}@@`;
-}
-
-function stringTokenIndex(token) {
-  let value = 0;
-  const letters = token.slice(2, -2);
-  for (const char of letters) {
-    value = value * 26 + (char.charCodeAt(0) - 64);
-  }
-  return value - 1;
-}
-
-function renderViewCode() {
-  const code = document.getElementById("view-code");
-  code.innerHTML = viewLines
-    .map((line, index) => {
-      const lineNo = String(index + 1).padStart(2, "0");
-      return `<span class="code-line" data-line="${index + 1}"><span class="line-no">${lineNo}</span><span>${highlightSwift(line)}</span></span>`;
-    })
-    .join("");
-}
-
-function renderPipeline() {
-  const stack = document.getElementById("pipeline-stack");
-  stack.innerHTML = runtimeStages
-    .map(
-      (stage) => `
-        <article class="stage-card" style="color:${stage.color}" data-stage="${stage.id}">
-          <span class="stage-num">${stage.number}</span>
-          <div class="stage-body">
-            <h3>${stage.title}</h3>
-            <p>${stage.summary}</p>
-            <code>${stage.product}</code>
-          </div>
-        </article>
-      `
-    )
-    .join("");
-
-  const track = document.getElementById("timeline-track");
-  track.innerHTML = runtimeStages
-    .map(
-      (stage) => `
-        <button class="track-node" type="button" data-step="${stage.number}" aria-label="Show ${stage.title}">
-          <span class="track-dot"></span>
-          <span>${stage.title}</span>
-        </button>
-      `
-    )
-    .join("");
-
-  for (const node of track.querySelectorAll(".track-node")) {
-    node.addEventListener("click", () => {
-      activeIndex = Number(node.dataset.step) - 1;
-      updateActiveStage();
-      restartTimer();
-    });
-  }
-}
-
-function renderPropagation() {
-  const grid = document.getElementById("propagation-grid");
-  grid.innerHTML = propagationSteps
-    .map((step) => {
-      const points = step.points
-        .map(([left, top], index) => `<span style="left:${left};top:${top};animation-delay:${index * 120}ms"></span>`)
-        .join("");
-      return `
-        <article class="propagation-card" style="color:${step.color}">
-          <h3>${step.title}</h3>
-          <p>${step.body}</p>
-          <div class="mini-graph" aria-hidden="true">${points}</div>
-        </article>
-      `;
-    })
-    .join("");
 }
 
 function sourceHref(path) {
   return `../../${path.split(":")[0]}`;
 }
 
-function renderCallpath() {
-  const list = document.getElementById("callpath-list");
-  list.innerHTML = callpath
+function sourceLabel(path) {
+  const [file, line] = path.split(":");
+  const short = file.replace(/^swift-tui\/Sources\//, "");
+  return line ? `${short}:${line}` : short;
+}
+
+function sourceAnchor(path, extraClass) {
+  const cls = extraClass ? ` class="${extraClass}"` : "";
+  return `<a${cls} href="${sourceHref(path)}">${sourceLabel(path)}</a>`;
+}
+
+/* --- TOC --- */
+const tocItems = [
+  ["overview", "01 · The mental model"],
+  ["explorer", "02 · Walkthrough"],
+  ["products", "03 · Phase products"],
+  ["propagation", "04 · Change propagation"],
+  ["isolation", "05 · What runs where"],
+  ["commit", "06 · Four fates"],
+  ["handoff", "07 · Host handoff"],
+  ["source", "08 · Source"],
+  ["diagnostics", "09 · Diagnostics"],
+  ["map", "10 · Where to look next"],
+];
+
+function renderToc() {
+  const nav = document.getElementById("toc-nav");
+  nav.innerHTML = tocItems
+    .map(([id, label]) => `<a href="#${id}" data-toc="${id}">${label}</a>`)
+    .join("");
+
+  const links = Array.from(nav.querySelectorAll("a"));
+  const targets = tocItems.map(([id]) => document.getElementById(id)).filter(Boolean);
+  const spy = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          for (const link of links) {
+            link.classList.toggle("is-active", link.dataset.toc === entry.target.id);
+          }
+        }
+      }
+    },
+    { rootMargin: "-45% 0px -50% 0px", threshold: 0 }
+  );
+  for (const t of targets) spy.observe(t);
+}
+
+/* --- view code --- */
+function renderViewCode() {
+  document.getElementById("view-code").innerHTML = viewLines
+    .map((line, i) => {
+      const n = String(i + 1).padStart(2, "0");
+      return `<span class="code-line" data-line="${i + 1}"><span class="ln">${n}</span><span class="lc">${highlightSwift(line)}</span></span>`;
+    })
+    .join("");
+}
+
+/* --- stage ↔ product mapping diagram --- */
+function renderMapping() {
+  const board = document.getElementById("mapping-board");
+
+  // Stages that own phase products get grid columns derived from those products
+  // (head -> resolve, fusedFrameTail -> measure..raster, commit -> commit), so
+  // the row aligns under the products without hand-tuned spans. The two stages
+  // that own no product are rendered in a separate band: they adjust the
+  // in-flight draft rather than introduce a new value.
+  const covering = STAGES.filter((s) => s.covers.length);
+  const adjusting = STAGES.filter((s) => !s.covers.length);
+
+  const stageCells = covering
+    .map((s) => {
+      const idxs = s.covers.map((c) => phaseIndex[c]);
+      const first = Math.min(...idxs);
+      const last = Math.max(...idxs);
+      const range =
+        first === last ? PHASES[first].key : `${PHASES[first].key}…${PHASES[last].key}`;
+      return `<div class="map-stage map-${s.actor}" style="grid-column: ${first + 1} / ${last + 2}">
+          <span class="map-name">${s.key}</span>
+          <span class="map-tag">covers ${range}</span>
+        </div>`;
+    })
+    .join("");
+
+  const adjustCells = adjusting
+    .map((s) => `<span class="adjust-chip map-${s.actor}">${s.key}</span>`)
+    .join("");
+
+  const productRow = PHASES.map(
+    (p) => `<div class="map-product"><span class="map-phase">${p.key}</span><code>${p.type}</code></div>`
+  ).join("");
+
+  board.innerHTML = `
+    <div class="map-rowlabel">runtime stages</div>
+    <div class="map-stages">${stageCells}</div>
+    <div class="map-adjust">${adjustCells}<span class="adjust-note">these adjust the in-flight draft — no new product</span></div>
+    <div class="map-rowlabel">phase products</div>
+    <div class="map-products">${productRow}</div>
+  `;
+}
+
+/* --- the interactive explorer --- */
+function renderStageRail() {
+  const rail = document.getElementById("stage-rail");
+  rail.innerHTML = STAGES.map(
+    (s, i) => `
+      <button class="rail-node" type="button" data-step="${i}" aria-label="Show stage ${s.key}">
+        <span class="rail-dot rail-${s.actor}"></span>
+        <span class="rail-name">${s.key}</span>
+      </button>`
+  ).join("");
+  for (const node of rail.querySelectorAll(".rail-node")) {
+    node.addEventListener("click", () => {
+      setStage(Number(node.dataset.step));
+      pause();
+    });
+  }
+}
+
+function renderStageDetail(stage) {
+  const actorLabel =
+    stage.actor === "tail" ? "off-actor eligible" : "main actor";
+  const covers = stage.covers.length
+    ? stage.covers.map((c) => `<code>${c}</code>`).join(" ")
+    : "<span class='detail-muted'>no new product — adjusts the draft</span>";
+
+  document.getElementById("stage-detail").innerHTML = `
+    <div class="detail-top">
+      <h4>${stage.key}</h4>
+      <span class="actor-pill actor-${stage.actor}">${actorLabel}</span>
+    </div>
+    <p class="detail-headline">${stage.headline}</p>
+    <dl class="detail-io">
+      <div><dt>covers</dt><dd>${covers}</dd></div>
+      <div><dt>consumes</dt><dd>${stage.consumes}</dd></div>
+      <div><dt>produces</dt><dd>${stage.produces}</dd></div>
+    </dl>
+    <p class="detail-does"><span class="lbl">Does:</span> ${stage.does}</p>
+    <p class="detail-not"><span class="lbl">Does not:</span> ${stage.not}</p>
+    <p class="detail-src">${sourceAnchor(stage.source)}</p>
+  `;
+}
+
+function renderProductLedger(stageIndex) {
+  const available = productsAfterStage(stageIndex);
+  const ledger = document.getElementById("product-ledger");
+  ledger.innerHTML = PHASES.map((p) => {
+    const ready = available.has(p.key);
+    return `<span class="ledger-chip ${ready ? "is-ready" : "is-pending"}" title="${p.type}">${p.key}</span>`;
+  }).join("");
+}
+
+function renderTerminal(stage) {
+  const lines = stagePreview[stage.key] || [];
+  document.getElementById("terminal-output").textContent = lines.join("\n");
+  document.getElementById("product-status").textContent = stage.status;
+}
+
+function setStage(index) {
+  activeIndex = ((index % STAGES.length) + STAGES.length) % STAGES.length;
+  const stage = STAGES[activeIndex];
+
+  for (const node of document.querySelectorAll(".rail-node")) {
+    node.classList.toggle("is-active", Number(node.dataset.step) === activeIndex);
+    node.classList.toggle("is-done", Number(node.dataset.step) < activeIndex);
+  }
+  for (const line of document.querySelectorAll(".code-line")) {
+    const n = Number(line.dataset.line);
+    line.classList.toggle("is-hot", stage.codeLines.includes(n));
+  }
+  document.getElementById("stage-counter").textContent = `${activeIndex + 1} / ${STAGES.length}`;
+  document.getElementById("explorer-progress").textContent =
+    `Stage ${activeIndex + 1} of ${STAGES.length}: ${stage.key}`;
+
+  renderStageDetail(stage);
+  renderProductLedger(activeIndex);
+  renderTerminal(stage);
+}
+
+function step(delta) {
+  setStage(activeIndex + delta);
+}
+
+function play() {
+  playing = true;
+  document.body.classList.add("is-playing");
+  if (timer) clearInterval(timer);
+  timer = setInterval(() => step(1), STEP_MS);
+}
+
+function pause() {
+  playing = false;
+  document.body.classList.remove("is-playing");
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+}
+
+function setupExplorerControls() {
+  document.getElementById("next-button").addEventListener("click", () => {
+    step(1);
+    pause();
+  });
+  document.getElementById("prev-button").addEventListener("click", () => {
+    step(-1);
+    pause();
+  });
+  document.getElementById("play-toggle").addEventListener("click", () => {
+    if (playing) pause();
+    else play();
+  });
+}
+
+/* --- static reference sections --- */
+function renderProductTable() {
+  document.getElementById("product-table").innerHTML = PHASES.map(
+    (p, i) => `
+      <article class="product-row">
+        <div class="product-key"><span class="product-no">${i + 1}</span><span>${p.key}</span></div>
+        <div class="product-type"><code>${p.type}</code><span class="product-q">${p.question}</span></div>
+        <p class="product-owns">${p.owns}</p>
+        <code class="product-field">FrameArtifacts.${p.field}</code>
+      </article>`
+  ).join("");
+}
+
+function renderPropagation() {
+  const flow = document.getElementById("propagation-flow");
+  const causes = wakeCauses
+    .map((c) => `<span class="cause-chip ${c === "invalidation" ? "is-lit" : ""}">${c}</span>`)
+    .join("");
+  flow.innerHTML =
+    `<li class="flow-causes"><span class="flow-causes-label">five wake causes funnel into one scheduler</span><div class="cause-row">${causes}</div></li>` +
+    propagation
+      .map(
+        (s, i) => `
+        <li class="flow-step">
+          <span class="flow-no">${i + 1}</span>
+          <div class="flow-body">
+            <h3>${s.title}</h3>
+            <p>${s.body}</p>
+            ${sourceAnchor(s.source, "flow-src")}
+          </div>
+        </li>`
+      )
+      .join("");
+}
+
+function renderIsolation() {
+  const col = (data, side) => `
+    <div class="iso-card iso-${side}">
+      <h3>${data.title}</h3>
+      <p class="iso-reason">${data.reason}</p>
+      <ul>${data.items.map((it) => `<li>${it}</li>`).join("")}</ul>
+    </div>`;
+  document.getElementById("isolation-main").innerHTML = col(isolation.main, "main");
+  document.getElementById("isolation-tail").innerHTML = col(isolation.tail, "tail");
+
+  document.getElementById("invariants").innerHTML = invariants
+    .map((inv) => `<li>${inv}</li>`)
+    .join("");
+}
+
+function renderFates() {
+  document.getElementById("fates").innerHTML = fates
     .map(
-      (item, index) => `
-        <li>
-          <span class="callpath-index">${String(index + 1).padStart(2, "0")}</span>
-          <code>${item.name}</code>
-          <p>${item.detail}</p>
-          <a href="${sourceHref(item.source)}">${item.source}</a>
-        </li>
-      `
+      (f) => `
+      <article class="fate-card">
+        <h3>${f.name}</h3>
+        <p>${f.body}</p>
+        <p class="fate-detail">${f.detail}</p>
+      </article>`
+    )
+    .join("");
+}
+
+function renderHandoff() {
+  document.getElementById("damage").innerHTML = damageRules
+    .map(
+      (d) => `
+      <div class="damage-row">
+        <code>${d.signal}</code>
+        <p>${d.meaning}</p>
+      </div>`
+    )
+    .join("");
+
+  document.getElementById("handoff-flow").innerHTML = handoff
+    .map(
+      (n, i) => `
+      <article class="handoff-node">
+        <span class="handoff-no">${i + 1}</span>
+        <h3>${n.title}</h3>
+        <p>${n.body}</p>
+      </article>`
+    )
+    .join("");
+}
+
+function renderDiagnostics() {
+  document.getElementById("diag").innerHTML = diagnostics
+    .map(
+      (d) => `
+      <div class="diag-row">
+        <h3>${d.label}</h3>
+        <p>${d.body}</p>
+      </div>`
     )
     .join("");
 }
@@ -760,161 +1033,65 @@ function renderSourceTabs() {
   const tabs = document.getElementById("source-tabs");
   tabs.innerHTML = sourceTabs
     .map(
-      (tab, index) => `
-        <button class="source-tab" type="button" data-source="${tab.id}" aria-pressed="${index === 0 ? "true" : "false"}">
-          ${tab.label}
-        </button>
-      `
+      (t, i) => `
+      <button class="source-tab" type="button" role="tab" data-source="${t.id}" aria-selected="${i === 0}">
+        ${t.label}
+      </button>`
     )
     .join("");
-
   for (const tab of tabs.querySelectorAll(".source-tab")) {
-    tab.addEventListener("click", () => {
-      setSourceTab(tab.dataset.source);
-    });
+    tab.addEventListener("click", () => setSourceTab(tab.dataset.source));
   }
   setSourceTab(sourceTabs[0].id);
 }
 
 function setSourceTab(id) {
-  const selected = sourceTabs.find((tab) => tab.id === id) ?? sourceTabs[0];
+  const sel = sourceTabs.find((t) => t.id === id) || sourceTabs[0];
   for (const tab of document.querySelectorAll(".source-tab")) {
-    tab.setAttribute("aria-pressed", String(tab.dataset.source === selected.id));
+    tab.setAttribute("aria-selected", String(tab.dataset.source === sel.id));
   }
-
-  document.getElementById("source-index").innerHTML = `
-    <h3>${selected.title}</h3>
-    <p>${selected.role}</p>
+  document.getElementById("source-meta").innerHTML = `
+    <h3>${sel.title}</h3>
+    <p class="meta-role">${sel.role}</p>
     <dl>
       <dt>file</dt>
-      <dd><a href="${sourceHref(selected.file)}">${selected.file}</a></dd>
-      <dt>stage</dt>
-      <dd>${selected.label}</dd>
-    </dl>
-  `;
-
-  document.getElementById("source-snippet").innerHTML = selected.snippet
-    .map((line, index) => {
-      const escaped = escapeHtml(line);
-      const hot = selected.hot.includes(index + 1);
-      return hot ? `<span class="snippet-hot">${escaped}</span>` : escaped;
+      <dd>${sourceAnchor(sel.file)}</dd>
+    </dl>`;
+  document.getElementById("source-snippet").innerHTML = sel.snippet
+    .map((line, i) => {
+      const escaped = highlightSwift(line);
+      return sel.hot.includes(i + 1)
+        ? `<span class="snippet-hot">${escaped}</span>`
+        : `<span class="snippet-line">${escaped}</span>`;
     })
     .join("\n");
-
   document.getElementById("source-notes").innerHTML = `
-    <h3>Why this matters</h3>
-    <ul>${selected.notes.map((note) => `<li>${note}</li>`).join("")}</ul>
-  `;
+    <h3>Reading notes</h3>
+    <ul>${sel.notes.map((n) => `<li>${n}</li>`).join("")}</ul>`;
 }
 
-function renderArtifacts() {
-  const board = document.getElementById("artifact-board");
-  board.innerHTML = artifacts
+function renderCodemap() {
+  document.getElementById("codemap").innerHTML = codemap
     .map(
-      (item) => `
-        <article class="artifact-card" style="color:${item.color}">
-          <span class="artifact-type"><span>${item.type}</span></span>
-          <h3>${item.title}</h3>
-          <p>${item.body}</p>
-          <code>${item.code}</code>
-        </article>
-      `
+      (row) => `
+      <div class="codemap-row">
+        <p class="codemap-q">${row.q}</p>
+        <div class="codemap-files">${row.files.map((f) => sourceAnchor(f)).join("")}</div>
+      </div>`
     )
     .join("");
 }
 
-function renderHandoff() {
-  const flow = document.getElementById("handoff-flow");
-  flow.innerHTML = handoff
+function renderGlossary() {
+  document.getElementById("glossary").innerHTML = glossary
     .map(
-      (node) => `
-        <article class="handoff-node" style="color:${node.color}">
-          <div class="handoff-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${iconPaths[node.icon]}</svg></div>
-          <h3>${node.title}</h3>
-          <p>${node.body}</p>
-        </article>
-      `
+      (g) => `
+      <div class="glossary-row">
+        <code>${g.term}</code>
+        <p>${g.def}</p>
+      </div>`
     )
     .join("");
-}
-
-function renderHexDump() {
-  document.getElementById("hex-dump").textContent = hexDump.join("\n");
-}
-
-function renderTerminal(stage) {
-  const output = stage.terminal
-    .map((line, index) => {
-      const escaped = escapeHtml(line);
-      if (index === 0) return `<span class="term-cyan">${escaped}</span>`;
-      if (line.includes("Release") || line.includes("animation")) return `<span class="term-amber">${escaped}</span>`;
-      if (line.includes("RasterSurface") || line.includes("TerminalHost")) return `<span class="term-green">${escaped}</span>`;
-      if (line.includes("No terminal")) return `<span class="term-muted">${escaped}</span>`;
-      return escaped;
-    })
-    .join("\n");
-  document.getElementById("terminal-output").innerHTML = output;
-  document.getElementById("terminal-status").textContent = stage.terminalStatus;
-}
-
-function updateActiveStage() {
-  const stage = runtimeStages[activeIndex];
-
-  for (const card of document.querySelectorAll(".stage-card")) {
-    card.classList.toggle("is-active", card.dataset.stage === stage.id);
-  }
-  for (const node of document.querySelectorAll(".track-node")) {
-    node.classList.toggle("is-active", Number(node.dataset.step) === activeIndex + 1);
-  }
-  for (const line of document.querySelectorAll(".code-line")) {
-    const lineNumber = Number(line.dataset.line);
-    line.classList.toggle("is-hot", stage.codeLines.includes(lineNumber));
-    line.classList.toggle("is-warm", stage.id === "commit" && lineNumber === 12);
-  }
-  for (const [index, node] of Array.from(document.querySelectorAll(".phase-map span")).entries()) {
-    node.classList.toggle("is-active", stage.phaseIndexes.includes(index));
-  }
-
-  document.getElementById("active-stage-title").textContent = stage.title;
-  document.getElementById("active-stage-summary").textContent = stage.summary;
-  renderTerminal(stage);
-}
-
-function stepStage() {
-  activeIndex = (activeIndex + 1) % runtimeStages.length;
-  updateActiveStage();
-}
-
-function restartTimer() {
-  if (timer) {
-    clearInterval(timer);
-  }
-  if (playing) {
-    timer = setInterval(stepStage, intervalMs);
-  }
-}
-
-function setupControls() {
-  const playToggle = document.getElementById("play-toggle");
-  const stepButton = document.getElementById("step-button");
-  const speedSelect = document.getElementById("speed-select");
-
-  playToggle.addEventListener("click", () => {
-    playing = !playing;
-    document.body.classList.toggle("is-paused", !playing);
-    playToggle.setAttribute("aria-label", playing ? "Pause pipeline animation" : "Play pipeline animation");
-    restartTimer();
-  });
-
-  stepButton.addEventListener("click", () => {
-    stepStage();
-    restartTimer();
-  });
-
-  speedSelect.addEventListener("change", () => {
-    intervalMs = Number(speedSelect.value);
-    restartTimer();
-  });
 }
 
 function prefersReducedMotion() {
@@ -922,25 +1099,27 @@ function prefersReducedMotion() {
 }
 
 function init() {
+  renderToc();
   renderViewCode();
-  renderPipeline();
+  renderMapping();
+  renderStageRail();
+  setupExplorerControls();
+  renderProductTable();
   renderPropagation();
-  renderCallpath();
-  renderSourceTabs();
-  renderArtifacts();
+  renderIsolation();
+  renderFates();
   renderHandoff();
-  renderHexDump();
-  setupControls();
-  updateActiveStage();
-  if (prefersReducedMotion()) {
-    playing = false;
-    document.body.classList.add("is-paused");
-    document
-      .getElementById("play-toggle")
-      .setAttribute("aria-label", "Play pipeline animation");
-    return;
+  renderDiagnostics();
+  renderSourceTabs();
+  renderCodemap();
+  renderGlossary();
+  setStage(0);
+
+  // Auto-play is opt-in and off by default: a serious doc should not move on
+  // its own. Honour reduced-motion by never offering motion in the first place.
+  if (!prefersReducedMotion()) {
+    document.body.classList.add("motion-ok");
   }
-  restartTimer();
 }
 
 init();

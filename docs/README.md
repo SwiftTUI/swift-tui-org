@@ -20,6 +20,13 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-08-0.1.0-public-release-readiness.md](reports/2026-06-08-0.1.0-public-release-readiness.md) -
+  first-public-`0.1.0` release-readiness audit across all four child repos: one
+  legal blocker (3 repos + npm tarballs have no LICENSE), several
+  reality-drift self-contradictions (install pin excludes 0.1.0, npm "being
+  finalized" vs live, missing `VISION-GAP.md`, stale `0.0.4` profile badge,
+  orphan `v0.1.0` tags, placeholder showcase graphics), and the highest-value
+  changes ranked by value-per-effort with a do-now/defer cut line.
 - [reports/2026-05-28-gallery-performance-report.md](reports/2026-05-28-gallery-performance-report.md) -
   in-process performance data collection across the Gallery tabs; identifies the
   hot spots (H1 off-screen idle frames, H2 per-interaction `resolve` cost).
