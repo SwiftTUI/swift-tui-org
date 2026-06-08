@@ -99,9 +99,10 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
   WebHost canvas and SwiftUI/CoreGraphics blend modes behind capability checks,
   with precomposition retained as fallback.
 - [plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md](plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md) -
-  later image blend-mode tranche for GIF behavior: explicit `AnimatedImage`
-  frame blending coverage, raw GIF pass-through contract decisions, and optional
-  frame decode bridging if the package graph supports it cleanly.
+  implemented image blend-mode tranche for GIF behavior: explicit
+  `AnimatedImage` PNG-frame blending coverage, reduced-motion first-frame
+  coverage, and tested raw GIF pass-through semantics without adding a runtime
+  GIF decoder bridge.
 - [plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md](plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md) -
   implemented image blend-mode tranche for ordered presentation layers: package
   sidecar paint order, overlapping image/cell semantics, topology-aware damage,

@@ -1,10 +1,28 @@
 # Image Blend Mode GIF Blending Plan
 
 **Date:** 2026-06-06
-**Status:** Follow-on implementation plan after cache hardening.
+**Status:** Implemented in `swift-tui` on 2026-06-08 for explicit
+`AnimatedImage` frame blending and raw-GIF pass-through semantics. Direct raw
+GIF frame decoding remains intentionally unsupported because the current package
+graph keeps `SwiftTUIRuntime` below `SwiftTUIAnimatedImage`.
 **Target repos:** implementation lives mostly in `swift-tui`; `swift-tui-web`
 changes are needed only if the web protocol changes. Root owns this plan and
 final pin updates.
+
+Implementation summary:
+
+- `Tests/SwiftTUIAnimatedImageTests/AnimatedImageTests.swift` now asserts that
+  `AnimatedImage(...).blendMode(...)` attaches compositing metadata to the
+  current PNG-backed frame, advances distinct GIF-decoded frames with blend
+  metadata, and still renders the first blended frame under reduced motion
+  without registering a playback task.
+- `Platforms/WASI/Tests/WASISurfaceBridgeTests/WebSurfaceTransportTests.swift`
+  now locks raw GIF byte behavior: unblended GIF records still pass through as
+  `format: "gif"`, and a GIF attachment carrying blend metadata still passes
+  through unchanged when no runtime GIF frame decoder exists.
+- `SwiftTUIAnimatedImage` and `SwiftTUIViews` DocC now distinguish animated GIF
+  frame blending from direct raw-GIF container pass-through.
+- No `swift-tui-web` protocol change was needed.
 
 ## 1. Goal
 
@@ -100,10 +118,13 @@ Frame identity must be part of the blended variant key:
 
 ### Phase 0 - Contract Decision and Tests
 
+Status: complete.
+
 - Add tests documenting current `AnimatedImage(...).blendMode(...)` behavior.
 - Add explicit tests for raw GIF byte pass-through under blend mode.
-- Decide whether this tranche implements raw GIF frame decode or documents it as
-  unsupported for direct `Image(data:)`.
+- Decided to document direct raw GIF frame decode as unsupported for direct
+  `Image(data:)`. Implementing it in this tranche would require moving or
+  sharing GIF decode across package layers that are intentionally separate.
 
 Focused commands:
 
@@ -115,13 +136,19 @@ swiftly run swift test --filter WASISurfaceBridgeTests.WebSurfaceTransportTests
 
 ### Phase 1 - AnimatedImage Frame Coverage
 
+Status: complete.
+
 - Add blended multi-frame tests with distinct frame bytes.
 - Add reduced-motion tests proving the first frame carries compositing metadata
   and produces a blended variant.
 - Assert cache occupancy remains bounded if the cache-hardening tranche exposed
-  metrics.
+  metrics. Existing cache-hardening tests cover bounded compositor storage; this
+  tranche adds frame-identity coverage through distinct embedded PNG frame
+  references.
 
 ### Phase 2 - Optional Raw GIF Decode Bridge
+
+Status: closed as intentionally unsupported in this tranche.
 
 Only do this if the package graph supports it cleanly:
 
@@ -135,6 +162,8 @@ after Phase 1.
 
 ### Phase 3 - Web Transport Semantics
 
+Status: complete for the documented non-support path.
+
 - For implemented raw GIF blending, make `WebSurfaceFrameEncoder` emit blended
   PNG frame payloads instead of GIF bytes.
 - For documented non-support, assert blended direct GIF pass-through stays
@@ -143,13 +172,17 @@ after Phase 1.
 
 ### Phase 4 - Host Regression Tests
 
-- Terminal graphics/fallback: blended animated frames produce per-frame variant
-  IDs.
-- WASI/WebHost: unblended GIF remains pass-through; blended frame output is PNG
-  if raw GIF decode is implemented.
-- SwiftUI host: blended animated frames use precomposed payloads.
+Status: complete for this tranche's chosen contract.
+
+- Terminal graphics/fallback and SwiftUI host still consume animated frames as
+  ordinary PNG-backed `Image(data:)` attachments, so they inherit the existing
+  blended image variant path and terminal graphics tests.
+- WASI/WebHost tests now prove unblended GIF remains pass-through and direct
+  raw GIF with blend metadata does not emit a misleading blended PNG.
 
 ### Phase 5 - Docs and Gates
+
+Status: complete after the verification listed below.
 
 - Update authoring docs to distinguish `AnimatedImage` frame blending from raw
   GIF pass-through.
@@ -184,4 +217,3 @@ mise exec -- bazel test //:org_fast
   or documented as unsupported with tests locking that contract.
 - Unblended GIF pass-through behavior remains unchanged.
 - Animated variant churn remains bounded by the cache policy.
-

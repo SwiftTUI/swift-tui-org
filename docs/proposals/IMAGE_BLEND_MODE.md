@@ -2,18 +2,18 @@
 
 Status: proposal, re-audited against current `HEAD` on 2026-06-06. The
 first-tranche implementation, cache-hardening follow-on, glyph-aware backdrop
-follow-on, and ordered presentation-layer follow-on landed in the `swift-tui`
-working tree by 2026-06-08; this proposal remains as design context and scope
-record.
+follow-on, ordered presentation-layer follow-on, and GIF behavior follow-on
+landed in the `swift-tui` working tree by 2026-06-08; this proposal remains as
+design context and scope record.
 Implementation plan:
 [`docs/plans/2026-06-06-001-image-blend-mode-implementation-plan.md`](../plans/2026-06-06-001-image-blend-mode-implementation-plan.md).
 Completed follow-on tranches:
 [`cache hardening`](../plans/2026-06-06-002-image-blend-mode-cache-hardening-plan.md),
 [`glyph-aware backdrops`](../plans/2026-06-06-003-image-blend-mode-glyph-backdrop-plan.md),
-and [`ordered layers`](../plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md).
-Remaining implementation tranches:
-[`GIF blending`](../plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md),
-and [`native host replay`](../plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md).
+[`ordered layers`](../plans/2026-06-06-004-image-blend-mode-ordered-layer-plan.md),
+and [`GIF behavior`](../plans/2026-06-06-005-image-blend-mode-gif-blending-plan.md).
+Remaining implementation tranche:
+[`native host replay`](../plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md).
 
 ## Summary
 
@@ -68,8 +68,14 @@ At the time of the audit, the stale parts were narrower:
   cells first, then draw unblended image attachments or blended image variants
   on top. WebHost and WASI/browser share the web-surface frame encoder and the
   `swift-tui-web` canvas runtime.
-- `SwiftTUIAnimatedImage` feeds each pre-composed frame through `Image(data:)`,
-  so it inherits the same attachment behavior.
+- `SwiftTUIAnimatedImage` decodes GIF input into pre-composed PNG-backed frames
+  and feeds each frame through `Image(data:)`, so animated playback and
+  reduced-motion first-frame rendering inherit the same blend metadata and
+  precomposed-variant behavior.
+- Direct raw GIF container bytes passed to `Image(data:)` remain a web-surface
+  pass-through path when unblended. Under blend metadata, they are explicitly
+  left as unmodified GIF records because `SwiftTUIRuntime` does not decode GIF
+  containers and must not depend on the public animated-image product.
 - Terminal image presentation resolves PNG/JPEG through `ImageAssetRepository`
   and cached render variants. Web-surface encoding still passes through
   unblended image bytes directly, while blended images are emitted as cached PNG
@@ -95,8 +101,9 @@ native hosts can display high-fidelity images without forcing every image
 through a cell fallback. Blended variants remain deterministic approximations:
 they blend image pixels against captured cell backgrounds plus explicit
 foreground glyph coverage for block, braille, and ordinary text. Exact terminal
-font masks, host-native ordered replay, and GIF pass-through byte blending
-remain future work.
+font masks and host-native ordered replay remain future work. Direct raw-GIF
+container blending remains intentionally unsupported unless a future plan adds a
+clean frame decoder without breaking package layering.
 
 ## Desired Contract
 
