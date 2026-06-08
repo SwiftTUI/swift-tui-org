@@ -3,6 +3,84 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      Theme bootstrap. This runs synchronously, before the body paints, so the
+      page never flashes the wrong appearance. Precedence: an explicit saved
+      choice wins; otherwise follow the operating system. While the user has
+      made no explicit choice, keep tracking the OS live. The toggle wiring is
+      attached once the button exists. Kept inline (not in the deferred app.js)
+      precisely so it can apply before first paint.
+    -->
+    <script>
+      (function () {
+        "use strict";
+        var STORAGE_KEY = "stui-theme";
+        var root = document.documentElement;
+        var mql = window.matchMedia
+          ? window.matchMedia("(prefers-color-scheme: light)")
+          : null;
+
+        function storedTheme() {
+          try {
+            var value = localStorage.getItem(STORAGE_KEY);
+            return value === "light" || value === "dark" ? value : null;
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function systemTheme() {
+          return mql && mql.matches ? "light" : "dark";
+        }
+
+        function apply(theme) {
+          root.dataset.theme = theme;
+        }
+
+        // Start aligned with the system unless the user has chosen before.
+        apply(storedTheme() || systemTheme());
+
+        // Keep following the OS until an explicit choice is made.
+        if (mql) {
+          var onSystemChange = function () {
+            if (!storedTheme()) apply(systemTheme());
+          };
+          if (mql.addEventListener) mql.addEventListener("change", onSystemChange);
+          else if (mql.addListener) mql.addListener(onSystemChange);
+        }
+
+        function wireToggle() {
+          var button = document.getElementById("theme-toggle");
+          if (!button) return;
+          var sync = function () {
+            var isLight = root.dataset.theme === "light";
+            var label = isLight ? "Switch to dark mode" : "Switch to light mode";
+            button.setAttribute("aria-pressed", String(isLight));
+            button.setAttribute("aria-label", label);
+            button.setAttribute("title", label);
+          };
+          button.addEventListener("click", function () {
+            var next = root.dataset.theme === "light" ? "dark" : "light";
+            apply(next);
+            try {
+              localStorage.setItem(STORAGE_KEY, next);
+            } catch (error) {
+              /* storage unavailable (private mode); theme still applies */
+            }
+            sync();
+          });
+          sync();
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", wireToggle);
+        } else {
+          wireToggle();
+        }
+      })();
+    </script>
+
     <title>SwiftTUI Render Pipeline — a developer walkthrough</title>
     <meta
       name="description"
@@ -33,6 +111,15 @@
       <a class="repo-link" href="../../swift-tui/Sources/SwiftTUIRuntime/SwiftTUIRuntime.docc/Runtime-Render-Pipeline.md">
         DocC&nbsp;source&nbsp;of&nbsp;truth&nbsp;↗
       </a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+        <svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+        </svg>
+        <svg class="icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
     </header>
 
     <div class="doc-shell" id="top">

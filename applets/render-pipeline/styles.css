@@ -40,10 +40,62 @@
   --tok-num: #d2a8ff;
   --tok-com: #6e7a87;
 
+  /* component-specific tints (overridden per theme) */
+  --topbar-bg: rgba(13, 17, 23, 0.86);
+  --code-fg: #c9d4de;
+  --code-ln: #43505c;
+
   --radius: 10px;
   --radius-sm: 7px;
   --mono: "SFMono-Regular", "SF Mono", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ---------------------------- light theme -------------------------- */
+/* Only colour tokens change between themes; every layout rule below is
+   shared and reads from these variables. The palette mirrors GitHub's
+   light appearance so the document reads the same in either mode, and
+   the meaning-carrying accents (main-actor warm, off-actor teal) are
+   darkened just enough to stay legible on light surfaces. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* surfaces */
+  --bg: #ffffff;
+  --bg-soft: #f6f8fa;
+  --panel: #ffffff;
+  --panel-2: #f6f8fa;
+  --inset: #f6f8fa;
+  --line: #d8dee4;
+  --line-soft: #e6eaef;
+  --line-strong: #d0d7de;
+
+  /* text */
+  --text: #1f2328;
+  --muted: #57606a;
+  --quiet: #818b98;
+
+  /* accents (calm, desaturated) */
+  --accent: #0969da;
+  --accent-soft: rgba(9, 105, 218, 0.1);
+  --main-actor: #9a6700;
+  --main-actor-soft: rgba(154, 103, 0, 0.12);
+  --tail: #1b7c70;
+  --tail-soft: rgba(27, 124, 112, 0.12);
+  --ok: #1a7f37;
+  --drop: #cf222e;
+
+  /* syntax */
+  --tok-kw: #cf222e;
+  --tok-type: #0550ae;
+  --tok-str: #0a3069;
+  --tok-num: #8250df;
+  --tok-com: #6e7781;
+
+  /* component-specific tints */
+  --topbar-bg: rgba(255, 255, 255, 0.85);
+  --code-fg: #1f2328;
+  --code-ln: #8c959f;
 }
 
 * {
@@ -109,7 +161,7 @@ button {
   gap: 22px;
   height: 60px;
   padding: 0 24px;
-  background: rgba(13, 17, 23, 0.86);
+  background: var(--topbar-bg);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(10px);
 }
@@ -188,6 +240,43 @@ button {
   color: var(--text);
   border-color: var(--accent);
   text-decoration: none;
+}
+
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.theme-toggle .icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* Show the icon for the appearance the click switches *to*: the sun
+   (go light) while dark, the moon (go dark) while light. Dark is the
+   default when no data-theme attribute is present yet. */
+.theme-toggle .icon-moon {
+  display: none;
+}
+
+:root[data-theme="light"] .theme-toggle .icon-sun {
+  display: none;
+}
+
+:root[data-theme="light"] .theme-toggle .icon-moon {
+  display: block;
 }
 
 /* --------------------------- doc shell ----------------------------- */
@@ -722,13 +811,13 @@ body.is-playing .pause-label {
 }
 
 .code-line .ln {
-  color: #43505c;
+  color: var(--code-ln);
   text-align: right;
   user-select: none;
 }
 
 .code-line .lc {
-  color: #c9d4de;
+  color: var(--code-fg);
   white-space: pre;
 }
 
@@ -941,7 +1030,7 @@ body.is-playing .pause-label {
   padding: 18px;
   overflow: auto;
   background: var(--inset);
-  color: #c9d4de;
+  color: var(--code-fg);
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.5;
@@ -1418,7 +1507,7 @@ body.is-playing .pause-label {
   display: block;
   margin: 0 -18px;
   padding: 0 18px;
-  color: #c9d4de;
+  color: var(--code-fg);
 }
 
 .snippet-hot {
@@ -1586,6 +1675,12 @@ body.is-playing .pause-label {
 @media (max-width: 760px) {
   .topnav {
     display: none;
+  }
+
+  /* .topnav carried the margin-left:auto that right-aligns the header
+     controls; restore it on the repo link now that the nav is hidden. */
+  .repo-link {
+    margin-left: auto;
   }
 
   .doc-shell {
