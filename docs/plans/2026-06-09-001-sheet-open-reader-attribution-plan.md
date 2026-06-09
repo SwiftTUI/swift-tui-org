@@ -1,5 +1,16 @@
 # Sheet / Command-Palette Open Latency — Reader-Attribution Re-architecture
 
+> **⚠️ SUPERSEDED IN PART (2026-06-09).** Lever B was implemented and is
+> mechanism-proven, but **the win does not materialize** and this plan's
+> root-cause diagnosis is **corrected** by
+> [`docs/reports/2026-06-09-lever-b-implementation-and-findings.md`](../reports/2026-06-09-lever-b-implementation-and-findings.md).
+> In short: the **OPEN transition re-resolves the background regardless of the
+> flag**, so `@State`-owner attribution (Levers A+B) is real-but-not-binding;
+> the spike (§4) measured an *inline-overlay proxy* that bypasses the portal and
+> does **not** generalize to the real `.sheet`/`.paletteSheet`. Read the report
+> first. Levers A+B remain landed and flag-gated-off as a proven foundation; the
+> flag is NOT flipped and pins are NOT bumped.
+
 **Date:** 2026-06-09
 **Status:** Foundation (Lever A) landed behind a default-off flag; Lever B
 (presentation-trigger split) + validation/fixture work remain. This is the
