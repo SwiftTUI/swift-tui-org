@@ -3,9 +3,10 @@
 **Date:** 2026-06-09
 **Status:** Implementation underway. Phases 0-2 are complete locally, the
 Android Gallery Gradle/Compose app assembles with system Gradle and the
-checked-in wrapper, and the attached `arm64-v8a` emulator now paints the first
-hosted SwiftTUI gallery frame. Tab-by-tab renderer/input/accessibility
-verification remains.
+checked-in wrapper, and the named `SwiftTUI_AndroidGallery_arm64` AVD now
+paints the first hosted SwiftTUI gallery frame. That AVD is configured for
+repeatable local smoke runs. Tab-by-tab
+renderer/input/accessibility verification remains.
 **Target repos:** `swift-tui`, `swift-tui-examples`, and this coordination
 root for gates, pins, and plan tracking. Root owns this plan and final pin
 updates.
@@ -169,8 +170,9 @@ Implementation update on 2026-06-09:
 - `./gradlew :app:assembleDebug` is currently blocked by repeated
   `services.gradle.org` Gradle distribution download timeouts before Gradle
   starts. The wrapper files are present with a 60 second timeout and retries.
-- Runtime smoke testing is blocked because `adb devices -l` returns no attached
-  devices and `emulator -list-avds` returns no configured AVDs.
+- Runtime smoke now has a named local AVD lane:
+  `SwiftTUI_AndroidGallery_arm64`, using the installed
+  `system-images;android-36.1;google_apis;arm64-v8a` image.
 
 Validation refresh on 2026-06-09 after installing `swift-6.3.2-RELEASE_android`:
 
@@ -200,6 +202,11 @@ Validation refresh on 2026-06-09 after installing `swift-6.3.2-RELEASE_android`:
   delivered hosted frames without queuing them through an unpumped Android task
   executor. After rebuilding the APK, install/launch on the same emulator paints
   the first hosted SwiftTUI gallery frame.
+- Configured the named `SwiftTUI_AndroidGallery_arm64` AVD from
+  `system-images;android-36.1;google_apis;arm64-v8a`, made it visible to the
+  default emulator lookup, and verified boot/install/launch against the current
+  AndroidGallery debug APK. The captured first-frame screenshot shows the hosted
+  SwiftTUI gallery surface on this AVD.
 - Verified `--swift-sdk swift-6.3.2-RELEASE_android` by itself is not the
   desired build selector for the `arm64-v8a` app: it can select a different
   Android target triple. The build command should keep using
@@ -770,6 +777,7 @@ cd swift-tui-examples/AndroidGallery
 
 - [x] Wire the Swift gallery shim to instantiate `GalleryView()`.
 - [x] Make the first screen the hosted gallery surface.
+- [x] Configure a named arm64 AVD for repeatable local smoke runs.
 - [ ] Verify all gallery tabs render without crashing.
 - [ ] Verify core interactions:
   buttons, tab selection, text input, scrolling, pointer lab, popovers, palette,
@@ -778,10 +786,10 @@ cd swift-tui-examples/AndroidGallery
   drop/content URI import if deferred.
 - [ ] Add screenshots or an emulator smoke test artifact if CI supports it.
 
-Current implementation note: install/launch succeeds on the attached
-`arm64-v8a` emulator and the first SwiftTUI gallery frame is visible. Tab-by-tab
-runtime verification has not run, so renderer fidelity and input coverage remain
-the next smoke targets.
+Current implementation note: install/launch succeeds on the named
+`SwiftTUI_AndroidGallery_arm64` AVD and the first SwiftTUI gallery frame is
+visible. Tab-by-tab runtime verification has not run, so renderer fidelity and
+input coverage remain the next smoke targets.
 
 Commands:
 

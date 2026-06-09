@@ -86,13 +86,30 @@ The resulting debug APK includes `libGalleryAndroidHost.so`,
 `libswift_tui_jni.so`, `libc++_shared.so`, and Swift runtime libraries under
 `lib/arm64-v8a/`.
 
-Runtime smoke progressed on an attached `arm64-v8a` emulator:
+Runtime smoke progressed on the named `arm64-v8a` AVD
+`SwiftTUI_AndroidGallery_arm64`, backed by
+`system-images;android-36.1;google_apis;arm64-v8a`:
 
 ```bash
-adb devices -l
-adb install -r swift-tui-examples/AndroidGallery/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -W -n org.swifttui.gallery.android/.MainActivity
-adb shell pidof org.swifttui.gallery.android
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+"$HOME/Library/Android/sdk/emulator/emulator" -list-avds
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+"$HOME/Library/Android/sdk/emulator/emulator" \
+  -avd SwiftTUI_AndroidGallery_arm64 \
+  -no-window \
+  -gpu swiftshader_indirect \
+  -no-audio \
+  -no-boot-anim \
+  -no-snapshot-save
+
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 devices -l
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 install -r \
+  swift-tui-examples/AndroidGallery/app/build/outputs/apk/debug/app-debug.apk
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 shell am start -W \
+  -n org.swifttui.gallery.android/.MainActivity
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 shell pidof \
+  org.swifttui.gallery.android
 ```
 
 Observed result: install succeeds, launch returns `Status: ok`, the app process
@@ -102,8 +119,6 @@ and the SwiftTUI logo art) instead of the Compose startup placeholder.
 
 ## Current Blockers
 
-- `emulator -list-avds` still returns no configured AVDs, so repeatable local or
-  CI smoke testing still needs a named AVD or an explicitly provisioned device.
 - Runtime verification beyond first paint has not run tab-by-tab yet. The
   remaining smoke risk is interaction and renderer fidelity, not first-frame
   publication.
@@ -123,19 +138,17 @@ The current Android host is a buildable scaffold, not complete platform parity:
   events. Pointer/touch, IME composition, clipboard, link opening, accessibility
   focus, and Android content URI import remain follow-up work.
 - Device/emulator behavior is only partially verified. The app opens, stays
-  alive, and paints the first SwiftTUI gallery frame on an attached `arm64-v8a`
-  emulator, but it has not yet survived tab switching or broader interaction
-  sweeps.
+  alive, and paints the first SwiftTUI gallery frame on the named
+  `SwiftTUI_AndroidGallery_arm64` AVD, but it has not yet survived tab switching
+  or broader interaction sweeps.
 
 ## Next Work
 
-1. Configure a named AVD or CI device lane so the install/launch smoke is
-   repeatable outside the currently attached emulator.
-2. Exercise the gallery tab-by-tab on device/emulator and record the remaining
+1. Exercise the gallery tab-by-tab on device/emulator and record the remaining
    renderer/input failures.
-3. Extend the frame snapshot from text rows to styled cells, image attachments,
+2. Extend the frame snapshot from text rows to styled cells, image attachments,
    semantics, and focus presentation.
-4. Extend Compose rendering and input to cover the gallery's tabs rather than
+3. Extend Compose rendering and input to cover the gallery's tabs rather than
    only the text-row proof.
-5. Add an examples native gate around the wrapper assemble, including explicit
+4. Add an examples native gate around the wrapper assemble, including explicit
    Swift SDK setup and Android SDK/NDK prerequisites.
