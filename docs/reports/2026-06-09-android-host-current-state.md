@@ -21,6 +21,9 @@ The repo now has explicit Android host scaffolding in two child repos:
 - The Android demo app builds a Swift dynamic library for `arm64-v8a`, copies
   the Swift Android runtime `.so` files into generated `jniLibs`, and packages
   them into the debug APK.
+- The Android host now publishes its first `GalleryView()` frame on an attached
+  `arm64-v8a` emulator. The Compose startup placeholder is no longer the
+  runtime stopping point.
 
 ## Verified Locally
 
@@ -56,7 +59,10 @@ The Android Gallery app assembles with both system Gradle 9.5.1 and the
 checked-in wrapper. The Gradle build creates a generated
 `app/build/swift-sdks` search path containing only
 `swift-6.3.2-RELEASE_android` before invoking SwiftPM, so the app build does
-not rely on SwiftPM's multiple-installed-SDK selection:
+not rely on SwiftPM's multiple-installed-SDK selection. During org-root
+development, Gradle also mirrors the public SwiftTUI HTTPS dependency to the
+local pinned checkout, keeping the public manifest free of sibling path
+dependencies:
 
 ```bash
 cd swift-tui-examples/AndroidGallery
@@ -90,18 +96,17 @@ adb shell pidof org.swifttui.gallery.android
 ```
 
 Observed result: install succeeds, launch returns `Status: ok`, the app process
-stays alive, and logcat shows `libswift_tui_jni.so` loading. A screenshot after
-launch is nonblank but remains on the Compose startup placeholder,
-`Starting SwiftTUI gallery...`; no SwiftTUI gallery frame is visible yet.
+stays alive, logcat shows `libswift_tui_jni.so` loading, and the screenshot
+shows the hosted SwiftTUI gallery content (`Logo`, `Counter`, `Life`, `Todo`,
+and the SwiftTUI logo art) instead of the Compose startup placeholder.
 
 ## Current Blockers
 
-- Runtime verification is now blocked at first-frame publication: the app
-  installs and launches on the attached emulator, but the Compose host remains
-  on `Starting SwiftTUI gallery...` instead of painting the first SwiftTUI
-  frame. There is no fatal exception in the checked logcat slice.
 - `emulator -list-avds` still returns no configured AVDs, so repeatable local or
   CI smoke testing still needs a named AVD or an explicitly provisioned device.
+- Runtime verification beyond first paint has not run tab-by-tab yet. The
+  remaining smoke risk is interaction and renderer fidelity, not first-frame
+  publication.
 
 ## Known Gaps
 
@@ -117,16 +122,17 @@ The current Android host is a buildable scaffold, not complete platform parity:
 - Input bridging currently covers basic hardware keys/text through Compose key
   events. Pointer/touch, IME composition, clipboard, link opening, accessibility
   focus, and Android content URI import remain follow-up work.
-- Device/emulator behavior is only partially verified. The app opens and stays
-  alive on an attached `arm64-v8a` emulator, but it has not yet painted a
-  SwiftTUI gallery frame or survived tab switching.
+- Device/emulator behavior is only partially verified. The app opens, stays
+  alive, and paints the first SwiftTUI gallery frame on an attached `arm64-v8a`
+  emulator, but it has not yet survived tab switching or broader interaction
+  sweeps.
 
 ## Next Work
 
-1. Diagnose why the Android Compose host remains on the startup placeholder
-   after launch instead of receiving and painting the first SwiftTUI frame.
-2. Configure a named AVD or CI device lane so the install/launch smoke is
+1. Configure a named AVD or CI device lane so the install/launch smoke is
    repeatable outside the currently attached emulator.
+2. Exercise the gallery tab-by-tab on device/emulator and record the remaining
+   renderer/input failures.
 3. Extend the frame snapshot from text rows to styled cells, image attachments,
    semantics, and focus presentation.
 4. Extend Compose rendering and input to cover the gallery's tabs rather than

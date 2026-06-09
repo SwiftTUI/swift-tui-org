@@ -3,8 +3,9 @@
 **Date:** 2026-06-09
 **Status:** Implementation underway. Phases 0-2 are complete locally, the
 Android Gallery Gradle/Compose app assembles with system Gradle and the
-checked-in wrapper, and runtime verification is blocked at first SwiftTUI frame
-publication on the attached `arm64-v8a` emulator.
+checked-in wrapper, and the attached `arm64-v8a` emulator now paints the first
+hosted SwiftTUI gallery frame. Tab-by-tab renderer/input/accessibility
+verification remains.
 **Target repos:** `swift-tui`, `swift-tui-examples`, and this coordination
 root for gates, pins, and plan tracking. Root owns this plan and final pin
 updates.
@@ -184,13 +185,21 @@ Validation refresh on 2026-06-09 after installing `swift-6.3.2-RELEASE_android`:
   containing only `swift-6.3.2-RELEASE_android`. The APK includes
   `libGalleryAndroidHost.so`, `libswift_tui_jni.so`, `libc++_shared.so`, and
   Swift runtime libraries under `lib/arm64-v8a/`.
+- The Android Gallery Swift package now uses a public HTTPS SwiftTUI dependency.
+  Gradle configures a local SwiftPM mirror during org-root development so the
+  build still uses the pinned sibling checkout without committing a sibling path
+  dependency into the public examples repo.
 - Installed the debug APK on an attached `arm64-v8a` emulator
   (`sdk_gphone64_arm64`) and launched
   `org.swifttui.gallery.android/.MainActivity`. Launch returned `Status: ok`,
   the app process stayed alive, and logcat showed `libswift_tui_jni.so`
-  loading. The visible screen remained on the startup placeholder
-  `Starting SwiftTUI gallery...`, so first SwiftTUI frame publication/rendering
-  is the current runtime blocker.
+  loading. Initial smoke stopped at the startup placeholder
+  `Starting SwiftTUI gallery...`.
+- Follow-up runtime work kept Android on the already-running main actor for the
+  start path, used sync hosted rendering for the Android scene session, and
+  delivered hosted frames without queuing them through an unpumped Android task
+  executor. After rebuilding the APK, install/launch on the same emulator paints
+  the first hosted SwiftTUI gallery frame.
 - Verified `--swift-sdk swift-6.3.2-RELEASE_android` by itself is not the
   desired build selector for the `arm64-v8a` app: it can select a different
   Android target triple. The build command should keep using
@@ -769,9 +778,10 @@ cd swift-tui-examples/AndroidGallery
   drop/content URI import if deferred.
 - [ ] Add screenshots or an emulator smoke test artifact if CI supports it.
 
-Current blocker: install/launch succeeds on the attached `arm64-v8a` emulator,
-but the visible app remains on `Starting SwiftTUI gallery...` and does not paint
-the first SwiftTUI gallery frame. Tab-by-tab runtime verification has not run.
+Current implementation note: install/launch succeeds on the attached
+`arm64-v8a` emulator and the first SwiftTUI gallery frame is visible. Tab-by-tab
+runtime verification has not run, so renderer fidelity and input coverage remain
+the next smoke targets.
 
 Commands:
 
