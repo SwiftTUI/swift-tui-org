@@ -31,19 +31,32 @@ swiftly run swift test --package-path swift-tui --filter HostedSurfaceSizeNegoti
 swiftly run swift test --package-path swift-tui --filter SwiftTUIAndroidHostTests
 ```
 
-Android Swift cross-builds have been verified with Swift 6.3.0 and the
-`swift-6.3-RELEASE_android` SDK:
+Android Swift cross-builds have been refreshed with Swift 6.3.1 and the
+installed `swift-6.3.2-RELEASE_android` SDK. The 6.3.2 bundle needs its
+`ndk-sysroot` materialized from an Android NDK before the first build:
+
+```bash
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+"$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android/scripts/setup-android-sdk.sh"
+```
+
+The `arm64-v8a` SwiftPM build uses the Android target triple selector; SwiftPM
+selects the `swift-6.3.2-RELEASE_android` artifact for that triple:
 
 ```bash
 DISABLE_EXPLICIT_PLATFORMS=1 \
 ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
-swiftly run swift build +6.3.0 \
+swiftly run swift build +6.3.1 \
   --package-path swift-tui \
   --swift-sdk aarch64-unknown-linux-android28 \
   --target SwiftTUIAndroidHost
 ```
 
-The Android Gallery app assembles with system Gradle 9.5.1:
+The Android Gallery app assembles with both system Gradle 9.5.1 and the
+checked-in wrapper. The Gradle build creates a generated
+`app/build/swift-sdks` search path containing only
+`swift-6.3.2-RELEASE_android` before invoking SwiftPM, so the app build does
+not rely on SwiftPM's multiple-installed-SDK selection:
 
 ```bash
 cd swift-tui-examples/AndroidGallery
@@ -51,20 +64,44 @@ cd swift-tui-examples/AndroidGallery
 JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 ANDROID_HOME="$HOME/Library/Android/sdk" \
 ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle" \
+SWIFT_ANDROID_ROOT="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android" \
 gradle :app:assembleDebug
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle" \
+SWIFT_ANDROID_ROOT="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android" \
+./gradlew :app:assembleDebug
 ```
 
 The resulting debug APK includes `libGalleryAndroidHost.so`,
-`libswift_tui_jni.so`, and Swift runtime libraries under `lib/arm64-v8a/`.
+`libswift_tui_jni.so`, `libc++_shared.so`, and Swift runtime libraries under
+`lib/arm64-v8a/`.
+
+Runtime smoke progressed on an attached `arm64-v8a` emulator:
+
+```bash
+adb devices -l
+adb install -r swift-tui-examples/AndroidGallery/app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -W -n org.swifttui.gallery.android/.MainActivity
+adb shell pidof org.swifttui.gallery.android
+```
+
+Observed result: install succeeds, launch returns `Status: ok`, the app process
+stays alive, and logcat shows `libswift_tui_jni.so` loading. A screenshot after
+launch is nonblank but remains on the Compose startup placeholder,
+`Starting SwiftTUI gallery...`; no SwiftTUI gallery frame is visible yet.
 
 ## Current Blockers
 
-- `./gradlew :app:assembleDebug` is blocked before Gradle configuration by
-  repeated `services.gradle.org` distribution download timeouts. The wrapper is
-  checked in and configured with a 60 second timeout and retries; the same
-  project builds with installed Gradle 9.5.1.
-- Runtime verification is blocked because `adb devices -l` returns no attached
-  Android devices and `emulator -list-avds` returns no configured AVDs.
+- Runtime verification is now blocked at first-frame publication: the app
+  installs and launches on the attached emulator, but the Compose host remains
+  on `Starting SwiftTUI gallery...` instead of painting the first SwiftTUI
+  frame. There is no fatal exception in the checked logcat slice.
+- `emulator -list-avds` still returns no configured AVDs, so repeatable local or
+  CI smoke testing still needs a named AVD or an explicitly provisioned device.
 
 ## Known Gaps
 
@@ -80,20 +117,19 @@ The current Android host is a buildable scaffold, not complete platform parity:
 - Input bridging currently covers basic hardware keys/text through Compose key
   events. Pointer/touch, IME composition, clipboard, link opening, accessibility
   focus, and Android content URI import remain follow-up work.
-- Device/emulator behavior is not yet verified. The next runtime smoke test
-  must prove the gallery opens, paints nonblank content, and survives tab
-  switching.
+- Device/emulator behavior is only partially verified. The app opens and stays
+  alive on an attached `arm64-v8a` emulator, but it has not yet painted a
+  SwiftTUI gallery frame or survived tab switching.
 
 ## Next Work
 
-1. Attach an `arm64-v8a` device or configure an AVD and run an install/launch
-   smoke test.
-2. Resolve the Gradle wrapper distribution download issue or pre-provision the
-   wrapper distribution in the local/CI environment.
+1. Diagnose why the Android Compose host remains on the startup placeholder
+   after launch instead of receiving and painting the first SwiftTUI frame.
+2. Configure a named AVD or CI device lane so the install/launch smoke is
+   repeatable outside the currently attached emulator.
 3. Extend the frame snapshot from text rows to styled cells, image attachments,
    semantics, and focus presentation.
 4. Extend Compose rendering and input to cover the gallery's tabs rather than
    only the text-row proof.
-5. Add an examples native gate once `:app:assembleDebug` is deterministic
-   through the wrapper or a pinned local Gradle path.
-
+5. Add an examples native gate around the wrapper assemble, including explicit
+   Swift SDK setup and Android SDK/NDK prerequisites.

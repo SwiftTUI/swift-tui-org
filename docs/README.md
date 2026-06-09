@@ -23,8 +23,9 @@ documentation in their own `docs/` trees.
 - [reports/2026-06-09-android-host-current-state.md](reports/2026-06-09-android-host-current-state.md) -
   current state of the Android host effort after the first implementation pass:
   implemented `SwiftTUIAndroidHost`/Compose Gallery scaffolding, local Swift and
-  Gradle verification, wrapper/device blockers, known renderer/input/a11y gaps,
-  and next work.
+  Gradle verification with `swift-6.3.2-RELEASE_android`, install/launch smoke
+  status, the first-frame runtime blocker, known renderer/input/a11y gaps, and
+  next work.
 - [reports/2026-06-08-0.1.0-public-release-readiness.md](reports/2026-06-08-0.1.0-public-release-readiness.md) -
   first-public-`0.1.0` release-readiness audit across all four child repos: one
   legal blocker (3 repos + npm tarballs have no LICENSE), several
@@ -102,8 +103,8 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 - [plans/2026-06-09-001-android-host-view-gallery-demo-plan.md](plans/2026-06-09-001-android-host-view-gallery-demo-plan.md) -
   Android host view and gallery demo plan/status: completed local Swift
   Android cross-build fixes, shared size negotiation, `SwiftTUIAndroidHost`,
-  Compose/JNI Android Gallery scaffold, current assemble verification, and
-  remaining renderer/input/accessibility/device-smoke work.
+  Compose/JNI Android Gallery scaffold, current assemble/install verification,
+  and remaining first-frame renderer/input/accessibility smoke work.
 - [plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md](plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md) -
   later image blend-mode tranche for native host replay after ordered layers:
   WebHost canvas and SwiftUI/CoreGraphics blend modes behind capability checks,

@@ -2,9 +2,9 @@
 
 **Date:** 2026-06-09
 **Status:** Implementation underway. Phases 0-2 are complete locally, the
-Android Gallery Gradle/Compose app assembles with system Gradle, and runtime
-device verification is blocked on no attached Android device and no configured
-AVD.
+Android Gallery Gradle/Compose app assembles with system Gradle and the
+checked-in wrapper, and runtime verification is blocked at first SwiftTUI frame
+publication on the attached `arm64-v8a` emulator.
 **Target repos:** `swift-tui`, `swift-tui-examples`, and this coordination
 root for gates, pins, and plan tracking. Root owns this plan and final pin
 updates.
@@ -119,7 +119,9 @@ Initial local probing showed:
 The first implementation step must align the Swift toolchain and Android SDK
 versions before drawing conclusions about SwiftTUI compile failures.
 
-Validation update on 2026-06-09:
+Earlier validation update on 2026-06-09, before the
+`swift-6.3.2-RELEASE_android` SDK install. This is superseded by the refresh
+below for current Android host verification:
 
 - Installed Swift 6.3.0 with `swiftly install 6.3.0 --assume-yes` without
   making it the default toolchain.
@@ -168,6 +170,32 @@ Implementation update on 2026-06-09:
   starts. The wrapper files are present with a 60 second timeout and retries.
 - Runtime smoke testing is blocked because `adb devices -l` returns no attached
   devices and `emulator -list-avds` returns no configured AVDs.
+
+Validation refresh on 2026-06-09 after installing `swift-6.3.2-RELEASE_android`:
+
+- Ran the 6.3.2 SDK's `scripts/setup-android-sdk.sh` with `ANDROID_NDK_HOME`
+  pointing at the existing r27d NDK from `swift-6.3-RELEASE_android`; this
+  materialized the 6.3.2 bundle's `ndk-sysroot`.
+- Verified `swiftly run swift build +6.3.1 --package-path swift-tui
+  --swift-sdk aarch64-unknown-linux-android28 --target SwiftTUIAndroidHost`
+  selects the installed `swift-6.3.2-RELEASE_android` SDK and completes.
+- Verified both `gradle :app:assembleDebug` and `./gradlew :app:assembleDebug`
+  with the Gradle build creating an isolated generated Swift SDK search path
+  containing only `swift-6.3.2-RELEASE_android`. The APK includes
+  `libGalleryAndroidHost.so`, `libswift_tui_jni.so`, `libc++_shared.so`, and
+  Swift runtime libraries under `lib/arm64-v8a/`.
+- Installed the debug APK on an attached `arm64-v8a` emulator
+  (`sdk_gphone64_arm64`) and launched
+  `org.swifttui.gallery.android/.MainActivity`. Launch returned `Status: ok`,
+  the app process stayed alive, and logcat showed `libswift_tui_jni.so`
+  loading. The visible screen remained on the startup placeholder
+  `Starting SwiftTUI gallery...`, so first SwiftTUI frame publication/rendering
+  is the current runtime blocker.
+- Verified `--swift-sdk swift-6.3.2-RELEASE_android` by itself is not the
+  desired build selector for the `arm64-v8a` app: it can select a different
+  Android target triple. The build command should keep using
+  `aarch64-unknown-linux-android28` as the SwiftPM selector while the configured
+  SDK bundle is `swift-6.3.2-RELEASE_android`.
 
 ### 2.6 Gallery anchor
 
@@ -596,9 +624,9 @@ loose script:
 
 Unblocked when Android Studio/JDK/NDK/Swift SDK downloads finish.
 
-- [x] Install/use a Swift toolchain that exactly matches the Android SDK.
-  Local validation uses Swift 6.3.0 via `swiftly run ... +6.3.0` to match the
-  installed `swift-6.3-RELEASE_android` SDK while leaving the default host
+- [x] Install/use a Swift toolchain compatible with the Android SDK.
+  Current local validation uses Swift 6.3.1 via `swiftly run ... +6.3.1` with
+  the installed `swift-6.3.2-RELEASE_android` SDK while leaving the default host
   toolchain unchanged.
 - [x] Set or verify Android environment variables:
   `ANDROID_HOME` or `ANDROID_SDK_ROOT`, and `ANDROID_NDK_HOME`.
@@ -615,14 +643,19 @@ swiftly run swift --version
 swiftly run swift sdk list
 env | sort | rg 'ANDROID_(HOME|SDK_ROOT|NDK_HOME)'
 
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+"$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android/scripts/setup-android-sdk.sh"
+
 DISABLE_EXPLICIT_PLATFORMS=1 \
-  swiftly run swift build \
+  ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+  swiftly run swift build +6.3.1 \
   --package-path swift-tui \
   --swift-sdk aarch64-unknown-linux-android28 \
   --target SwiftTUIRuntime
 
 DISABLE_EXPLICIT_PLATFORMS=1 \
-  swiftly run swift build \
+  ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+  swiftly run swift build +6.3.1 \
   --package-path swift-tui-examples/gallery \
   --swift-sdk aarch64-unknown-linux-android28 \
   --target GalleryDemoViews
@@ -736,8 +769,9 @@ cd swift-tui-examples/AndroidGallery
   drop/content URI import if deferred.
 - [ ] Add screenshots or an emulator smoke test artifact if CI supports it.
 
-Current blocker: no Android device is attached and no AVD is configured, so
-install/launch and tab-by-tab runtime verification have not run.
+Current blocker: install/launch succeeds on the attached `arm64-v8a` emulator,
+but the visible app remains on `Starting SwiftTUI gallery...` and does not paint
+the first SwiftTUI gallery frame. Tab-by-tab runtime verification has not run.
 
 Commands:
 
@@ -800,9 +834,9 @@ mise exec -- bazel test //:android_gallery_native_gate
 ## 9. Risks And Open Questions
 
 - **Swift/Android SDK version matching:** the local build is aligned by using
-  Swift 6.3.0 explicitly with the installed `swift-6.3-RELEASE_android` SDK.
-  Future Android SDK bumps must be paired with the matching Swift toolchain
-  before treating compiler errors as framework issues.
+  Swift 6.3.1 explicitly with the installed `swift-6.3.2-RELEASE_android`
+  SDK. Future Android SDK bumps must be paired with a compatible Swift
+  toolchain before treating compiler errors as framework issues.
 - **Manifest gating:** `Package.swift` includes `SwiftUIHost` based on host OS,
   not target OS. Android targeted builds from macOS may need an explicit host
   exclusion gate for full package builds.
