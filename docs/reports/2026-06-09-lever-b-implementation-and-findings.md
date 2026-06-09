@@ -111,38 +111,80 @@ trigger.**
    **contradicted by direct measurement** — opens are cold even with Lever A+B
    active and the button outside the background.
 
-## Leading hypothesis for the open-time re-resolve (NOT yet confirmed)
+## CONFIRMED: the open-time re-resolve has THREE overlapping causes
 
-The controlled render reuses the background when invalidation is isolated, but
-the live open does not — so the live open must either (a) flip an
-**environment-snapshot value propagated across the whole background** when the
-overlay opens (`ViewNode.canReuse` requires `committed.environmentSnapshot ==
-environment`, so any background-wide env change fails reuse for every node), or
-(b) drive **runtime-reader reuse-suppression** broadly (`effectiveSuppresses-
-RetainedReuse`). `focus_syncs = 0` rules out the focus-snapshot path for palette
-specifically, so a non-focus env value (interaction gate / "presentation active")
-or the suppression path are the prime suspects.
+Added an env-gated reuse-denial trace (`SWIFTTUI_REUSE_TRACE`, swift-tui
+`2e36a922`) that records, per recomputed node, *why* retained reuse was denied,
+plus the offending environment keys and invalidated identity paths. Ran the
+standard `.paletteSheet` open flag-on (8 rows, async). Aggregate denial reasons:
 
-## Recommended next step (for the human to scope)
+| reason | count | share | meaning |
+| --- | --- | --- | --- |
+| `invalidation-conflict` | 4978 | **~63%** | node is an ancestor/descendant of an invalidated identity |
+| `env-mismatch` | 1374 | ~17% | `committed.environmentSnapshot != environment` |
+| `suppressed` | 1365 | ~17% | `effectiveSuppressesRetainedReuse` (focus/press cone) |
+| no-node / visited / dirty / stale / not-present | small | — | cold-start + normal churn |
 
-Instrument **one live open frame** to capture what re-resolves the background
-beyond the isolated trigger:
+- **`invalidation-conflict` (the #1 blocker).** The invalidated identity the
+  background conflicts with is **`App/sheet-open-latency/Layout[0]`** — the
+  app-content root (the renderer's `rootIdentity`), an **ancestor of the entire
+  background**. So the whole background (every descendant) is blocked on open.
+  (The `…/PortalHost/overlays/entry:SheetPresentation:…` invalidations are the
+  overlay itself — a separate subtree that does *not* block the background.)
+  **This root invalidation is flag-INDEPENDENT**: running the trace flag-off
+  shows `…/Layout[0]` invalidated on exactly the same open frames (only the
+  background's own path differs — `…/Layout[0]/false/content/…` flag-off vs
+  `…/Layout[0]/false/base/content/…` flag-on, the Lever B `base` wrapper). So
+  this is **not** the `@State`-owner attribution Lever A+B fixes — it is a
+  separate, root-level invalidation on the open/close action (candidates: the
+  runtime's input-dispatch root invalidation — `RunLoop+EventDispatch`/
+  pointer-activation requests `requestInvalidation(of: [rootIdentity])` on
+  handled input — and/or presentation reconciliation). **Plan §6 "Portal is NOT a
+  blocker" is contradicted, and the plan's whole "owner-anchored `@State`" thesis
+  is shown non-binding here.** (Flag-on recompute counts are even slightly
+  *higher* than flag-off — the Lever B wrapper adds nodes — consistent with the
+  measured flag-on ≈ flag-off.)
+- **`env-mismatch` is dominated by `IsFocusedKey`** (1283 of 1374 env-diffs;
+  `ForegroundStyleKey`/`style` are minor). Opening moves focus → `isFocused`
+  flips across the focused node's ancestor/descendant cone → the env snapshot
+  differs → reuse denied. **This is the §8 `isFocused`-snapshot blocker, and it
+  DOES bite palette** (the earlier `focus_syncs = 0` reading was misleading — the
+  snapshot still changes even when the focus-sync counter is 0).
+- **`suppressed`** is the focus/press runtime-reader suppression cone
+  (`retainedReuseSuppressionScopeForFrameSafety`), whose `suppresses(identity:)`
+  covers the entire ancestor+descendant cone of each focus/press identity.
 
-1. Log, per node on the open frame, why `canReuse` returns false — split into
-   `environmentSnapshot !=` vs `invalidated/conflict` vs
-   `effectiveSuppressesRetainedReuse`.
-2. If it is an env-snapshot change: identify which environment value flips across
-   the background on open (interaction gate, presentation-active, etc.) and make
-   it runtime-derived / excluded from the reuse snapshot (mirroring the
-   previously-considered `RuntimeDerivedEnvironmentKey` exclusion for
-   `IsFocusedKey`, but for the palette's actual value), then re-measure.
-3. Re-validate against the **real** `.paletteSheet` (not the inline spike). A
-   replacement spike should toggle a real `.paletteSheet`, not an inline overlay.
+## Recommended fix path (prioritized by measured weight)
 
-Only once the open-time re-resolve is removed does Lever B's
-background-sparing become the *binding* improvement — at which point flipping
-`SWIFTTUI_READER_ATTRIBUTION` on (and re-baselining the presentation fixtures,
-per the plan §7.3) is justified.
+Sheet-open latency needs **all three** addressed; in weight order:
+
+1. **(~63%) Stop the root-level `…/Layout[0]` (`rootIdentity`) invalidation from
+   blocking the background.** Confirmed flag-independent, so this is the highest
+   lever and is *not* what Lever A+B addresses. Immediate next step: add an
+   **invalidation-source trace** (mirror `ReuseDenialTrace`: log the caller +
+   identity for each `scheduler.requestInvalidation`) to pin which call
+   invalidates `rootIdentity` on the open `sendClick`. Prime suspects, in order:
+   (a) the runtime's input-dispatch root invalidation —
+   `RunLoop+EventDispatch.swift:56/82/108/139` and the pointer-activation path
+   both do `requestInvalidation(of: [rootIdentity])` after a handled event; (b)
+   presentation reconciliation / `PresentationCoordinatorStorage.swift:301`. If
+   it is (a), the fix is to scope the post-input invalidation to the handler's
+   subtree instead of the whole root (big, general win beyond presentations). If
+   (b), narrow the presentation invalidation to the overlay subtree.
+2. **(~17%) Exclude `IsFocusedKey` from the reuse environment snapshot** — the
+   previously-prototyped `RuntimeDerivedEnvironmentKey` exclusion (route
+   `\.isFocused` reads via `FocusedIdentityKey` deps). It regressed a
+   WindowGroup/TabView external-binding ScrollView before
+   (`InteractiveRuntimeTests`), so re-derive carefully and gate on the full
+   scroll suite.
+3. **(~17%) Narrow the focus/press suppression cone** so it does not suppress an
+   entire disjoint background when focus moves into an overlay.
+
+Re-validate against the **real** `.paletteSheet` with `SWIFTTUI_REUSE_TRACE=1`
+(watch the three buckets shrink), not the inline spike. Only once the background
+actually reuses on open does Lever B's sparing become binding — then flipping
+`SWIFTTUI_READER_ATTRIBUTION` on (and re-baselining presentation fixtures, plan
+§7.3) is justified.
 
 ## State / reversibility
 
