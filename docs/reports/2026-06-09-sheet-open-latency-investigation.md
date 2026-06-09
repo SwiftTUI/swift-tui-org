@@ -1,5 +1,12 @@
 # Sheet / Command-Palette Open Latency — Investigation & Prototypes
 
+> **SUPERSEDED (2026-06-09):** the "recommended next step" here (descendant
+> reuse) was prototyped and proven a **dead end** (~0 latency win — the descent
+> dominates). The authoritative direction is now reader-attributed `@State`
+> tracking + a presentation-trigger split; see
+> [`docs/plans/2026-06-09-001-sheet-open-reader-attribution-plan.md`](../plans/2026-06-09-001-sheet-open-reader-attribution-plan.md).
+> This report is retained for its measurement data and per-phase breakdown.
+
 **Date:** 2026-06-09
 **Status:** Investigation complete; one landable measurement tool + one gated raster
 prototype checked in; the principal optimization identified but **not landed** (see
