@@ -1,0 +1,191 @@
+# Android Host Current State
+
+**Date:** 2026-06-10
+
+This report records the current state of the Android host effort after the
+latest parity pass. The execution plan remains
+[`docs/plans/2026-06-09-001-android-host-view-gallery-demo-plan.md`](../plans/2026-06-09-001-android-host-view-gallery-demo-plan.md).
+
+## Current State
+
+The repo now has explicit Android host scaffolding in two child repos:
+
+- `swift-tui` has a `SwiftTUIAndroidHost` product and target under
+  `Platforms/Android`.
+- `swift-tui` has a platform-neutral `HostedSurfaceSizeNegotiator` in
+  `SwiftTUIRuntime`, and the SwiftUI host now adapts to that shared negotiator.
+- `swift-tui-examples` has an `AndroidGallery` Gradle project with a Compose
+  host view, a Kotlin state/frame parser layer, an Android Canvas renderer,
+  a transparent Compose semantics overlay, a small `ndk-build` JNI bridge, and
+  a Swift package shim that creates `GalleryView()`.
+- The Android demo app builds a Swift dynamic library for `arm64-v8a`, copies
+  the Swift Android runtime `.so` files into generated `jniLibs`, and packages
+  them into the debug APK.
+- The Android host now publishes its first `GalleryView()` frame on an attached
+  `arm64-v8a` emulator. The Compose startup placeholder is no longer the
+  runtime stopping point.
+- The Android frame snapshot schema now carries terminal colors, raster cells,
+  cell styles, ranged damage metadata, image attachment records and payloads,
+  accessibility nodes, accessibility announcements, focus presentation, and
+  preferred layout size.
+- The Compose renderer now paints styled cells, foreground/background colors,
+  underline/strikethrough decorations, and embedded image payloads. The host view
+  mounts a transparent semantics overlay and bridges basic touch activation back
+  through SwiftTUI input.
+
+## Verified Locally
+
+Swift-side focused tests pass:
+
+```bash
+swiftly run swift test --package-path swift-tui --filter HostedSurfaceSizeNegotiatorTests
+swiftly run swift test --package-path swift-tui --filter SwiftTUIAndroidHostTests
+cd swift-tui && Scripts/generate_public_api_inventory.sh --check
+```
+
+Android Swift cross-builds have been refreshed with Swift 6.3.1 and the
+installed `swift-6.3.2-RELEASE_android` SDK. The 6.3.2 bundle needs its
+`ndk-sysroot` materialized from an Android NDK before the first build:
+
+```bash
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+"$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android/scripts/setup-android-sdk.sh"
+```
+
+The `arm64-v8a` SwiftPM build uses the Android target triple selector; SwiftPM
+selects the `swift-6.3.2-RELEASE_android` artifact for that triple:
+
+```bash
+DISABLE_EXPLICIT_PLATFORMS=1 \
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+swiftly run swift build +6.3.1 \
+  --package-path swift-tui \
+  --swift-sdk aarch64-unknown-linux-android28 \
+  --target SwiftTUIAndroidHost
+```
+
+The Android Gallery app assembles with both system Gradle 9.5.1 and the
+checked-in wrapper. The Gradle build creates a generated
+`app/build/swift-sdks` search path containing only
+`swift-6.3.2-RELEASE_android` before invoking SwiftPM, so the app build does
+not rely on SwiftPM's multiple-installed-SDK selection. During org-root
+development, Gradle also mirrors the public SwiftTUI HTTPS dependency to the
+local pinned checkout, keeping the public manifest free of sibling path
+dependencies:
+
+```bash
+cd swift-tui-examples/AndroidGallery
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle" \
+SWIFT_ANDROID_ROOT="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android" \
+gradle :app:assembleDebug
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle" \
+SWIFT_ANDROID_ROOT="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android" \
+./gradlew :app:assembleDebug
+```
+
+The 2026-06-10 parity pass also verified Kotlin compilation directly:
+
+```bash
+cd swift-tui-examples/AndroidGallery
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle" \
+SWIFT_ANDROID_ROOT="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android" \
+./gradlew :app:compileDebugKotlin \
+  -x buildSwiftAndroid \
+  -x copySwiftAndroidLibraries \
+  -x externalNativeBuildDebug
+```
+
+The resulting debug APK includes `libGalleryAndroidHost.so`,
+`libswift_tui_jni.so`, `libc++_shared.so`, and Swift runtime libraries under
+`lib/arm64-v8a/`.
+
+Runtime smoke progressed on the named `arm64-v8a` AVD
+`SwiftTUI_AndroidGallery_arm64`, backed by
+`system-images;android-36.1;google_apis;arm64-v8a`:
+
+```bash
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+"$HOME/Library/Android/sdk/emulator/emulator" -list-avds
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+"$HOME/Library/Android/sdk/emulator/emulator" \
+  -avd SwiftTUI_AndroidGallery_arm64 \
+  -no-window \
+  -gpu swiftshader_indirect \
+  -no-audio \
+  -no-boot-anim \
+  -no-snapshot-save
+
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 devices -l
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 install -r \
+  swift-tui-examples/AndroidGallery/app/build/outputs/apk/debug/app-debug.apk
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 shell am start -W \
+  -n org.swifttui.gallery.android/.MainActivity
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 shell pidof \
+  org.swifttui.gallery.android
+```
+
+Observed result: install succeeds, launch returns `Status: ok`, the app process
+stays alive, logcat shows `libswift_tui_jni.so` loading, and the screenshot
+shows the hosted SwiftTUI gallery content (`Logo`, `Counter`, `Life`, `Todo`,
+and the SwiftTUI logo art) instead of the Compose startup placeholder.
+
+The 2026-06-10 parity retry installed
+`system-images;android-35;google_apis;arm64-v8a` and created a smaller
+`SwiftTUI_AndroidGallery_api35_medium_arm64` AVD. The important operational
+detail is that the emulator must be kept alive as a foreground long-running
+process; launching it as a background job under a short-lived shell can let the
+shell tear it down just after boot. With the foreground session held open,
+`adb` reported `emulator-5554 booted`, install returned `Success`, launch
+returned `Status: ok`, the app process stayed alive as pid `3430`, and the
+screenshot at `/tmp/swifttui-androidgallery-api35-medium.png` shows the hosted
+SwiftTUI gallery with the tab bar and SwiftTUI logo content.
+
+## Current Blockers
+
+- Runtime verification beyond first paint has not run tab-by-tab yet.
+- Automated accessibility-tree verification is still shallow:
+  `uiautomator dump` exposed the focused Compose host, not the per-node semantic
+  labels from the transparent overlay.
+
+## Known Gaps
+
+The current Android host is much closer to SwiftUI host parity, but still not
+complete platform parity:
+
+- The JSON frame snapshot now carries styled cells, image records, semantic
+  nodes, announcements, and focus presentation. It remains JSON rather than a
+  binary frame protocol.
+- The Compose renderer now paints styled cells and embedded images. It consumes
+  damage metadata but does not yet maintain a retained bitmap damage cache.
+- Input bridging covers hardware keys/text and basic touch activation. IME
+  composition, clipboard, link opening, precise drag/scroll gestures,
+  accessibility focus feedback, and Android content URI import remain follow-up
+  work.
+- Device/emulator behavior is still partial but current. The app opens, stays
+  alive, and paints the first SwiftTUI gallery frame on the API 35
+  `SwiftTUI_AndroidGallery_api35_medium_arm64` AVD. It has not yet survived
+  tab-by-tab or broader interaction sweeps.
+
+## Next Work
+
+1. Run tab-by-tab device/emulator smoke for the new styled-cell/image/semantics
+   renderer and record interaction results.
+2. Extend Android input from basic activation to IME composition, drag/scroll,
+   clipboard, links, and accessibility focus feedback.
+3. Decide whether JSON remains acceptable or whether the Android host needs a
+   binary frame protocol before broader animation profiling.
+4. Add an examples native gate around the wrapper assemble, including explicit
+   Swift SDK setup and Android SDK/NDK prerequisites.
