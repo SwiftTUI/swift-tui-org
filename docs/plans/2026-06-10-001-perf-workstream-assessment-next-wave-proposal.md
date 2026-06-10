@@ -1,13 +1,34 @@
 # Performance Workstream Assessment & Next-Wave Proposal
 
 - **Date:** 2026-06-10
-- **Status:** Proposal (assessment complete; next steps ranked and verified)
+- **Status:** In progress (assessment complete; next steps ranked and verified;
+  step 2 probe implemented; regression bisect still open)
 - **Measured at:** `swift-tui` local `main@bc63495a` (0.0.19 + merged
   `perf/sheet-open-reader-attribution`, `SWIFTTUI_READER_ATTRIBUTION` default-ON)
 - **Method:** multi-agent assessment — four documentation/code surveys, one
   live `TermUIPerf` measurement run, a first-principles cost model, exhaustive
   candidate enumeration (24), adversarial code-level verification of the top 8
   (8/8 premises confirmed), and a completeness critique.
+
+## 0. Implementation update — 2026-06-10
+
+- Step 1 is complete in the current checkout: `swift-tui` and the org root now
+  pin a published child revision beyond `main@4033d7ea`, so the previously
+  local-only `bc63495a` pin is no longer unpublished.
+- The first half of step 2 is implemented in `swift-tui`:
+  committed-frame diagnostics now carry head-side timings for frame-head
+  prepare, graph checkpoint create/restore, resolve checkpoint restore,
+  `AnimationController.processResolvedTree`, and animation interpolation apply.
+  `TermUIPerf` parses these fields from `frames.tsv`, includes them in
+  per-run summaries, and aggregates p50 values across iterations.
+- Release smoke evidence:
+  `Tools/TermUIPerf termui-perf run --mode async --scenario synthetic-narrow-invalidation --iterations 3 --artifacts-root .perf/runs/head-probe-smoke --configuration release`
+  produced raw `frames.tsv` columns and aggregate metrics such as
+  head_prepare_p50_ms ≈ 0.90, head_graph_checkpoint_create_p50_ms ≈ 0.095,
+  head_graph_checkpoint_restore_p50_ms ≈ 0.22, and
+  head_animation_process_resolved_tree_p50_ms ≈ 0.12 on the small smoke run.
+- Still open: the 0.0.19-window resolve regression bisect/A-B. The probe makes
+  that work sized; it does not by itself identify the regressing commit.
 
 ## 1. Where the workstream stands
 
