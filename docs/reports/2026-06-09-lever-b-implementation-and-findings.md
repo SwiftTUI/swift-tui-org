@@ -1,14 +1,69 @@
-# Sheet-Open Latency — Lever B Implemented; Root-Cause **Corrected**
+# Sheet-Open Latency — Lever B Implemented; Root-Cause **Corrected**; **OPEN Resolved (2026-06-10)**
 
-**Date:** 2026-06-09
-**Status:** Lever B (presentation-trigger split) **implemented and
-mechanism-proven**, behind the existing `SWIFTTUI_READER_ATTRIBUTION` flag
-(default off). **The sheet-open win does NOT materialize**, and end-to-end
-measurement **corrects the root-cause diagnosis** in
-[`docs/plans/2026-06-09-001-sheet-open-reader-attribution-plan.md`](../plans/2026-06-09-001-sheet-open-reader-attribution-plan.md).
-**Nothing pushed. Flag NOT flipped. Pins NOT bumped.**
+**Date:** 2026-06-09 (resolution appended 2026-06-10)
+**Status:** **RESOLVED for the OPEN transition.** The dominant ~63%
+`invalidation-conflict` blocker was the `@State` **write-side** invalidating the
+slot *owner* identity — the half of owner-attribution that Lever A never fixed.
+Completing it (write-side reader attribution, `0cbc2930`) makes the open reuse
+the background; the flag is now **flipped ON by default** (`72e0ddf4`). See the
+**RESOLUTION** section below; the original-day findings follow for the record.
 **Code:** `SwiftTUI/swift-tui` branch `perf/sheet-open-reader-attribution`
-(`c710bbf5`).
+(head `72e0ddf4`). Nothing pushed; org pin not yet bumped.
+
+---
+
+## ✅ RESOLUTION (2026-06-10) — the ~63% was the @State WRITE-side, not `rootIdentity`
+
+The "DEFINITIVE 3-WAY DIAGNOSIS" below **mis-attributed** the dominant blocker.
+A temporary `[STATE-WRITE]` + `[INVAL-SRC]` trace (built on `ReuseDenialTrace`,
+since removed) showed the open click does **NOT** invalidate `rootIdentity` from
+input dispatch — those `[rootIdentity]` sites are key/paste-guarded, and the
+mouse path uses *scoped* `postActionInvalidationIdentities` /
+`scrollPointerInvalidationIdentities`. The `…/Layout[0]` invalidation was the
+**`@State` write**: `ViewNode.setStateSlot` always did
+`requestInvalidation(of: [invalidationIdentity ?? identity])`, and
+`State.setValue` passes `invalidationIdentity = context.viewIdentity` = the slot
+**owner**. Because `conflictsWithInvalidation` is symmetric, invalidating the
+owner blocks the whole background as an ancestor. **Flag-independent because
+Lever A only fixed the read/dirty side** (`stateChangeDirtyNodeIDs` drops
+`∪{owner}`), never the write-side invalidation.
+
+**Fix (Lever A completion, `0cbc2930`):** flag-on, `setStateSlot` invalidates the
+genuine recorded readers (`ViewGraph.stateDependentIdentities(for: key)`),
+falling back to the owner only when no readers were recorded. Flag-off
+byte-identical. A cross-checking workflow (dispatch + machinery agents)
+independently confirmed the mechanism; they assumed it required a topology
+change, but the reader set Lever A already populates makes it a **localized write
+re-target** — no ownership move. New write-side `ReaderAttributionTests` prove
+flag-on→reader, flag-off→owner.
+
+**Measured (release, async, 8 iters):** open `invalidation-conflict` **888 → 5**;
+all 8 `@State` writes (open + close) invalidate `{__presentationTrigger}`;
+background reused on open; **CPU/frame −9.0%/−8.1%**, **p95 latency −9.9%/−8.3%**
+at rows 176/704. Win does not *scale* with tree size because only ~1 of ~3
+expensive frames per cycle (the open's `@State` frame) is fixed.
+
+**Flag flipped ON by default (`72e0ddf4`):** gate green with the new default
+(rendered-text fixture matrix unchanged — the trigger leaf is layout-inert).
+`SWIFTTUI_READER_ATTRIBUTION=0` is the opt-out.
+
+**RESIDUAL (in progress) = FOCUS, not @State.** The close + open-focus-move
+`conflict=890` frames re-resolve the background because focus lands on the
+background's *container* `VStack[0]` (an ancestor of the grid): `FocusTracker`
+invalidating the focus **identity** drives the conflict, and `contextualEnvironmentValues`
+propagating `isFocused` to that container's whole descendant cone drives the
+`IsFocusedKey` env-mismatch. The coupled next fix: (1) derive `\.isFocused` via
+the `FocusedIdentityKey` runtime-focus dependency + exclude `IsFocusedKey` from
+the reuse snapshot (Report 3's *safe* path — the naïve snapshot-exclusion
+regressed `InteractiveRuntimeTests` before), then (2) narrow `FocusTracker` to
+invalidate `isFocused` readers, not the focus container. **Lever #3 (suppression
+cone) is retired** as a non-starter (recovers ~0; ancestor leg can't be deleted —
+reintroduces the `fcb1a531` stale-focus regression; `suppressed` is logged before
+`invalidation-conflict`, so double-counted, not independently recoverable).
+
+---
+
+### Original 2026-06-09 findings (for the record — partially superseded above)
 
 ---
 

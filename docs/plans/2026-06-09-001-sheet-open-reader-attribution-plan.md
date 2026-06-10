@@ -1,15 +1,20 @@
 # Sheet / Command-Palette Open Latency — Reader-Attribution Re-architecture
 
-> **⚠️ SUPERSEDED IN PART (2026-06-09).** Lever B was implemented and is
-> mechanism-proven, but **the win does not materialize** and this plan's
-> root-cause diagnosis is **corrected** by
-> [`docs/reports/2026-06-09-lever-b-implementation-and-findings.md`](../reports/2026-06-09-lever-b-implementation-and-findings.md).
-> In short: the **OPEN transition re-resolves the background regardless of the
-> flag**, so `@State`-owner attribution (Levers A+B) is real-but-not-binding;
-> the spike (§4) measured an *inline-overlay proxy* that bypasses the portal and
-> does **not** generalize to the real `.sheet`/`.paletteSheet`. Read the report
-> first. Levers A+B remain landed and flag-gated-off as a proven foundation; the
-> flag is NOT flipped and pins are NOT bumped.
+> **✅ OPEN RESOLVED (2026-06-10); diagnosis below partially superseded.** The
+> OPEN-latency win **does** materialize once the **`@State` write-side** is also
+> reader-attributed (Lever A only fixed the read/dirty side; the write still
+> invalidated the slot *owner*, an ancestor of the background). Completing it
+> (`0cbc2930`) drops open `invalidation-conflict` 888→5 for **CPU/frame −9%,
+> p95 −9%**; the flag is now **ON by default** (`72e0ddf4`). This plan's earlier
+> "the win does not materialize / portal is the blocker" conclusion was wrong —
+> the blocker was the write-side owner invalidation, not the portal. The spike
+> (§4) is still an inline-overlay proxy and does not generalize, but its
+> *premise* (move attribution off the background's ancestor chain) was correct.
+> **Residual (in progress): focus-driven** (focus lands on the background's
+> container, re-resolving the grid on close + open-focus-move). Full current
+> state + the coupled focus-fix plan:
+> [`docs/reports/2026-06-09-lever-b-implementation-and-findings.md`](../reports/2026-06-09-lever-b-implementation-and-findings.md)
+> (§ RESOLUTION). Read the report first.
 
 **Date:** 2026-06-09
 **Status:** Foundation (Lever A) landed behind a default-off flag; Lever B
