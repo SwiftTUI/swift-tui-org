@@ -21,11 +21,11 @@ documentation in their own `docs/` trees.
 ## Reports
 
 - [reports/2026-06-09-android-host-current-state.md](reports/2026-06-09-android-host-current-state.md) -
-  current state of the Android host effort after the first implementation pass:
-  implemented `SwiftTUIAndroidHost`/Compose Gallery scaffolding, local Swift and
-  Gradle verification with `swift-6.3.2-RELEASE_android`, install/launch smoke
-  status with first-frame rendering on emulator, known renderer/input/a11y
-  gaps, and next work.
+  current state of the Android host effort after the parity pass: implemented
+  `SwiftTUIAndroidHost`/Compose Gallery scaffolding, styled-cell/image/semantics
+  frame snapshots, local Swift and Gradle verification with
+  `swift-6.3.2-RELEASE_android`, API 35 arm64 emulator install/launch screenshot
+  smoke, known input/runtime gaps, and next work.
 - [reports/2026-06-08-0.1.0-public-release-readiness.md](reports/2026-06-08-0.1.0-public-release-readiness.md) -
   first-public-`0.1.0` release-readiness audit across all four child repos: one
   legal blocker (3 repos + npm tarballs have no LICENSE), several
@@ -103,8 +103,9 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 - [plans/2026-06-09-001-android-host-view-gallery-demo-plan.md](plans/2026-06-09-001-android-host-view-gallery-demo-plan.md) -
   Android host view and gallery demo plan/status: completed local Swift
   Android cross-build fixes, shared size negotiation, `SwiftTUIAndroidHost`,
-  Compose/JNI Android Gallery scaffold, current assemble/install/first-frame
-  verification, and remaining renderer/input/accessibility smoke work.
+  Compose/JNI Android Gallery scaffold, styled-cell/image/semantics frame
+  snapshot work, current assemble verification, API 35 install/first-frame
+  verification, and remaining tab-by-tab/input/accessibility smoke work.
 - [plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md](plans/2026-06-06-006-image-blend-mode-native-host-replay-plan.md) -
   later image blend-mode tranche for native host replay after ordered layers:
   WebHost canvas and SwiftUI/CoreGraphics blend modes behind capability checks,

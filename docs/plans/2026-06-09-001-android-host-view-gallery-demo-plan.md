@@ -1,12 +1,13 @@
 # Android Host View And Gallery Demo Plan
 
 **Date:** 2026-06-09
-**Status:** Implementation underway. Phases 0-2 are complete locally, the
-Android Gallery Gradle/Compose app assembles with system Gradle and the
-checked-in wrapper, and the named `SwiftTUI_AndroidGallery_arm64` AVD now
-paints the first hosted SwiftTUI gallery frame. That AVD is configured for
-repeatable local smoke runs. Tab-by-tab
-renderer/input/accessibility verification remains.
+**Status:** Implementation underway. Phases 0-2 are complete locally. Phase 3
+and the renderer/accessibility parts of Phase 4 now carry styled cells, image
+records, semantic nodes, announcements, and focus presentation through the
+Android host frame. The Android Gallery Gradle/Compose app assembles with the
+checked-in wrapper. A local Android 35 arm64 medium-phone AVD now paints the
+hosted SwiftTUI gallery frame when the emulator is kept alive as a foreground
+long-running process. Fresh tab-by-tab runtime verification remains.
 **Target repos:** `swift-tui`, `swift-tui-examples`, and this coordination
 root for gates, pins, and plan tracking. Root owns this plan and final pin
 updates.
@@ -207,6 +208,12 @@ Validation refresh on 2026-06-09 after installing `swift-6.3.2-RELEASE_android`:
   default emulator lookup, and verified boot/install/launch against the current
   AndroidGallery debug APK. The captured first-frame screenshot shows the hosted
   SwiftTUI gallery surface on this AVD.
+- Retry verification on 2026-06-10 installed
+  `system-images;android-35;google_apis;arm64-v8a`, created
+  `SwiftTUI_AndroidGallery_api35_medium_arm64`, kept the emulator running as a
+  foreground tool session, and verified boot/install/launch/screenshot for the
+  current styled-cell/image/semantics renderer. The screenshot artifact was
+  `/tmp/swifttui-androidgallery-api35-medium.png`.
 - Verified `--swift-sdk swift-6.3.2-RELEASE_android` by itself is not the
   desired build selector for the `arm64-v8a` app: it can select a different
   Android target triple. The build command should keep using
@@ -731,12 +738,12 @@ DISABLE_EXPLICIT_PLATFORMS=1 \
 
 ### Phase 3 - Frame Snapshot Encoding
 
-- [x] Define `AndroidHostFrameSnapshot` schema version 1.
-- [ ] Encode raster cells, style runs, damage, image records, semantics, focus,
+- [x] Define `AndroidHostFrameSnapshot` schema version 2.
+- [x] Encode raster cells, style runs, damage, image records, semantics, focus,
   announcements, and preferred layout size.
-- [ ] Add stable image attachment ids and Kotlin-side cache invalidation rules.
-- [ ] Add golden tests for representative gallery frames:
-  text-only, images, animated images, scroll, focus, and presentation overlay.
+- [x] Add stable image attachment ids and Kotlin-side cache invalidation rules.
+- [ ] Add broader golden tests for representative gallery frames:
+  images, animated images, scroll, focus, and presentation overlay.
 - [ ] Add stale sequence tests.
 
 Commands:
@@ -753,17 +760,19 @@ swiftly run swift test --filter SwiftUIHostTests
 - [x] Add `SwiftTUIHostState` Kotlin wrapper around native handles.
 - [x] Load the Swift `.so` and start/stop sessions from the Activity lifecycle.
 - [x] Implement Compose measurement and publish resize back to Swift.
-- [ ] Implement Canvas renderer for cells, style, text, images, and damage
+- [x] Implement Canvas renderer for cells, style, text, images, and damage
   metadata.
-- [ ] Implement pointer, keyboard, IME, focus, and clipboard bridging.
-- [ ] Implement transparent accessibility semantics overlay.
+- [ ] Implement full pointer, keyboard, IME, focus, and clipboard bridging.
+- [x] Implement transparent accessibility semantics overlay.
 - [ ] Add JVM/Robolectric or instrumentation tests for measure, frame parsing,
   input mapping, and accessibility node projection.
 
-Current implementation note: the renderer paints text rows from the JSON frame
-snapshot and the key bridge handles basic hardware keys/text. Style runs, image
-attachments, pointer/touch input, IME composition, clipboard, and accessibility
-projection remain in the next tranche.
+Current implementation note: the renderer consumes schema v2 JSON frame
+snapshots and paints styled cells, foreground/background colors, text
+decorations, and embedded image payloads. The host view bridges hardware
+keys/text and basic touch activation. IME composition, clipboard, link opening,
+precise drag/scroll gestures, accessibility focus feedback, retained damage
+caches, and Android content URI import remain follow-up work.
 
 Commands:
 
@@ -786,10 +795,12 @@ cd swift-tui-examples/AndroidGallery
   drop/content URI import if deferred.
 - [ ] Add screenshots or an emulator smoke test artifact if CI supports it.
 
-Current implementation note: install/launch succeeds on the named
-`SwiftTUI_AndroidGallery_arm64` AVD and the first SwiftTUI gallery frame is
-visible. Tab-by-tab runtime verification has not run, so renderer fidelity and
-input coverage remain the next smoke targets.
+Current implementation note: install/launch now succeeds on
+`SwiftTUI_AndroidGallery_api35_medium_arm64` when the emulator is held open as a
+foreground process, and the first SwiftTUI gallery frame is visible in
+`/tmp/swifttui-androidgallery-api35-medium.png`. Tab-by-tab runtime verification
+has not run, so renderer fidelity and input coverage remain the next smoke
+targets.
 
 Commands:
 
