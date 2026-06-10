@@ -61,6 +61,68 @@ cone) is retired** as a non-starter (recovers ~0; ancestor leg can't be deleted 
 reintroduces the `fcb1a531` stale-focus regression; `suppressed` is logged before
 `invalidation-conflict`, so double-counted, not independently recoverable).
 
+### Focus residual — design conclusion (2026-06-10): blocked on a latent orphaning bug; lever #1 shipped
+
+A four-agent design pass (verified against `72e0ddf4`) concluded the focus residual
+**cannot be fixed by the isFocused/FocusTracker change alone** and is deferred. Key
+findings:
+
+- **No shipping view reads `\.isFocused`.** Every control (Button `Button.swift:109`,
+  ScrollView, TextEditor, Picker, …) computes focus from
+  `context.environmentValues.focusedIdentity == context.identity` **directly**. The
+  per-node `isFocused` *snapshot bake* (`ResolveContext.contextualEnvironmentValues`,
+  cone = focused id + ancestors + **all descendants**) exists only as the **reuse
+  signal** that makes `canReuse` (`ViewNode.swift:493`) notice focus changes — plus
+  one lone test fixture (`AppRuntimeTests` `FocusEnvironmentWindow`,
+  `EnvironmentReader(\.isFocused)`). So the cone-wide bake is what fails reuse across
+  the whole background on a focus move.
+- **Excluding `isFocused` from the snapshot is correct for the grid** (it doesn't
+  focus-style) — the focus *leaves* (prev/current) still recompute via
+  `FocusTracker.notifyIfFocusChanged`'s existing `{prev,current}` invalidation —
+  **but it re-exposes a latent divergent-identity orphaning bug** (reproduced
+  deterministically as the prior `InteractiveRuntimeTests` scroll freeze). On a
+  **scroll** frame (no focus change), a **capture-hosted** node (the WindowGroup
+  scene root) has a `resolvedIdentity` that **diverges** from its structural identity,
+  so the scroll's structural-path invalidation (`scrollPointerInvalidationIdentities`,
+  `RunLoop+PointerHandling.swift:308-324`) never intersects it in
+  `conflictsWithInvalidation` (`ViewGraph.swift:1143-1150`). Today it is rescued from
+  being wrongly retained-reused **only** by the incidental `isFocused` snapshot flip
+  (default focus on the descendant ScrollView bakes `isFocused=true` cone-wide).
+  Remove the bake → the scene root is reused → the dirty ScrollView underneath is
+  orphaned → the pane freezes. The `FocusedIdentityKey`-dependency path does **not**
+  fix this (non-focus frame; the scene root reads no `isFocused`).
+- **Part B (edit `FocusTracker`) is retired.** `notifyIfFocusChanged`
+  (`FocusTracker.swift:538-554`) is the **sole wakeup + frame schedule** on a keyboard
+  focus move (Tab/arrow handlers in `RunLoop+EventDispatch.swift:144-162` return `nil`
+  with no other `requestInvalidation`), and `FocusTracker` is in the Foundation-free
+  `SwiftTUICore` core with no `ViewGraph` handle (a dependency query there is a layer
+  violation). The intended narrowing **falls out of Part A**: once `isFocused` leaves
+  the snapshot, the prev/current container invalidation no longer carries a cone (the
+  grid descendants reuse), while the focus ring still repaints on the leaves.
+
+**→ Next effort (Part 0, documented; NOT done): fix the divergent-identity
+orphaning** so a retained-reused node cannot skip an id-divergent,
+structurally-non-intersecting **dirty** descendant. Two candidate edits: **A0**
+(lower-risk) — extend `scrollPointerInvalidationIdentities`
+(`RunLoop+PointerHandling.swift:308-324`) to also include the **resolved-identity**
+ancestor chain of the scroll target so the conflict scan's `resolvedIdentity` clauses
+hit the capture host; **B0** — a reuse-host re-resolve guard in `reusableSnapshot`
+(`ViewGraph.swift:1102-1160`). This is **independently valuable** (a real reuse
+**correctness** bug) but lands on the **hot reuse path** with measurable risk to the
+shipped H2/H3 reuse wins, so it deserves its own focused, perf-validated PR. Guards:
+the three `InteractiveRuntimeTests` scroll cases (`~2376/2428/2505`) must pass **with
+`IsFocusedKey` still in the snapshot** (proving Part 0 is the real rescuer), the
+H2/H3 resolve-reuse perf suites, and the full Linux Repo Gate under load. Only after
+Part 0 is green + perf-validated does **Part A** (exclude `IsFocusedKey` from the
+reuse snapshot at `Environment.swift:80-86`/`contextualEnvironmentValues` + map
+`\.isFocused`→`FocusedIdentityKey` in `runtimeFocusStateDependencyKey`,
+`StyleEnvironment.swift:99-109`) become safe.
+
+**Decision (2026-06-10): ship lever #1 as the realized win; Part 0 deferred** to a
+separately-scoped reuse-correctness effort. The residual is also partly
+scenario-amplified (the perf scenario co-locates the toggle Button in the
+background's container; real apps usually don't).
+
 ---
 
 ### Original 2026-06-09 findings (for the record — partially superseded above)
