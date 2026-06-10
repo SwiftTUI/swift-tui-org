@@ -100,6 +100,14 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 
 ### Other planning documents
 
+- [plans/2026-06-10-001-perf-workstream-assessment-next-wave-proposal.md](plans/2026-06-10-001-perf-workstream-assessment-next-wave-proposal.md) -
+  full perf-workstream assessment at `bc63495a` (live-measured): all landed
+  wins holding and reader-attribution reproducing, but `resolve_ms` regressed
+  +73/+91% in the 0.0.19 window (untriaged) and is now the dominant residual
+  in every workload class; transition-frame commit falsifies the G3a/G11
+  deferral premise; ranked next wave (push → resolve diagnosis → Part 0 →
+  scenario calibration → Part A → transition-commit probe → popover split)
+  plus measurement accounting traps and a gaps register.
 - [plans/2026-06-09-001-android-host-view-gallery-demo-plan.md](plans/2026-06-09-001-android-host-view-gallery-demo-plan.md) -
   Android host view and gallery demo plan/status: completed local Swift
   Android cross-build fixes, shared size negotiation, `SwiftTUIAndroidHost`,
