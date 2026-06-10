@@ -7,8 +7,16 @@ slot *owner* identity — the half of owner-attribution that Lever A never fixed
 Completing it (write-side reader attribution, `0cbc2930`) makes the open reuse
 the background; the flag is now **flipped ON by default** (`72e0ddf4`). See the
 **RESOLUTION** section below; the original-day findings follow for the record.
-**Code:** `SwiftTUI/swift-tui` branch `perf/sheet-open-reader-attribution`
-(head `72e0ddf4`). Nothing pushed; org pin not yet bumped.
+
+**Code / integration (2026-06-10):** **merged to main, integrated with the 0.0.19
+release** that landed on origin mid-workstream. swift-tui `main` = `bc63495a`
+(feature branch `perf/sheet-open-reader-attribution` merged onto the release main
+`6811274f` — **zero file overlap, conflict-free**; full repo gate **green** with
+reader attribution ON by default). org root `main` = `fff0de1` (release + our
+sheet-open docs; swift-tui pin → `bc63495a`; swift-tui-site → `f0ab073`/web/examples
+at release pins; our pre-workstream site advance `64c8eb8` was an ancestor →
+already included); `bazel //:org_fast` **green**. **Nothing pushed** (org root 7
+ahead of origin/main); push/PR is the next step.
 
 ---
 
