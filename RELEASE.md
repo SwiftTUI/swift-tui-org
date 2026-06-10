@@ -61,6 +61,17 @@ swift-tui-web  →  swift-tui  →  swift-tui-examples  →  swift-tui-site  →
 - An npm **publish** token for the `@swifttui` scope. Never write it into a
   tracked file. Use an isolated userconfig (see step 1g) and delete it after.
 - Push access to all five repos over SSH.
+- **Every child repo's own CI is green on `main` at the commit you are about
+  to tag.** For `swift-tui` that means the Repo Gate workflow (or a local
+  `bun run test`), *plus* a wasm cross-build check
+  (`swiftly run swift build --swift-sdk swift-6.3.1-RELEASE_wasm --target
+  SwiftTUIRuntime`) — the site gate compiles swift-tui for wasm32-wasi, so a
+  WASI-only compile break in swift-tui surfaces as a *site* CI failure after
+  everything is already tagged. Tagging on top of a red gate forces a
+  tag-move cascade (swift-tui → examples lock re-pins → root pins), and
+  moved tags additionally trip SwiftPM's fingerprint tamper check
+  (`~/.swiftpm/security/fingerprints`) on any machine that resolved the old
+  tag. Check first; it was learned the hard way cutting `0.0.19`.
 
 ## 0. Bump the authored version strings
 
