@@ -2,21 +2,56 @@
 
 - **Date:** 2026-06-10
 - **Status:** In progress. The publish/pin step is complete; the head-timing
-  probe is implemented; the 0.0.19 `resolve_ms` bisect is complete; and the
-  retained-root mitigation has landed. The next wave is **not complete**:
-  residual runtime-ID stamping work, Part 0, sheet calibration, Part A,
-  transition-frame `commit_ms` diagnosis, popover trigger splitting, and the
-  gaps register remain open.
+  probe is implemented; the 0.0.19 `resolve_ms` bisect is complete; the
+  retained-root mitigation has landed; and the residual runtime-ID stamping
+  fast path has landed. The next wave is **not complete**: Part 0, sheet
+  calibration, Part A, transition-frame `commit_ms` diagnosis, popover
+  trigger splitting, and the gaps register remain open.
 - **Measured at:** original assessment: `swift-tui` local `main@bc63495a`
   (0.0.19 + merged `perf/sheet-open-reader-attribution`,
   `SWIFTTUI_READER_ATTRIBUTION` default-ON). Latest implementation/root pin:
-  `swift-tui main@a93112b3`.
+  `swift-tui main@0b041764`.
 - **Method:** multi-agent assessment — four documentation/code surveys, one
   live `TermUIPerf` measurement run, a first-principles cost model, exhaustive
   candidate enumeration (24), adversarial code-level verification of the top 8
   (8/8 premises confirmed), and a completeness critique.
 
 ## 0. Implementation updates
+
+### 2026-06-11 (second update — stamping fast path landed)
+
+- The residual-resolve design item (open ranked work #1) is **closed**:
+  `swift-tui@0b041764` adds a derived `ResolvedNode.subtreeRuntimeNodeIDsStamped`
+  cache and an early return in the stamping walk, so fresh-parent applies stop
+  re-stamping fully stamped reused subtrees. Same-session release A/B on
+  `synthetic-narrow-invalidation`: `resolve_ms` −15.1/−20.2% (rows 20/40),
+  total CPU −3.5/−4.1% (t≈4.4/4.7), computed/reused identical; the win grows
+  with tree size. `sheet-open-latency` rows=176 is flat (−0.8% CPU, within
+  noise) — sheet frames are recompute-dominated, which is Part 0/Part A's
+  target, not this change's. Full gate green with a new debug stamp-coherence
+  assertion active. Evidence:
+  [reports/2026-06-11-resolve-stamp-skip-results.md](../reports/2026-06-11-resolve-stamp-skip-results.md).
+- The understand-phase survey behind that change produced three findings worth
+  recording beyond the fix itself:
+  1. **Hot-path shape:** every interaction frame force-queues the
+     presentation-portal root dirty whenever `invalidatedIdentities` is
+     non-empty (`DefaultRendererFrameHeadCoordinator.swift:261-266`), so the
+     dirty frontier collapses to the root and the whole spine re-resolves
+     top-down. **Frontier narrowing** is a competing structural fix that
+     would remove the fresh-spine cost class entirely, but it must be
+     co-designed with the island freshness-cache hazard (parent-nil AnyView
+     content and unattached group-owner nodes cannot invalidate ancestor
+     snapshot caches; the every-frame root walk currently masks that) — i.e.
+     it is adjacent to the same seam Part 0 fixes. Sized-by-probe bucket.
+  2. **Part 0 interaction:** the one divergence seam the stamp skip leaves
+     open is exactly the divergent-resolvedIdentity capture-host orphaning
+     bug; the skip widens that existing bug's blast radius on an
+     already-broken seam (debug assertion now trips loudly there). Part 0
+     gains a second reason to be next.
+  3. **Next resolve residuals by rank:** `restoreRuntimeRegistrations`
+     (per-reuse-hit O(subtree) walk with structuralPath-keyed lookups, also
+     grown in `8732c8d3`) and the per-candidate `reusableSnapshot` gates are
+     the remaining O(tree)-ish terms inside `evaluateDirtyNodes`.
 
 ### 2026-06-11
 
@@ -235,13 +270,12 @@ closed. The remaining items are still ranked work, not completed coverage.
 
 ### Open ranked work
 
-1. **Residual resolve design — runtime-ID stamping fast path for freshly
-   evaluated parents.** The retained-root mitigation recovered part of the
-   regression, but the broader same-child fast path was unsafe: freshly
-   evaluated parents can observe the same child node objects before those child
-   nodes hold the new resolved payload. This needs a proof of ordering and a
-   targeted implementation, or a fresh sizing pass that picks a different
-   resolve residual.
+1. ~~**Residual resolve design — runtime-ID stamping fast path for freshly
+   evaluated parents.**~~ **Closed 2026-06-11** (`swift-tui@0b041764`, see
+   §0). The safe design proved to be a derived stamp-completeness flag plus an
+   early return — payload values are never substituted, which sidesteps the
+   metadata-sync/state-wipe hazard that broke the naive `child.snapshot()`
+   attempt.
 2. **Part 0 — fix the latent divergent-identity orphaning bug.** A
    capture-hosted scene root whose `resolvedIdentity` diverges from its
    structural identity can be wrongly retained-reused on scroll frames, today
