@@ -1,12 +1,15 @@
 # Performance Workstream Assessment & Next-Wave Proposal
 
 - **Date:** 2026-06-10
-- **Status:** In progress (assessment complete; next steps ranked and verified;
-  step 2 probe implemented; 0.0.19 resolve regression bisect complete;
-  retained-root mitigation landed; residual resolve work remains)
+- **Status:** In progress. The publish/pin step is complete; the head-timing
+  probe is implemented; the 0.0.19 `resolve_ms` bisect is complete; and the
+  retained-root mitigation has landed. The next wave is **not complete**:
+  residual runtime-ID stamping work, Part 0, sheet calibration, Part A,
+  transition-frame `commit_ms` diagnosis, popover trigger splitting, and the
+  gaps register remain open.
 - **Measured at:** original assessment: `swift-tui` local `main@bc63495a`
   (0.0.19 + merged `perf/sheet-open-reader-attribution`,
-  `SWIFTTUI_READER_ATTRIBUTION` default-ON). Latest implementation update:
+  `SWIFTTUI_READER_ATTRIBUTION` default-ON). Latest implementation/root pin:
   `swift-tui main@a93112b3`.
 - **Method:** multi-agent assessment — four documentation/code surveys, one
   live `TermUIPerf` measurement run, a first-principles cost model, exhaustive
@@ -41,6 +44,9 @@
   parents, not an unsized bisect.
 - Detailed evidence:
   [reports/2026-06-11-resolve-ms-regression-bisect.md](../reports/2026-06-11-resolve-ms-regression-bisect.md).
+- Current verification after the root update: `swift-tui@a93112b3` is pinned in
+  the org root and on `origin/main`; `mise exec -- bazel test //:org_fast`
+  passed 4/4.
 
 ### 2026-06-10
 
@@ -85,9 +91,8 @@ sheet-open reader attribution) has compounded as designed. Verified live at
   `RunLoop.swift:864-941`, `Scheduler.swift:169-184`). Off-screen animation is
   near floor (elided tick p50 0.01 ms); the only residual is the per-tick
   wakeup itself (coalescing remains deliberately deferred).
-- **Unpublished:** at assessment time the merged work was local-only
-  (swift-tui main 7 ahead, org root 8 ahead of origin). The coordinated push is
-  step 0 below.
+- **Published/pinned:** the assessment-time local-only state has been resolved.
+  The org root now pins the published `swift-tui@a93112b3` child revision.
 
 ## 2. Live measurement results
 
@@ -123,7 +128,7 @@ Total CPU 0.1640 ± 0.0048 / 0.2517 ± 0.0079 s/iter (CV ~3%).
 
 ## 3. Key findings
 
-### 3.1 `resolve_ms` regressed +73/+91% since 2026-05-31 (untriaged)
+### 3.1 `resolve_ms` regressed +73/+91% since 2026-05-31 (bisected; partially mitigated)
 
 Narrow-invalidation interaction resolve is 1.224/2.003 ms (rows 20/40) vs the
 0.706/1.049 recorded in the 2026-05-31 place-ms report. place/commit moved only
@@ -133,6 +138,13 @@ reader attribution: same-session flag-off is *worse* (1.238/2.218). The
 2026-06-04 corpus report already showed resolve ≈ 1.8 ms / "resolve dominates
 37–53%", so the regression predates the sheet work. The scenario file is
 unchanged since the 05-31 runs, so the comparison is apples-to-apples.
+
+Update 2026-06-11: the first durable jump is now identified as
+`swift-tui@8732c8d3`, caused by runtime node-ID restamping on retained subtrees.
+`swift-tui@a93112b3` avoids restamping retained descendants and recovers
+13–16% of current-head `resolve_ms` on `synthetic-narrow-invalidation`, without
+changing computed/reused counts. This is a mitigation, not closure of the
+whole residual.
 
 ### 3.2 Resolve is now the dominant residual in every workload class
 
@@ -164,10 +176,12 @@ Part A (drop `IsFocusedKey` from the reuse snapshot). See
   checkpoints per abortable frame (`ViewGraphCheckpointing.swift`) and
   `AnimationController.processResolvedTree` (`AnimationController.swift:520` —
   an unconditional full-tree walk building 6 per-identity dictionaries every
-  frame) are **not** inside it; committed frames have *no* metric that
-  attributes the animation walk (elided frames log
-  `elided_animation_tick_ms` only). Any resolve probe must instrument inside
-  `evaluateDirtyNodes` *and* separately time the head-phase walks.
+  frame) are **not** inside it. The 2026-06-10 head-timing probe now adds
+  committed-frame timing columns for prepare, graph checkpoint create/restore,
+  resolve checkpoint restore, `processResolvedTree`, and animation
+  interpolation apply. Remaining resolve work still needs either targeted
+  instrumentation inside `evaluateDirtyNodes` or a safe design for the
+  freshly evaluated parent runtime-ID stamping fast path.
 - The archived commit-breakdown probe
   (`docs/perf/commit-ms-breakdown-probe/probe.patch`) **no longer applies** at
   HEAD (`git apply --check` fails); it needs a rebase over the 06-02/03
@@ -204,24 +218,31 @@ Non-violations to leave alone: idle, off-screen elision, terminal emission
 restore, draw-proof reuse. Raster (0.723 ms, flat) is the **#2 phase at small
 trees** — part floor (visible-cell diff), part reducible.
 
-## 4. Ranked next steps
+## 4. Completed items and ranked next steps
 
-Each verified against code at `bc63495a` (not already done; premise holds;
-blockers listed).
+Current status at `swift-tui@a93112b3`: the first two original next steps are
+closed. The remaining items are still ranked work, not completed coverage.
 
-1. **Publish the merged work** — push `swift-tui` main **first**, then the org
-   root (the root pins `bc63495a`, which exists on no remote branch; reverse
-   order publishes a root referencing an unfetchable child commit; all other
-   submodule pins are already on their origins). Then make the 0.0.20 release
-   decision separately. The Linux Repo Gate still carries the swift-tui#12
-   run-loop SEGV flake — do not mistake a crash there for a regression.
+1. **Closed 2026-06-10 — publish the merged work.** `swift-tui` and the org
+   root now pin a published child revision beyond `main@4033d7ea`; the
+   assessment-time local-only `bc63495a` pin is no longer unfetchable.
 2. **Closed 2026-06-11 — resolve diagnosis: in-frame breakdown probe + 0.0.19
    regression triage.** The probe landed on 2026-06-10; the bisect/A-B closed
    on 2026-06-11 with `8732c8d3` as the first durable jump and `a93112b3` as
    the retained-root mitigation. Follow-up is no longer "find the commit"; it
    is designing a safe runtime-ID stamping fast path for freshly evaluated
    parents, sized against the residual `resolve_ms` slope.
-3. **Part 0 — fix the latent divergent-identity orphaning bug.** A
+
+### Open ranked work
+
+1. **Residual resolve design — runtime-ID stamping fast path for freshly
+   evaluated parents.** The retained-root mitigation recovered part of the
+   regression, but the broader same-child fast path was unsafe: freshly
+   evaluated parents can observe the same child node objects before those child
+   nodes hold the new resolved payload. This needs a proof of ordering and a
+   targeted implementation, or a fresh sizing pass that picks a different
+   resolve residual.
+2. **Part 0 — fix the latent divergent-identity orphaning bug.** A
    capture-hosted scene root whose `resolvedIdentity` diverges from its
    structural identity can be wrongly retained-reused on scroll frames, today
    rescued only incidentally by the `isFocused` cone-bake. Fix directions: A0
@@ -234,41 +255,43 @@ blockers listed).
    load. Note the in-code warning at `ViewGraph.swift:1131-1142` recording the
    794fbf3e/7044ce13 revert — the identity-axis conflict scan is not
    redundant.
-4. **Cheap calibration: de-amplified sheet scenario variant.** The perf
+3. **Cheap calibration: de-amplified sheet scenario variant.** The perf
    scenario co-locates the toggle Button in the background container, which
    amplifies the settle residual; a variant with the toggle outside calibrates
    Part A's real-world payoff before paying its validation cost. (The existing
    `TERMUI_PERF_SHEET_SPIKE` is *not* this — it bypasses `.sheet` entirely.)
-5. **Part A — exclude `IsFocusedKey` from the reuse snapshot** + map
+4. **Part A — exclude `IsFocusedKey` from the reuse snapshot** + map
    `\.isFocused` → `FocusedIdentityKey` in `runtimeFocusStateDependencyKey`
    (`StyleEnvironment.swift:99-109`). Targets §3.4. **Hard-gated on Part 0**
    (mandatory sequencing per the 2026-06-10 decision). Part B (edit
    FocusTracker) stays retired; Lever #3 stays a non-starter.
-6. **Transition-frame commit_ms diagnosis** — rebase the archived probe
+5. **Transition-frame commit_ms diagnosis** — rebase the archived probe
    (§3.5) and run it on the sheet scenario. If a registration-style pathology
    dominates, a Fix-2-class win (−80%+) may exist on the 15–16% transition
    commit share; this is also the *only* sanctioned revisit-condition for the
    G3a/G11 index-patcher deferral.
-7. **Popover presentation-trigger split (complete Lever B).** All three
+6. **Popover presentation-trigger split (complete Lever B).** All three
    popover modifiers still read `isPresented`/`item` at the background
    identity (`PopoverPresentation.swift:80/131/193`). Mechanical application
    of the sheet pattern + a popover perf scenario + write-side
    ReaderAttributionTests cases. Caution: unlike the sheet split (landed dark,
    flag-off byte-identical), this lands directly on the flag-ON default path.
 
-**Sized-by-probe (do not start before step 2/6 sizing):** scope
-`processResolvedTree` to changed subtrees; reduce checkpoint cost (×2 O(tree)
-per abortable frame — sheet runs show 7–8 cancelled frames per 18 committed,
-so the abort path is hot); O2 ordered semantic fragments (template:
-`normalizeScopedRestoreOrder` byte-identity pattern); phase-proof signature
-consolidation; O4 retained layout validation (measure_ms); raster residuals
-(O3 — best parallel-track candidate, dominant at small trees); animation
-identity-scoped suppression (needs the animation-teleport `ViewNodeID` re-key
-first — the unlanded Stage-4 G5 half, `AnimationController.swift:1240`).
+**Sized-by-probe (do not start before residual-resolve and transition-commit
+sizing):** scope `processResolvedTree` to changed subtrees; reduce checkpoint
+cost (×2 O(tree) per abortable frame — sheet runs show 7–8 cancelled frames
+per 18 committed, so the abort path is hot); O2 ordered semantic fragments
+(template: `normalizeScopedRestoreOrder` byte-identity pattern); phase-proof
+signature consolidation; O4 retained layout validation (measure_ms); raster
+residuals (O3 — best parallel-track candidate, dominant at small trees);
+animation identity-scoped suppression (needs the animation-teleport
+`ViewNodeID` re-key first — the unlanded Stage-4 G5 half,
+`AnimationController.swift:1240`).
 
-**Leave deferred (re-affirmed):** G3a/G11 index patcher (unless step 6
-reverses it), H1 wakeup coalescing (0 elided frames in the entire live corpus;
-the affected state is not exercised), resolve win (ii)
+**Leave deferred (re-affirmed):** G3a/G11 index patcher (unless the
+transition-frame `commit_ms` diagnosis reverses it), H1 wakeup coalescing (0
+elided frames in the entire live corpus; the affected state is not exercised),
+resolve win (ii)
 `structuralInvalidationIntersects` reduction, O6 elision residuals.
 
 ## 5. Gaps register (deliberate decisions wanted, not silence)
