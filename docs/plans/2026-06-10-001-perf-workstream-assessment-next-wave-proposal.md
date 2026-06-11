@@ -2,15 +2,47 @@
 
 - **Date:** 2026-06-10
 - **Status:** In progress (assessment complete; next steps ranked and verified;
-  step 2 probe implemented; regression bisect still open)
-- **Measured at:** `swift-tui` local `main@bc63495a` (0.0.19 + merged
-  `perf/sheet-open-reader-attribution`, `SWIFTTUI_READER_ATTRIBUTION` default-ON)
+  step 2 probe implemented; 0.0.19 resolve regression bisect complete;
+  retained-root mitigation landed; residual resolve work remains)
+- **Measured at:** original assessment: `swift-tui` local `main@bc63495a`
+  (0.0.19 + merged `perf/sheet-open-reader-attribution`,
+  `SWIFTTUI_READER_ATTRIBUTION` default-ON). Latest implementation update:
+  `swift-tui main@a93112b3`.
 - **Method:** multi-agent assessment — four documentation/code surveys, one
   live `TermUIPerf` measurement run, a first-principles cost model, exhaustive
   candidate enumeration (24), adversarial code-level verification of the top 8
   (8/8 premises confirmed), and a completeness critique.
 
-## 0. Implementation update — 2026-06-10
+## 0. Implementation updates
+
+### 2026-06-11
+
+- The remaining step-2 bisect/A-B is complete. Historical release-mode
+  `TermUIPerf` scouting isolates the first durable `resolve_ms` jump to
+  `swift-tui@8732c8d3` (`Split runtime identity to view node IDs`), after the
+  last low boundary `f47c08af`.
+- The confirmed mechanism is runtime node-ID restamping on retained subtrees:
+  `recordReusedSubtree(... retained: true)` still routed through
+  `ViewNode.apply`, whose `resolvedWithRuntimeNodeIDs` recursively stamped the
+  retained snapshot before the same-children fast path. Computed/reused counts
+  were unchanged, so this was per-retained-subtree bookkeeping, not lost reuse.
+- Landed mitigation: `swift-tui@a93112b3` commits retained snapshots directly at
+  the retained root through `ViewNode.applyRetainedSnapshot`, preserving the H3
+  descendant-recursion skip.
+- Current-head A/B, same session, release `synthetic-narrow-invalidation`
+  excluding the settle frame (`frame > 1`): rows=20 `resolve_ms` improved
+  `1.351 -> 1.173` ms; rows=40 improved `2.252 -> 1.895` ms. Computed/reused
+  counts stayed effectively identical (`18.2/178.8`, `19.4/357.6`), confirming
+  unchanged reuse semantics.
+- This closes the bisect item but not the whole resolve residual. A broader
+  attempt to move the same-child fast path ahead of fresh evaluation caused the
+  perf scenario to stop advancing after three frames, so the remaining slope is
+  now a targeted design problem around runtime-ID stamping in freshly evaluated
+  parents, not an unsized bisect.
+- Detailed evidence:
+  [reports/2026-06-11-resolve-ms-regression-bisect.md](../reports/2026-06-11-resolve-ms-regression-bisect.md).
+
+### 2026-06-10
 
 - Step 1 is complete in the current checkout: `swift-tui` and the org root now
   pin a published child revision beyond `main@4033d7ea`, so the previously
@@ -27,8 +59,8 @@
   head_prepare_p50_ms ≈ 0.90, head_graph_checkpoint_create_p50_ms ≈ 0.095,
   head_graph_checkpoint_restore_p50_ms ≈ 0.22, and
   head_animation_process_resolved_tree_p50_ms ≈ 0.12 on the small smoke run.
-- Still open: the 0.0.19-window resolve regression bisect/A-B. The probe makes
-  that work sized; it does not by itself identify the regressing commit.
+- Closed by the 2026-06-11 update: the 0.0.19-window resolve regression
+  bisect/A-B is no longer open.
 
 ## 1. Where the workstream stands
 
@@ -183,11 +215,12 @@ blockers listed).
    submodule pins are already on their origins). Then make the 0.0.20 release
    decision separately. The Linux Repo Gate still carries the swift-tui#12
    run-loop SEGV flake — do not mistake a crash there for a regression.
-2. **Resolve diagnosis: in-frame breakdown probe + 0.0.19 regression triage.**
-   Bisect/A-B the 0.0.19 window for the +73/+91% regression and land (or
-   archive) a resolve-phase probe honoring §3.5. *Gates* candidates 8–10
-   below — the workstream's history (commit_ms hypothesis wrong; Fix 1 and
-   Candidate A no-ops) shows unsized attempts here have a ~50% no-op rate.
+2. **Closed 2026-06-11 — resolve diagnosis: in-frame breakdown probe + 0.0.19
+   regression triage.** The probe landed on 2026-06-10; the bisect/A-B closed
+   on 2026-06-11 with `8732c8d3` as the first durable jump and `a93112b3` as
+   the retained-root mitigation. Follow-up is no longer "find the commit"; it
+   is designing a safe runtime-ID stamping fast path for freshly evaluated
+   parents, sized against the residual `resolve_ms` slope.
 3. **Part 0 — fix the latent divergent-identity orphaning bug.** A
    capture-hosted scene root whose `resolvedIdentity` diverges from its
    structural identity can be wrongly retained-reused on scroll frames, today
