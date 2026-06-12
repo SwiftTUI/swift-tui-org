@@ -93,22 +93,48 @@ Why this is sufficient and safe:
   direction. `layout-scroll-burst` flat (0.0149 → 0.0150; counts identical).
   Artifacts: `/tmp/part0-ab/` (ephemeral).
 
-## New finding: a second, distinct second-interaction freeze (OPEN)
+## New finding (CORRECTED 2026-06-12): semantic scroll routes flicker on/off across frames — scrolls silently dropped (OPEN)
 
 While building coverage, a two-scroll variant of the **internal-@State**
-gallery shape (the 2505 fixture: `@State` scroll position, PhaseAnimator in
-content) was found to **freeze persistently** as well — and the
-`evaluationHost` fix does *not* cure it. Its mechanism is different: the
-trace shows its dirty walk *does* reach the portal root, no scroll-route
-invalidation fires for its scrolls (`scrollTarget` route writes `@State`
-only; the first scroll's repaint rode the PhaseAnimator's frame cadence),
-and after the animation content scrolls off-screen the pane never repaints
-(a frame-gated wait hangs indefinitely). Prime suspects: the
-reader-attributed invalidation cone of the position slot landing entirely
-inside clipped content, interacting with off-screen elision or commit
-diffing. Needs its own focused diagnosis; registered in the assessment plan
-as new open work. (The probe test was removed from the tree — it fails — and
-should be reintroduced as the RED guard of that effort.)
+gallery shape (the 2505 fixture: `@State` scroll position + PhaseAnimator
+content, `@State` TabView selection) appeared to "freeze". Instrumented
+diagnosis showed the freeze framing was wrong — and the real bug is worse:
+
+- **The scrolls never reached the ScrollView at all.** `handleMouseScroll`
+  logged `scrollTarget = nil` for every scroll because
+  `latestSemanticSnapshot.scrollRoutes` was **empty** at dispatch time. No
+  position write, no invalidation — the events were silently dropped. (The
+  probe's "first scroll worked" gate was itself an artifact:
+  `DamageRecordingTerminalHost.visibleFrames` records damage regions, and a
+  PhaseAnimator damage frame doesn't contain the row marker.)
+- **The route flickers in and out of the published snapshot per frame.**
+  Per-frame logging of `latestSemanticSnapshot` assignment shows the pane's
+  single scroll route (`…/TabContentPayload[1]/content`, the indexed-source
+  boundary identity) present on some commits and absent on others, in
+  batches loosely tracking the PhaseAnimator's
+  `suppressed`/`transaction` frame storms — but not cleanly one class:
+  frame 1 (a full re-resolve) also published a routeless snapshot, and
+  routes returned mid-storm. Input hit-testing therefore **races the frame
+  cadence**: any pane whose app commits frames with route-less snapshots
+  (looping animations make this continuous) randomly drops scroll events —
+  here >50% of the time, deterministically reproducible.
+- The external-binding fixture never flickers (no animation → the
+  pre-scroll snapshot is a full commit with routes), which is why the
+  committed Part 0 guard is unaffected. The 2550 gallery-animating burst
+  test masks the flicker probabilistically (12 ticks, retrying waits).
+- Co-occurring observation to check during diagnosis: executor-stage
+  off-screen elision fired repeatedly (`causes=[deadline]`) while the
+  PhaseAnimator's text was plausibly on-screen — if confirmed, that is an
+  H1 soundness violation (redraw-vs-drawn identity sets diverging at the
+  capture/indexed-source seam) feeding the same root cause.
+
+This is **not** the Part 0 orphaning class (no wrong reuse is involved) and
+the `evaluationHost` fix is neither implicated nor sufficient. Next effort:
+find which commit classes extract/publish semantics without the
+indexed-source interior (measure-phase realization vs semantics extraction
+vs retained-fragment reuse), fix the snapshot stability, and reintroduce a
+two-scroll internal-@State guard with artifact-proof gating (full-surface
+frames, not damage regions). Registered in the assessment plan.
 
 ## Sequencing consequence
 

@@ -42,17 +42,27 @@
   in the report: Part A removes the one-shot mask that hides
   first-interaction variants of any residual freeze class — diagnose the
   item below first or together with Part A.
-- **New open bug (distinct mechanism):** a two-scroll variant of the
-  internal-@State gallery shape (2505 fixture: `@State` scroll position +
-  PhaseAnimator content) freezes persistently and is NOT cured by the
-  Part 0 fix. Trace evidence: its dirty walk reaches the portal root; its
-  scrolls fire no scroll-route invalidation (`scrollTarget` handler writes
-  `@State` only); the first scroll's repaint rode the PhaseAnimator frame
-  cadence; once the animating content is scrolled off-screen the pane never
-  repaints (frame-gated wait hangs). Suspects: reader-attributed position
-  invalidation cone fully inside clipped content × off-screen elision /
-  commit diffing. Needs its own diagnosis + RED guard (the probe exists in
-  this session's history; it was not committed because it fails).
+- **New open bug (CORRECTED same day after instrumented diagnosis):
+  semantic scroll routes flicker on/off across committed frames, so scroll
+  input is silently dropped racing the frame cadence.** The earlier
+  "internal-@State second-interaction freeze" framing was a probe artifact
+  (damage-region frame gating); the scrolls in fact never dispatched —
+  `latestSemanticSnapshot.scrollRoutes` was EMPTY at scroll time. Per-frame
+  logging shows the pane's route (`…/TabContentPayload[1]/content`, the
+  indexed-source boundary identity) present on some commits and absent on
+  others (batches loosely tracking PhaseAnimator `suppressed`/`transaction`
+  storms, but frame 1's full re-resolve was also routeless). Any pane in an
+  app committing routeless-snapshot frames (continuous under looping
+  animations) randomly drops scrolls — >50% in the repro. Co-check during
+  diagnosis: executor-stage off-screen elision fired (`causes=[deadline]`)
+  while the animator was plausibly on-screen — possible H1 soundness
+  violation at the same seam. NOT the Part 0 class (no wrong reuse). Next
+  effort: find which commit classes publish semantics without the
+  indexed-source interior (measure realization vs semantics extraction vs
+  retained fragments), fix snapshot stability, add an artifact-proof
+  two-scroll internal-@State guard. Full evidence in the
+  [Part 0 report](../reports/2026-06-12-part0-divergent-identity-orphaning-fix.md)
+  §New finding.
 
 ### 2026-06-11 (second update — stamping fast path landed)
 
