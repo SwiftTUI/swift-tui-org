@@ -1,192 +1,17 @@
-diff --git a/Sources/SwiftTUIRuntime/Diagnostics/CommitBreakdownProbe.swift b/Sources/SwiftTUIRuntime/Diagnostics/CommitBreakdownProbe.swift
-new file mode 100644
-index 00000000..3c7d87c7
---- /dev/null
-+++ b/Sources/SwiftTUIRuntime/Diagnostics/CommitBreakdownProbe.swift
-@@ -0,0 +1,167 @@
-+#if canImport(Darwin)
-+  import Darwin
-+#elseif canImport(Glibc)
-+  import Glibc
-+#elseif canImport(Android)
-+  import Android
-+#elseif canImport(Musl)
-+  import Musl
-+#elseif canImport(WASILibc)
-+  import WASILibc
-+#endif
-+
-+/// TEMPORARY measurement instrumentation (NOT a shipped feature).
-+///
-+/// Accumulates the per-frame sub-phase durations of ``DefaultRenderer``'s
-+/// committed-frame commit path — `finalizeFrame`, the head-draft
-+/// `transaction.commit()`, and `commitPlanner.plan` — so the `commit_ms`
-+/// frame-tail residual identified after H3 can be attributed to a specific
-+/// O(tree) sub-step before any optimization is attempted.
-+///
-+/// Gated entirely by the `TERMUI_PERF_COMMIT_BREAKDOWN` environment variable: a
-+/// no-op (single cached `Bool` read per frame) when unset, so it has no effect
-+/// on normal runs. The accumulators are process-global and per-`@MainActor`
-+/// (the commit path is `@MainActor`-isolated), so a single `termui-perf` run
-+/// — which executes its iterations sequentially on the main actor — yields one
-+/// aggregate. ``summaryLine()`` is read once at harness teardown; see
-+/// `Tools/TermUIPerf/.../main.swift`.
-+///
-+/// Plan: `docs/plans/2026-05-30-003-perf-commit-ms-instrumentation-plan.md`
-+/// (org repo). Revert with the rest of this instrumentation once the cost is
-+/// located.
-+@_spi(Runners)
-+@MainActor
-+public enum CommitBreakdownProbe {
-+  /// Read once, on first access, on the main actor. After that this is a plain
-+  /// `Bool` load — cheap enough to evaluate on every committed frame.
-+  public static let isEnabled: Bool =
-+    environmentValue(named: "TERMUI_PERF_COMMIT_BREAKDOWN") != nil
-+
-+  private static var finalizeTotal: Duration = .zero
-+  private static var txnTotal: Duration = .zero
-+  private static var planTotal: Duration = .zero
-+  private static var frameCount: Int = 0
-+
-+  // Phase 2: `txn` (= `FrameHeadTransaction.commit()`) is the dominant,
-+  // O(tree)-scaling commit sub-phase, so it is split one level further into its
-+  // four sub-commits to pinpoint which one scales. Recorded from
-+  // ``FrameHeadTransaction/commit()``.
-+  private static var txnGraphRegistrationsTotal: Duration = .zero
-+  private static var txnObservationTotal: Duration = .zero
-+  private static var txnPortalTotal: Duration = .zero
-+  private static var txnAnimationTotal: Duration = .zero
-+  private static var txnFrameCount: Int = 0
-+
-+  // Publication-mode tally per committed frame. Decides whether scoping the
-+  // restore (Fix 2) can help: an `.all` frame must resetAll + full-restore, so
-+  // only `.subtrees`/`.unchanged` frames are scopable.
-+  private static var pubAllCount: Int = 0
-+  private static var pubSubtreesCount: Int = 0
-+  private static var pubUnchangedCount: Int = 0
-+  private static var pubSubtreeRootTotal: Int = 0
-+
-+  /// Accumulate one committed frame's three commit sub-phase durations.
-+  public static func record(
-+    finalize: Duration,
-+    txn: Duration,
-+    plan: Duration
-+  ) {
-+    finalizeTotal += finalize
-+    txnTotal += txn
-+    planTotal += plan
-+    frameCount += 1
-+  }
-+
-+  /// Accumulate one committed frame's four `transaction.commit()` sub-steps.
-+  public static func recordTxn(
-+    graphRegistrations: Duration,
-+    observation: Duration,
-+    portal: Duration,
-+    animation: Duration
-+  ) {
-+    txnGraphRegistrationsTotal += graphRegistrations
-+    txnObservationTotal += observation
-+    txnPortalTotal += portal
-+    txnAnimationTotal += animation
-+    txnFrameCount += 1
-+  }
-+
-+  /// Tally a committed frame's runtime-registration publication mode. `rootCount`
-+  /// is the subtree-root count for `.subtrees` frames (0 otherwise).
-+  public static func recordPublication(
-+    all: Bool,
-+    subtrees: Bool,
-+    rootCount: Int
-+  ) {
-+    if all {
-+      pubAllCount += 1
-+    } else if subtrees {
-+      pubSubtreesCount += 1
-+      pubSubtreeRootTotal += rootCount
-+    } else {
-+      pubUnchangedCount += 1
-+    }
-+  }
-+
-+  /// One-line stderr-ready summary, or `nil` when no committed frames were
-+  /// recorded (instrumentation disabled, or a run with zero commits). Reports
-+  /// the mean per committed frame for each sub-phase — the signal compared
-+  /// across the tree-size sweep to find the O(tree) cost — plus the totals and
-+  /// frame count for context.
-+  public static func summaryLine() -> String? {
-+    guard frameCount > 0 else {
-+      return nil
-+    }
-+    let frames = Double(frameCount)
-+    let finalizeMs = milliseconds(finalizeTotal)
-+    let txnMs = milliseconds(txnTotal)
-+    let planMs = milliseconds(planTotal)
-+    var line =
-+      "[commit-breakdown] frames=\(frameCount) "
-+      + "mean/frame: finalize=\(round4(finalizeMs / frames))ms "
-+      + "txn=\(round4(txnMs / frames))ms "
-+      + "plan=\(round4(planMs / frames))ms | "
-+      + "totals: finalize=\(round4(finalizeMs))ms "
-+      + "txn=\(round4(txnMs))ms "
-+      + "plan=\(round4(planMs))ms"
-+    if txnFrameCount > 0 {
-+      let txnFrames = Double(txnFrameCount)
-+      line +=
-+        "\n[commit-breakdown:txn] frames=\(txnFrameCount) mean/frame: "
-+        + "graphRegistrations=\(round4(milliseconds(txnGraphRegistrationsTotal) / txnFrames))ms "
-+        + "observation=\(round4(milliseconds(txnObservationTotal) / txnFrames))ms "
-+        + "portal=\(round4(milliseconds(txnPortalTotal) / txnFrames))ms "
-+        + "animation=\(round4(milliseconds(txnAnimationTotal) / txnFrames))ms"
-+    }
-+    let pubTotal = pubAllCount + pubSubtreesCount + pubUnchangedCount
-+    if pubTotal > 0 {
-+      let meanRoots =
-+        pubSubtreesCount > 0
-+        ? round4(Double(pubSubtreeRootTotal) / Double(pubSubtreesCount)) : 0
-+      line +=
-+        "\n[commit-breakdown:publication] frames=\(pubTotal) "
-+        + "all=\(pubAllCount) subtrees=\(pubSubtreesCount) unchanged=\(pubUnchangedCount) "
-+        + "meanSubtreeRoots=\(meanRoots)"
-+    }
-+    return line
-+  }
-+
-+  private static func milliseconds(_ duration: Duration) -> Double {
-+    let components = duration.components
-+    return Double(components.seconds) * 1_000
-+      + Double(components.attoseconds) / 1_000_000_000_000_000
-+  }
-+
-+  private static func round4(_ value: Double) -> Double {
-+    (value * 10_000).rounded() / 10_000
-+  }
-+}
-+
-+private func environmentValue(named name: String) -> String? {
-+  unsafe name.withCString { cName in
-+    guard let rawValue = unsafe getenv(cName) else {
-+      return nil
-+    }
-+    return unsafe String(cString: rawValue)
-+  }
-+}
 diff --git a/Sources/SwiftTUIRuntime/Rendering/DefaultRenderer+CompletedFrameCandidates.swift b/Sources/SwiftTUIRuntime/Rendering/DefaultRenderer+CompletedFrameCandidates.swift
-index 144ff29f..2100f753 100644
+index 33f061b6..450fb685 100644
 --- a/Sources/SwiftTUIRuntime/Rendering/DefaultRenderer+CompletedFrameCandidates.swift
 +++ b/Sources/SwiftTUIRuntime/Rendering/DefaultRenderer+CompletedFrameCandidates.swift
-@@ -126,15 +126,24 @@ extension DefaultRenderer {
+@@ -126,15 +126,22 @@ extension DefaultRenderer {
      semantics: SemanticSnapshot,
      workerCustomLayoutCacheUpdates: [WorkerCustomLayoutCacheUpdate]
    ) -> CommittedFrameEffects {
 -    var runtimeRegistrationDiagnostics = RuntimeRegistrationDiagnostics()
 -    let (commit, commitDuration) = measurePhase(clock: draft.clock) {
 -      let lifecycleEvents = viewGraph.finalizeFrame(
-+    // TEMPORARY: `commit_ms` is split into three measured sub-phases so the
-+    // post-H3 commit residual can be attributed to a specific sub-step. The
-+    // sum equals the former single span (modulo the negligible gap between
-+    // clock reads), so `commit_ms` semantics are preserved. See
-+    // ``CommitBreakdownProbe`` and the commit-ms instrumentation plan.
++    // TEMPORARY PROBE (do not land): `commit_ms` split into three measured
++    // sub-phases; the sum equals the former single span. See
++    // ``CommitBreakdownProbe``.
 +    let clock = draft.clock
 +    let (lifecycleEvents, finalizeDuration) = measurePhase(clock: clock) {
 +      viewGraph.finalizeFrame(
@@ -205,7 +30,7 @@ index 144ff29f..2100f753 100644
          resolved: resolved,
          placed: placed,
          semantics: semantics,
-@@ -142,6 +151,14 @@ extension DefaultRenderer {
+@@ -142,6 +149,14 @@ extension DefaultRenderer {
          lifecycleEvents: lifecycleEvents
        )
      }
@@ -219,20 +44,17 @@ index 144ff29f..2100f753 100644
 +    }
      applyWorkerCustomLayoutCacheUpdates(workerCustomLayoutCacheUpdates)
      frameTailRenderer.pruneMeasurementCache(
-       keeping: viewGraph.liveIdentitySnapshot()
+       keeping: viewGraph.liveNodeIDSnapshot()
 diff --git a/Sources/SwiftTUIRuntime/Rendering/FrameHeadDraftTransaction.swift b/Sources/SwiftTUIRuntime/Rendering/FrameHeadDraftTransaction.swift
-index e3cd98cf..59153ba3 100644
+index 1cfc3e00..9960c815 100644
 --- a/Sources/SwiftTUIRuntime/Rendering/FrameHeadDraftTransaction.swift
 +++ b/Sources/SwiftTUIRuntime/Rendering/FrameHeadDraftTransaction.swift
-@@ -80,10 +80,45 @@ package final class FrameHeadTransaction {
+@@ -86,10 +86,42 @@ package final class FrameHeadTransaction {
    ///   elision path; keep both in sync until they intentionally diverge.
    package func commit() -> RuntimeRegistrationDiagnostics {
      precondition(!didCommit && !didDiscard)
-+    // TEMPORARY: the four sub-commits are lap-timed so the dominant O(tree)
-+    // `commit_ms` cost (this method) can be attributed to a specific sub-step.
-+    // Single code path; the clock reads are negligible and the accumulation is
-+    // gated by ``CommitBreakdownProbe/isEnabled``. Revert with the rest of the
-+    // commit-ms instrumentation. Keep in sync with ``commitElided()``.
++    // TEMPORARY PROBE (do not land): lap-time the four sub-commits and record
++    // the registration publication mode. See ``CommitBreakdownProbe``.
 +    if CommitBreakdownProbe.isEnabled {
 +      switch graphDraft.runtimeRegistrationPublication {
 +      case .all:
@@ -271,29 +93,28 @@ index e3cd98cf..59153ba3 100644
      return diagnostics
    }
 diff --git a/Tools/TermUIPerf/Sources/TermUIPerf/main.swift b/Tools/TermUIPerf/Sources/TermUIPerf/main.swift
-index f8e1a628..7035a7f3 100644
+index f3476f2f..54cce870 100644
 --- a/Tools/TermUIPerf/Sources/TermUIPerf/main.swift
 +++ b/Tools/TermUIPerf/Sources/TermUIPerf/main.swift
-@@ -1,4 +1,8 @@
+@@ -1,5 +1,9 @@
  import Foundation
-+// TEMPORARY: reads the commit-phase sub-step breakdown probe at teardown. See
-+// `CommitBreakdownProbe` and the commit-ms instrumentation plan. Revert with
-+// the rest of this instrumentation once the O(tree) commit cost is located.
-+@_spi(Runners) import SwiftTUI
  
++// TEMPORARY PROBE (do not land): reads the commit-phase sub-step breakdown at
++// teardown. See `CommitBreakdownProbe`.
++@_spi(Runners) import SwiftTUI
++
  #if canImport(Darwin)
    import Darwin
-@@ -33,6 +37,13 @@ private func run(arguments: [String]) async throws {
+ #elseif canImport(Glibc)
+@@ -33,6 +37,11 @@ private func run(arguments: [String]) async throws {
      for aggregate in outcome.aggregates {
        print(AggregateReducer.format(aggregate))
      }
-+    // TEMPORARY: emit the commit-phase sub-step breakdown to stderr when the
-+    // probe is enabled (`TERMUI_PERF_COMMIT_BREAKDOWN`); `nil` (no emit) when
-+    // disabled or no frames committed. stderr keeps it out of the stdout
-+    // run-directory/aggregate output the harness already prints.
++    // TEMPORARY PROBE (do not land): emit the commit-phase sub-step breakdown
++    // to stderr when TERMUI_PERF_COMMIT_BREAKDOWN is set.
 +    if let breakdown = CommitBreakdownProbe.summaryLine() {
 +      FileHandle.standardError.writeLine(breakdown)
 +    }
    case .compare(let config):
-     let result = try CompareCommand.compare(config)
-     print(CompareCommand.format(result))
+     if config.gateEnabled {
+       let base = try CompareCommand.loadAggregate(from: config.baseRunDirectory)

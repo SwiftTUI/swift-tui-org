@@ -1,23 +1,55 @@
 # Performance Workstream Assessment & Next-Wave Proposal
 
 - **Date:** 2026-06-10
-- **Status:** In progress. The publish/pin step is complete; the head-timing
-  probe is implemented; the 0.0.19 `resolve_ms` bisect is complete; the
-  retained-root mitigation has landed; the residual runtime-ID stamping
-  fast path has landed; and Part 0 (divergent-identity orphaning) is fixed.
-  The next wave is **not complete**: the internal-@State second-interaction
-  freeze (new), sheet calibration, Part A, transition-frame `commit_ms`
-  diagnosis, popover trigger splitting, and the gaps register remain open.
+- **Status:** **COMPLETE (2026-06-12).** All open ranked items are closed:
+  publish/pin, head-timing probe, 0.0.19 bisect + retained-root mitigation,
+  stamping fast path, Part 0 (+ same-day island-staleness correction), sheet
+  calibration variant, Part A, the transition-frame `commit_ms` diagnosis
+  (registration pathology CONFIRMED — G3a/G11 revisit condition met), and
+  the popover trigger split. See
+  [reports/2026-06-12-next-wave-completion.md](../reports/2026-06-12-next-wave-completion.md).
+  Remaining recorded work: the sized-by-probe bucket (now led by
+  root-evaluation registration scoping) and the §5 gaps register.
 - **Measured at:** original assessment: `swift-tui` local `main@bc63495a`
   (0.0.19 + merged `perf/sheet-open-reader-attribution`,
-  `SWIFTTUI_READER_ATTRIBUTION` default-ON). Latest implementation/root pin:
-  `swift-tui main@f748be26`.
+  `SWIFTTUI_READER_ATTRIBUTION` default-ON). Final implementation/root pin:
+  `swift-tui main@e9b9d00e`.
 - **Method:** multi-agent assessment — four documentation/code surveys, one
   live `TermUIPerf` measurement run, a first-principles cost model, exhaustive
   candidate enumeration (24), adversarial code-level verification of the top 8
   (8/8 premises confirmed), and a completeness critique.
 
 ## 0. Implementation updates
+
+### 2026-06-12 (second update — items 3–6 closed; plan COMPLETE)
+
+- **Item 3 (sheet calibration)**: `TERMUI_PERF_SHEET_TRIGGER=sibling` landed
+  in the scenario; ~⅓ of the settle residual was co-location amplification,
+  but the de-amplified shape still computed ~336 nodes/frame → Part A
+  remained worth its validation cost.
+- **Item 4 (Part A)**: `swift-tui@2b05d0fa` — `isFocused` is now a snapshot-
+  excluded side-field (mirroring `_focusedIdentity`) with reader invalidation
+  via the `FocusedIdentityKey` runtime focus dependency. Sheet rows=176:
+  resolve −45%, measure −64%, total CPU −29% (sibling shape −10%); narrow
+  rows=40 also improved (CPU −10%, computed 19.4→17.0). The three scroll
+  guards pass UNMASKED (Part 0 is the rescuer). Pitfall: `EnvironmentValues`
+  grew a stored field → stale-`.build` SIGBUS until clean rebuild (twice:
+  main package + Tools/TermUIPerf).
+- **Item 5 (transition-frame commit diagnosis)**: probe rebased (archive
+  refreshed against `2b05d0fa`) and run on the sheet scenario. CONFIRMED
+  registration pathology: txn ≈ 5.86 of 6.85 ms commit, 99% of txn =
+  `graphRegistrations`, publication mode `.all` on 58% of frames — sheet
+  frames carry unmapped presentation identities → root-evaluation fallback →
+  `recordDirtyEvaluationPlan(nil)` → `.all`. **The G3a/G11 deferral's
+  sanctioned revisit condition is MET**; "scope registration publication on
+  root-evaluation frames" is now the lead sized-by-probe candidate (post-
+  Part-A commit is ~20% of the sheet pipeline, the largest unattacked share).
+- **Item 6 (popover trigger split)**: `swift-tui@e9b9d00e` —
+  `resolvePresentationModifier` generalized with `isActive`; all three
+  popover modifiers split (tip keeps its one-shot dismissal `@State` at the
+  background — slot-rebinding hazard, dismissal rare). Popover overlay
+  rows=176: resolve −38%, pipeline −24%, computed/reused 692/46 → 356/378.
+  Four new trigger-split tests; full gate green.
 
 ### 2026-06-12 (Part 0 landed; Part A unblocked; new open bug)
 
@@ -327,27 +359,20 @@ closed. The remaining items are still ranked work, not completed coverage.
    invalidation producers. Replaced by a NEW open item: the
    internal-@State second-interaction freeze (§0, 2026-06-12 — distinct
    mechanism, not cured by Part 0).
-3. **Cheap calibration: de-amplified sheet scenario variant.** The perf
-   scenario co-locates the toggle Button in the background container, which
-   amplifies the settle residual; a variant with the toggle outside calibrates
-   Part A's real-world payoff before paying its validation cost. (The existing
-   `TERMUI_PERF_SHEET_SPIKE` is *not* this — it bypasses `.sheet` entirely.)
-4. **Part A — exclude `IsFocusedKey` from the reuse snapshot** + map
-   `\.isFocused` → `FocusedIdentityKey` in `runtimeFocusStateDependencyKey`
-   (`StyleEnvironment.swift:99-109`). Targets §3.4. **Hard-gated on Part 0**
-   (mandatory sequencing per the 2026-06-10 decision). Part B (edit
-   FocusTracker) stays retired; Lever #3 stays a non-starter.
-5. **Transition-frame commit_ms diagnosis** — rebase the archived probe
-   (§3.5) and run it on the sheet scenario. If a registration-style pathology
-   dominates, a Fix-2-class win (−80%+) may exist on the 15–16% transition
-   commit share; this is also the *only* sanctioned revisit-condition for the
-   G3a/G11 index-patcher deferral.
-6. **Popover presentation-trigger split (complete Lever B).** All three
-   popover modifiers still read `isPresented`/`item` at the background
-   identity (`PopoverPresentation.swift:80/131/193`). Mechanical application
-   of the sheet pattern + a popover perf scenario + write-side
-   ReaderAttributionTests cases. Caution: unlike the sheet split (landed dark,
-   flag-off byte-identical), this lands directly on the flag-ON default path.
+3. ~~**Cheap calibration: de-amplified sheet scenario variant.**~~ **Closed
+   2026-06-12** (`TERMUI_PERF_SHEET_TRIGGER=sibling`, see §0): ~⅓ of the
+   settle residual was amplification; Part A still justified.
+4. ~~**Part A — exclude `IsFocusedKey` from the reuse snapshot.**~~ **Closed
+   2026-06-12** (`swift-tui@2b05d0fa`, see §0): sheet CPU −29% (sibling
+   −10%), narrow rows=40 CPU −10%; scroll guards pass unmasked.
+5. ~~**Transition-frame commit_ms diagnosis.**~~ **Closed 2026-06-12** (see
+   §0): registration pathology CONFIRMED (publication `.all` on 58% of sheet
+   frames via the root-evaluation fallback); the G3a/G11 revisit condition is
+   met — "scope registration publication on root-evaluation frames" is the
+   lead next-wave candidate.
+6. ~~**Popover presentation-trigger split (complete Lever B).**~~ **Closed
+   2026-06-12** (`swift-tui@e9b9d00e`, see §0): resolve −38%, computed/reused
+   692/46 → 356/378 on the popover overlay scenario.
 
 **Sized-by-probe (do not start before residual-resolve and transition-commit
 sizing):** scope `processResolvedTree` to changed subtrees; reduce checkpoint

@@ -24,8 +24,8 @@ teardown. Excluded from the public-API baseline (`@_spi`).
 
 ## How to re-apply
 
-`probe.patch` is a diff against `swift-tui` `main` @ `1526e21a` (the base the fix
-landed on). The probe touches files **disjoint** from the fix, so it applies cleanly
+`probe.patch` is a diff against `swift-tui` `main` @ `2b05d0fa` (rebased
+2026-06-12 for the sheet transition-frame commit diagnosis). The probe touches files **disjoint** from the fix, so it applies cleanly
 on top of `main` + the scoped-restore fix:
 
 ```bash
