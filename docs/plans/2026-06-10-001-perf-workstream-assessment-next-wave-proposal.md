@@ -42,25 +42,22 @@
   in the report: Part A removes the one-shot mask that hides
   first-interaction variants of any residual freeze class — diagnose the
   item below first or together with Part A.
-- **New open bug (CORRECTED same day after instrumented diagnosis):
-  semantic scroll routes flicker on/off across committed frames, so scroll
-  input is silently dropped racing the frame cadence.** The earlier
-  "internal-@State second-interaction freeze" framing was a probe artifact
-  (damage-region frame gating); the scrolls in fact never dispatched —
-  `latestSemanticSnapshot.scrollRoutes` was EMPTY at scroll time. Per-frame
-  logging shows the pane's route (`…/TabContentPayload[1]/content`, the
-  indexed-source boundary identity) present on some commits and absent on
-  others (batches loosely tracking PhaseAnimator `suppressed`/`transaction`
-  storms, but frame 1's full re-resolve was also routeless). Any pane in an
-  app committing routeless-snapshot frames (continuous under looping
-  animations) randomly drops scrolls — >50% in the repro. Co-check during
-  diagnosis: executor-stage off-screen elision fired (`causes=[deadline]`)
-  while the animator was plausibly on-screen — possible H1 soundness
-  violation at the same seam. NOT the Part 0 class (no wrong reuse). Next
-  effort: find which commit classes publish semantics without the
-  indexed-source interior (measure realization vs semantics extraction vs
-  retained fragments), fix snapshot stability, add an artifact-proof
-  two-scroll internal-@State guard. Full evidence in the
+- ~~**New open bug: semantic scroll routes flicker across committed
+  frames.**~~ **RESOLVED same day** (`swift-tui@0b9b4c23`): the flicker was
+  a regression introduced by `f748be26` itself — the island-crossing walk
+  staled the host spine through capture seams, and `snapshot()`'s rebuild
+  (which reconstructs from live children, impossible across a seam)
+  laundered a truncated tree on animation tick frames: the pane visibly
+  erased and its routes dropped out of the published snapshot. Fix = split
+  the signal: `isCommittedSnapshotFresh` stays parent-link-only (rebuild
+  semantics, never truncates); new `hasStaleIslandDescendant` (set past the
+  first `evaluationHost` crossing, consumed only by `canReuse`, cleared by
+  `apply`) carries the Part 0 reuse denial. Guards: the two-scroll
+  orphaning test stays green; new
+  `animationFramesKeepTabHostedPaneSurfaceStable` (verified RED against
+  the regression). Perf flat (<1% same-session A/B). The earlier
+  "internal-@State second-interaction freeze" and the elision-soundness
+  suspicion were artifacts of this same regression. Full story in the
   [Part 0 report](../reports/2026-06-12-part0-divergent-identity-orphaning-fix.md)
   §New finding.
 

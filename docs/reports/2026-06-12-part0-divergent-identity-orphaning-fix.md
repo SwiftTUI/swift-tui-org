@@ -93,7 +93,42 @@ Why this is sufficient and safe:
   direction. `layout-scroll-burst` flat (0.0149 → 0.0150; counts identical).
   Artifacts: `/tmp/part0-ab/` (ephemeral).
 
-## New finding (CORRECTED 2026-06-12): semantic scroll routes flicker on/off across frames — scrolls silently dropped (OPEN)
+## New finding (RESOLVED 2026-06-12, same day): the flicker was a regression introduced by `f748be26` itself — fixed in `swift-tui@0b9b4c23`
+
+**Root cause:** the island-crossing freshness walk over-served one flag to two
+consumers. `canReuse` correctly read `isCommittedSnapshotFresh == false` as "a
+descendant changed — don't reuse"; but `snapshot()`'s rebuild reads the same
+flag as "reconstruct committed from live children", which is impossible across
+a capture seam (island content is reachable only through body resolution).
+Every PhaseAnimator tick staled the host spine through the seam; on frames
+that did not re-resolve the spine, the rebuild grafted a **truncated tree**
+(live children only — 3 nodes instead of 66) and laundered it as fresh. The
+truncated tree was then measured, placed, semantically extracted, and
+committed: the pane **visibly erased** from the surface on animation frames
+and its scroll routes flickered out of the published snapshot. A/B with the
+walk reverted confirmed stable 66-node trees on every frame pre-`f748be26`.
+This was exactly the "skip-then-launder / which invariant does the fix
+restore" hazard the design review flagged.
+
+**Fix (`0b9b4c23`):** split the signal. `isCommittedSnapshotFresh` keeps
+parent-link-only semantics (pre-`f748be26` rebuild behavior — never
+truncates); a new `hasStaleIslandDescendant` is set by the walk from the
+first `evaluationHost` crossing onward, consumed **only** by `canReuse`, and
+cleared by `apply` (the body re-run that re-captures islands by value). The
+orphaning fix's reuse denial is fully preserved — the two-scroll guard stays
+green through the new flag.
+
+**Guards:** new `animationFramesKeepTabHostedPaneSurfaceStable` (asserts an
+animated TabView-hosted pane's composited surface keeps its content across
+animation frames) — verified RED against the regression behavior, GREEN with
+the split. Same-session perf A/B vs `f748be26`: flat (<1%, counts identical)
+on layout-scroll-burst and synthetic-narrow-invalidation. Full gate green.
+
+The investigation notes below are preserved for the record; note their
+"shipping bug" severity framing applied to the `f748be26`→`0b9b4c23` window
+only (about one day on `main`, never tagged in a release).
+
+### Original investigation notes (superseded by the resolution above)
 
 While building coverage, a two-scroll variant of the **internal-@State**
 gallery shape (the 2505 fixture: `@State` scroll position + PhaseAnimator
