@@ -53,11 +53,14 @@ A convergence fix should compare like-for-like (post-absorption vs
 post-absorption) and stop re-resolving capture-host content into the live
 graph on unchanged frames.
 
-**Bug C — gallery.** The physics toy never settles: `reflected()`'s
-`max(1, …)` magnitude floor creates a sub-cell micro-bounce limit cycle, so
-when the loop *does* run the app renders full-rate frames forever. Gallery
--side fix: allow the bounce to damp to zero (drop the floor or widen the
-settle window).
+**Bug C — withdrawn (correction).** An earlier draft of this triage claimed
+the physics toy never settles (limit cycle). That was a misread of stderr
+trace interleaving as wall-time ordering. Verified: the sim performs ~52
+state writes (≈2 s at the 40 ms tick) and then rests, matching the damping
+math. What remains real and **unexplained** is post-settle presents that
+alternate (full-row damage) between the rest surface and stale mid-air
+surfaces — stale-content residue in the same family as Bugs A/B; fold into
+that investigation rather than touching the gallery physics.
 
 **Bug D — untriaged.** The quarantined palette test ("gallery command palette
 omits the redundant cancel button", focus regions 3 vs 2) remains open;
