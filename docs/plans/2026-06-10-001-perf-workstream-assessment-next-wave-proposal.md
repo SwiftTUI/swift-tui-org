@@ -3,20 +3,56 @@
 - **Date:** 2026-06-10
 - **Status:** In progress. The publish/pin step is complete; the head-timing
   probe is implemented; the 0.0.19 `resolve_ms` bisect is complete; the
-  retained-root mitigation has landed; and the residual runtime-ID stamping
-  fast path has landed. The next wave is **not complete**: Part 0, sheet
-  calibration, Part A, transition-frame `commit_ms` diagnosis, popover
-  trigger splitting, and the gaps register remain open.
+  retained-root mitigation has landed; the residual runtime-ID stamping
+  fast path has landed; and Part 0 (divergent-identity orphaning) is fixed.
+  The next wave is **not complete**: the internal-@State second-interaction
+  freeze (new), sheet calibration, Part A, transition-frame `commit_ms`
+  diagnosis, popover trigger splitting, and the gaps register remain open.
 - **Measured at:** original assessment: `swift-tui` local `main@bc63495a`
   (0.0.19 + merged `perf/sheet-open-reader-attribution`,
   `SWIFTTUI_READER_ATTRIBUTION` default-ON). Latest implementation/root pin:
-  `swift-tui main@0b041764`.
+  `swift-tui main@f748be26`.
 - **Method:** multi-agent assessment — four documentation/code surveys, one
   live `TermUIPerf` measurement run, a first-principles cost model, exhaustive
   candidate enumeration (24), adversarial code-level verification of the top 8
   (8/8 premises confirmed), and a completeness critique.
 
 ## 0. Implementation updates
+
+### 2026-06-12 (Part 0 landed; Part A unblocked; new open bug)
+
+- **Part 0 is fixed**: `swift-tui@f748be26` adds `ViewNode.evaluationHost`
+  (the node whose body resolution evaluated this one) and lets both upward
+  freshness walks cross `parent ?? evaluationHost`, so a dirty node behind a
+  capture seam stales its true host spine and the spine can no longer be
+  wrongly retained-reused over it. Key corrections vs this plan's item 2:
+  the bug was **live on main** (any second scroll after settle froze a
+  WindowGroup-hosted TabView pane — the isFocused mask is one-shot, spent on
+  the first interaction); the wrongly-reused node (scene root) is **not**
+  the divergent node (that is the `.id`-re-rooted `FrameModifier` content
+  host); A0 as written was a literal no-op (the resolved-axis chain was
+  already in the invalidation set), and B0(i) would have missed the bug —
+  the failure was the **parent-link dead-end** that killed both the dirty
+  rescue and G2 at once. Guards: new two-scroll RED→GREEN test; the three
+  existing scroll cases pass with `IsFocusedKey` still in the snapshot;
+  full gate green; same-session perf flat (narrow rows=20 +0.3% noise,
+  reuse counts byte-identical; layout-scroll-burst flat). Evidence:
+  [reports/2026-06-12-part0-divergent-identity-orphaning-fix.md](../reports/2026-06-12-part0-divergent-identity-orphaning-fix.md).
+- **Part A is unblocked** (mandatory sequencing satisfied). Caveat recorded
+  in the report: Part A removes the one-shot mask that hides
+  first-interaction variants of any residual freeze class — diagnose the
+  item below first or together with Part A.
+- **New open bug (distinct mechanism):** a two-scroll variant of the
+  internal-@State gallery shape (2505 fixture: `@State` scroll position +
+  PhaseAnimator content) freezes persistently and is NOT cured by the
+  Part 0 fix. Trace evidence: its dirty walk reaches the portal root; its
+  scrolls fire no scroll-route invalidation (`scrollTarget` handler writes
+  `@State` only); the first scroll's repaint rode the PhaseAnimator frame
+  cadence; once the animating content is scrolled off-screen the pane never
+  repaints (frame-gated wait hangs). Suspects: reader-attributed position
+  invalidation cone fully inside clipped content × off-screen elision /
+  commit diffing. Needs its own diagnosis + RED guard (the probe exists in
+  this session's history; it was not committed because it fails).
 
 ### 2026-06-11 (second update — stamping fast path landed)
 
@@ -276,19 +312,14 @@ closed. The remaining items are still ranked work, not completed coverage.
    early return — payload values are never substituted, which sidesteps the
    metadata-sync/state-wipe hazard that broke the naive `child.snapshot()`
    attempt.
-2. **Part 0 — fix the latent divergent-identity orphaning bug.** A
-   capture-hosted scene root whose `resolvedIdentity` diverges from its
-   structural identity can be wrongly retained-reused on scroll frames, today
-   rescued only incidentally by the `isFocused` cone-bake. Fix directions: A0
-   — extend `scrollPointerInvalidationIdentities`
-   (`RunLoop+PointerHandling.swift:308-324`) with the resolved-identity
-   ancestor chain; B0 — a reuse-host guard in `reusableSnapshot`
-   (`ViewGraph.swift:1102-1160`). Hot reuse path: own perf-validated PR;
-   guards = the three `InteractiveRuntimeTests` scroll cases passing *with*
-   `IsFocusedKey` still in the snapshot, H2/H3 perf suites, full gate under
-   load. Note the in-code warning at `ViewGraph.swift:1131-1142` recording the
-   794fbf3e/7044ce13 revert — the identity-axis conflict scan is not
-   redundant.
+2. ~~**Part 0 — fix the latent divergent-identity orphaning bug.**~~
+   **Closed 2026-06-12** (`swift-tui@f748be26`, see §0). The mechanism
+   differed from this item's premise (parent-link dead-end at the capture
+   seam, not a gate-math gap; the bug was live, not latent); the fix is the
+   island-crossing `evaluationHost` freshness walk, covering all
+   invalidation producers. Replaced by a NEW open item: the
+   internal-@State second-interaction freeze (§0, 2026-06-12 — distinct
+   mechanism, not cured by Part 0).
 3. **Cheap calibration: de-amplified sheet scenario variant.** The perf
    scenario co-locates the toggle Button in the background container, which
    amplifies the settle residual; a variant with the toggle outside calibrates
