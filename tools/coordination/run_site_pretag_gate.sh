@@ -29,6 +29,11 @@ overlay_dir="${SWIFTTUI_ORG_SITE_PRETAG_DIR:-$default_overlay}"
 overlay_dir="$("$script_dir/materialize_pretag_overlay.sh" --source-mode "$source_mode" --output "$overlay_dir" site)"
 
 site_dir="$overlay_dir/swift-tui-site"
+web_dir="$overlay_dir/swift-tui-web"
+
+cd "$web_dir"
+bun install
+bun run build:packages
 
 SWIFTTUI_CHECKOUT="$repo_root/swift-tui" \
 SWIFTTUI_EXAMPLES_CHECKOUT="$overlay_dir/swift-tui-examples" \

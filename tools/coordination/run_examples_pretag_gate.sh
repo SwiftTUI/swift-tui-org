@@ -29,6 +29,11 @@ overlay_dir="${SWIFTTUI_ORG_EXAMPLES_PRETAG_DIR:-$default_overlay}"
 overlay_dir="$("$script_dir/materialize_pretag_overlay.sh" --source-mode "$source_mode" --output "$overlay_dir" examples)"
 
 examples_dir="$overlay_dir/swift-tui-examples"
+web_dir="$overlay_dir/swift-tui-web"
+
+cd "$web_dir"
+bun install
+bun run build:packages
 
 cd "$examples_dir"
 bun install

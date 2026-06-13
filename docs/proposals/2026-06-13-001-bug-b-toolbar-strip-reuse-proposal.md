@@ -1,6 +1,6 @@
 # Bug B: toolbar strip re-resolve — implementation proposal
 
-**Date:** 2026-06-13 · **Status:** implementation pass 1 committed; full pre-tag web gates blocked ·
+**Date:** 2026-06-13 · **Status:** implementation pass 1 committed; full gate rerun pending ·
 **Depends on / follows:** [2026-06-13-bug-a-scoped-publication-task-drop-fix.md](../reports/2026-06-13-bug-a-scoped-publication-task-drop-fix.md) ·
 **Register item:** "reuse-host guard" (perf)
 
@@ -127,13 +127,20 @@ Focused validation completed:
 and validation commits. The toolbar/native path passed, including
 `@swift_tui//:native_gate`, `@swift_tui_examples//:native_gate`,
 `@swift_tui_site//:native_gate_script`, and `@swift_tui_web//:native_gate`.
-The run remained red on the two pre-tag WebExample web gates:
+The first run remained red on the two pre-tag WebExample web gates:
 
 - `//:site_pretag_native_gate`: `bun run build:wasm` failed because
   `WebExample/src/build-terminal.ts` could not resolve `@swifttui/build`.
 - `//:examples_pretag_native_gate`: the WebExample web build failed on the same
   missing `@swifttui/build` module, then the follow-on local host build failed
   because `tsdown` was not on `PATH`.
+
+Root follow-up fixed the pre-tag runners so they install and build the local
+`swift-tui-web` packages in the materialized overlay before WebExample imports
+`@swifttui/build`/`@swifttui/web`. Targeted gate reruns then passed:
+
+- `mise exec -- bazel test //:site_pretag_native_gate`
+- `mise exec -- bazel test //:examples_pretag_native_gate`
 
 ## Required validation before landing (do not skip — crash-class hot path)
 
@@ -151,9 +158,8 @@ The run remained red on the two pre-tag WebExample web gates:
   gallery, or a layout-dependent-toolbar harness) with the standard metrics.
 - [ ] **Full gate** (`mise exec -- bazel test //:org_full`) + **gallery suite**
   (must stay green; the stamp-skip crash class lives here). Attempted
-  2026-06-13; Swift/native targets passed, but the pre-tag WebExample web gates
-  failed on missing `@swifttui/build`/`tsdown` tooling resolution before this
-  item could be checked off.
+  2026-06-13; Swift/native targets passed, then targeted pre-tag reruns passed
+  after fixing overlay web package builds. Needs one clean full-gate rerun.
 - [ ] **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
   `.build` if structs change (cf. memory).
 
@@ -172,5 +178,4 @@ action-registration freshness and icon-signature soundness questions, but the
 change still lives in the byte-equivalence-sensitive retained-reuse hot path
 that every prior perf PR (H2/H3/place_ms/commit_ms) treated with A/B +
 equivalence proofs. Before final release, finish the broader perf A/B and get
-the full/gallery gates green after the pre-tag WebExample tooling issue is
-resolved.
+one clean full/gallery gate rerun from the committed root tree.
