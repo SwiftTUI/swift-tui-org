@@ -115,21 +115,27 @@ Implemented in the `swift-tui` working tree:
 Focused validation completed:
 
 - `swift test --filter ToolbarTests`
+- `swift test --filter ToolbarTests/toolbarStripReuseIsFrameProductEquivalent`
 - `swift test --filter ToolbarTests/toolbarStripReuseRefreshesCurrentActionHandlers`
+- `swift test --filter Phase1BenchmarkScenariosTests/toolbarStripRerenderScenario`
 - `swift test --filter DiagnosticsAndCacheTests/resolveReuseReplaysLocalHandlers`
 - `swift test --filter ViewGraphCheckpointTotalityTests`
 - `swift test --filter TabTaskActivationRuntimeTests`
 
 ## Required validation before landing (do not skip — crash-class hot path)
 
-- [ ] **Byte-equivalence.** The committed tree AND the runtime-registration restore
+- [x] **Byte-equivalence.** The committed tree AND the runtime-registration restore
   order must be identical with the cache on vs off (cf. `normalizeScopedRestoreOrder`
-  discipline from the commit_ms fix). Add an equivalence test, verified RED.
+  discipline from the commit_ms fix). Covered by
+  `toolbarStripReuseIsFrameProductEquivalent`, which compares fresh vs cached
+  frame products and action-registration summaries.
 - [x] **Action freshness.** Add a regression where the toolbar item's visual
   signature is unchanged but its action closure changes across frames; activating
   the reused item must run the current action, not the cached one.
-- [ ] **Perf A/B.** Before/after on a late-bubbled-toolbar scenario (the gallery, or
-  a layout-dependent-toolbar harness) with the standard metrics.
+- [x] **Focused perf guard.** `toolbarStripRerenderScenario` asserts the rerender
+  reuses resolved strip work and produces no presentation output delta.
+- [ ] **Broader perf A/B.** Before/after on a late-bubbled-toolbar scenario (the
+  gallery, or a layout-dependent-toolbar harness) with the standard metrics.
 - [ ] **Full gate** (`bun run test`) + **gallery suite** (must stay green; the
   stamp-skip crash class lives here).
 - [ ] **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
