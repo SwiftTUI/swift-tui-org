@@ -1,6 +1,6 @@
 # Bug B: toolbar strip re-resolve — implementation proposal
 
-**Date:** 2026-06-13 · **Status:** implementation pass 1 in working tree; full gate/perf A/B pending ·
+**Date:** 2026-06-13 · **Status:** implementation pass 1 committed; full pre-tag web gates blocked ·
 **Depends on / follows:** [2026-06-13-bug-a-scoped-publication-task-drop-fix.md](../reports/2026-06-13-bug-a-scoped-publication-task-drop-fix.md) ·
 **Register item:** "reuse-host guard" (perf)
 
@@ -97,7 +97,7 @@ retained-reuse mechanism:
 
 ## Implementation pass 1 status (2026-06-13)
 
-Implemented in the `swift-tui` working tree:
+Implemented and committed in `swift-tui`:
 
 - `ViewGraph` now owns a scoped resolved-node reuse cache that is checkpointed,
   debug-snapshotted, and pruned with removed graph subtrees.
@@ -121,6 +121,19 @@ Focused validation completed:
 - `swift test --filter DiagnosticsAndCacheTests/resolveReuseReplaysLocalHandlers`
 - `swift test --filter ViewGraphCheckpointTotalityTests`
 - `swift test --filter TabTaskActivationRuntimeTests`
+- `mise exec -- bazel test //:org_fast`
+
+`mise exec -- bazel test //:org_full` was attempted after the implementation
+and validation commits. The toolbar/native path passed, including
+`@swift_tui//:native_gate`, `@swift_tui_examples//:native_gate`,
+`@swift_tui_site//:native_gate_script`, and `@swift_tui_web//:native_gate`.
+The run remained red on the two pre-tag WebExample web gates:
+
+- `//:site_pretag_native_gate`: `bun run build:wasm` failed because
+  `WebExample/src/build-terminal.ts` could not resolve `@swifttui/build`.
+- `//:examples_pretag_native_gate`: the WebExample web build failed on the same
+  missing `@swifttui/build` module, then the follow-on local host build failed
+  because `tsdown` was not on `PATH`.
 
 ## Required validation before landing (do not skip — crash-class hot path)
 
@@ -136,8 +149,11 @@ Focused validation completed:
   reuses resolved strip work and produces no presentation output delta.
 - [ ] **Broader perf A/B.** Before/after on a late-bubbled-toolbar scenario (the
   gallery, or a layout-dependent-toolbar harness) with the standard metrics.
-- [ ] **Full gate** (`bun run test`) + **gallery suite** (must stay green; the
-  stamp-skip crash class lives here).
+- [ ] **Full gate** (`mise exec -- bazel test //:org_full`) + **gallery suite**
+  (must stay green; the stamp-skip crash class lives here). Attempted
+  2026-06-13; Swift/native targets passed, but the pre-tag WebExample web gates
+  failed on missing `@swifttui/build`/`tsdown` tooling resolution before this
+  item could be checked off.
 - [ ] **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
   `.build` if structs change (cf. memory).
 
@@ -151,9 +167,10 @@ deferred content) is needed to exercise the late-reconcile site.
 
 ## Recommendation
 
-**GO with remaining landing gates.** Implementation pass 1 resolves the
+**GO for the next validation pass, not final release.** Implementation pass 1 resolves the
 action-registration freshness and icon-signature soundness questions, but the
 change still lives in the byte-equivalence-sensitive retained-reuse hot path
 that every prior perf PR (H2/H3/place_ms/commit_ms) treated with A/B +
-equivalence proofs. Before landing, finish the byte-equivalence check, perf A/B,
-and full/gallery gates above.
+equivalence proofs. Before final release, finish the broader perf A/B and get
+the full/gallery gates green after the pre-tag WebExample tooling issue is
+resolved.
