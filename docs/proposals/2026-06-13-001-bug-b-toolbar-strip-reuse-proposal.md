@@ -72,8 +72,13 @@ retained-reuse mechanism:
 1. **`ToolbarStripSignature`** (Equatable, Sendable): derived from
    `[ToolbarItemConfig]` (`title`, an `Image` descriptor for `icon`, `isEnabled`,
    `systemHint`, `position`) + the style's placement/itemLayout discriminator.
-   `action` is a closure — excluded; it does not affect the rendered strip and is
-   re-captured each frame regardless.
+   `action` is a closure and does not affect the rendered strip, but it **does**
+   affect runtime registrations: `Button.resolve` registers the action handler
+   during resolve, and retained reuse restores the captured handler from the
+   previous `ViewNode`. Therefore the cache may exclude `action` only if the
+   reuse path separately refreshes toolbar button action registrations from the
+   current item configs. Without that refresh, a visually unchanged toolbar item
+   whose action closure changed would replay the stale cached handler.
 
 2. **Cache** keyed by toolbar-host `Identity` → `(ToolbarStripSignature,
    ResolvedNode)`. Store on the `ViewGraph` (survives frames; pruned with the
@@ -82,25 +87,37 @@ retained-reuse mechanism:
 3. **In `reconciledToolbarHost`**, before building the strip: if
    `cache[hostIdentity].signature == currentSignature`, reuse the cached strip
    `ResolvedNode` via `viewGraph.recordReusedSubtree(cachedStrip, invalidator:,
-   retained: true)` and use it as `stripNode`; else resolve fresh and update the
-   cache. This must run at the **resolve-time** site (well-timed: during resolve,
-   before `finalizeFrame`). The **late-reconcile** site needs separate timing
-   verification (it runs in the frame tail before commit; confirm `frameOrder`
-   is still open then).
+   retained: true)`, refresh any current-item runtime registrations that are not
+   represented by the visual signature, and use the result as `stripNode`; else
+   resolve fresh and update the cache. This must run at the **resolve-time** site
+   (well-timed: during resolve, before `finalizeFrame`). The **late-reconcile**
+   site needs separate timing verification (it runs in the frame tail before
+   commit; confirm `frameOrder` is still open then).
 
-## Open implementation question
+## Open implementation questions
 
-`ToolbarItemConfig.icon` is an `Image` (a `PrimitiveView`; equatability not
-guaranteed). The signature must be **sound** — when it cannot prove items are
-unchanged it must fall back to a fresh resolve, never reuse stale. Either make
-the icon comparable via a stable descriptor, or omit reuse when any item carries
-an icon (conservative first cut).
+1. **Action freshness.** A visual-signature-only cache is unsound unless the
+   reused path updates current toolbar button action registrations. A
+   conservative first cut can fall back to fresh resolve whenever the
+   implementation cannot refresh/prove the current action handlers; do not
+   replay stale `LocalActionRegistry` entries from the cached strip.
+
+2. **Icon signature.** `ToolbarItemConfig.icon` is an `Image` (a `PrimitiveView`;
+   the public type does not currently conform to `Equatable`). The current stored
+   fields are descriptor-friendly (`source`, `isResizable`, `scalingMode`), but
+   the signature must remain **sound**: when it cannot prove items are unchanged
+   it must fall back to a fresh resolve, never reuse stale. Either derive a
+   stable image descriptor from those fields, or omit reuse when any item carries
+   an icon (conservative first cut).
 
 ## Required validation (do not skip — crash-class hot path)
 
 - **Byte-equivalence.** The committed tree AND the runtime-registration restore
   order must be identical with the cache on vs off (cf. `normalizeScopedRestoreOrder`
   discipline from the commit_ms fix). Add an equivalence test, verified RED.
+- **Action freshness.** Add a regression where the toolbar item's visual
+  signature is unchanged but its action closure changes across frames; activating
+  the reused item must run the current action, not the cached one.
 - **Perf A/B.** Before/after on a late-bubbled-toolbar scenario (the gallery, or
   a layout-dependent-toolbar harness) with the standard metrics.
 - **Full gate** (`bun run test`) + **gallery suite** (must stay green; the
@@ -119,10 +136,10 @@ deferred content) is needed to exercise the late-reconcile site.
 ## Recommendation
 
 **GO** — the cost is confirmed real. Implement as a **focused pass** (own PR):
-design is complete, the measurement harness exists, and the only open piece is
-the icon-signature soundness above. It is deliberately *not* bundled with Bug A
-because the change is in the byte-equivalence-sensitive retained-reuse hot path
-that every prior perf PR (H2/H3/place_ms/commit_ms) treated with A/B +
-equivalence proofs, and Bug A already removed the user-visible symptom — so the
-landing should get fresh context and the full equivalence/A-B gauntlet rather
-than a rushed same-session attempt.
+the measurement harness exists, but action-registration freshness and
+icon-signature soundness must be resolved before landing. It is deliberately
+*not* bundled with Bug A because the change is in the byte-equivalence-sensitive
+retained-reuse hot path that every prior perf PR (H2/H3/place_ms/commit_ms)
+treated with A/B + equivalence proofs, and Bug A already removed the
+user-visible symptom — so the landing should get fresh context and the full
+equivalence/A-B gauntlet rather than a rushed same-session attempt.
