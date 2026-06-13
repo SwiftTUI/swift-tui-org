@@ -1,6 +1,6 @@
 # Bug B: toolbar strip re-resolve — implementation proposal
 
-**Date:** 2026-06-13 · **Status:** implementation pass 1 committed; full gate green; broader perf A/B pending ·
+**Date:** 2026-06-13 · **Status:** implementation pass 1 committed; full gate green; broader perf A/B green ·
 **Depends on / follows:** [2026-06-13-bug-a-scoped-publication-task-drop-fix.md](../reports/2026-06-13-bug-a-scoped-publication-task-drop-fix.md) ·
 **Register item:** "reuse-host guard" (perf)
 
@@ -122,6 +122,9 @@ Focused validation completed:
 - `swift test --filter ViewGraphCheckpointTotalityTests`
 - `swift test --filter TabTaskActivationRuntimeTests`
 - `mise exec -- bazel test //:org_fast`
+- `swift package clean`, then:
+  - `swift test --filter ToolbarTests`
+  - `swift test --filter Phase1BenchmarkScenariosTests`
 
 `mise exec -- bazel test //:org_full` was attempted after the implementation
 and validation commits. The toolbar/native path passed, including
@@ -146,6 +149,19 @@ The clean-tree full rerun then passed:
 
 - `mise exec -- bazel test //:org_full`
 
+Broader perf A/B was added to
+`Tests/SwiftTUITests/Phase1BenchmarkScenariosTests.swift` as
+`lateBubbledToolbarPerfABScenario`. The scenario uses a `GeometryReader` to
+contribute late-bubbled bottom toolbar items, then compares the same second
+frame with normal strip reuse vs the same strip identity under retained-reuse
+suppression. Both sides produce identical incremental zero-damage terminal
+output. Measured on 2026-06-13:
+
+| Scenario | `resolvedNodesComputed` | `resolvedNodesReused` | Presentation |
+| --- | ---: | ---: | --- |
+| Optimized strip reuse | 15 | 40 | 0 bytes / 0 lines / 0 cells |
+| Strip reuse suppressed | 67 | 0 | 0 bytes / 0 lines / 0 cells |
+
 ## Required validation before landing (do not skip — crash-class hot path)
 
 - [x] **Byte-equivalence.** The committed tree AND the runtime-registration restore
@@ -158,13 +174,18 @@ The clean-tree full rerun then passed:
   the reused item must run the current action, not the cached one.
 - [x] **Focused perf guard.** `toolbarStripRerenderScenario` asserts the rerender
   reuses resolved strip work and produces no presentation output delta.
-- [ ] **Broader perf A/B.** Before/after on a late-bubbled-toolbar scenario (the
+- [x] **Broader perf A/B.** Before/after on a late-bubbled-toolbar scenario (the
   gallery, or a layout-dependent-toolbar harness) with the standard metrics.
+  Covered by `lateBubbledToolbarPerfABScenario`: optimized second frame
+  computed 15 / reused 40 resolved nodes; strip-reuse-suppressed second frame
+  computed 67 / reused 0, with identical zero-damage presentation output.
 - [x] **Full gate** (`mise exec -- bazel test //:org_full`) + **gallery suite**
   (must stay green; the stamp-skip crash class lives here). Passed clean-tree
   rerun on 2026-06-13 after fixing overlay web package builds.
-- [ ] **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
-  `.build` if structs change (cf. memory).
+- [x] **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
+  `.build` if structs change (cf. memory). Covered on 2026-06-13 by
+  `swift package clean`, then `swift test --filter ToolbarTests` and
+  `swift test --filter Phase1BenchmarkScenariosTests`.
 
 ## Measurement harness already in place
 
@@ -176,8 +197,8 @@ deferred content) is needed to exercise the late-reconcile site.
 
 ## Recommendation
 
-**GO for the next validation pass, not final release.** Implementation pass 1 resolves the
-action-registration freshness and icon-signature soundness questions, but the
-change still lives in the byte-equivalence-sensitive retained-reuse hot path
-that every prior perf PR (H2/H3/place_ms/commit_ms) treated with A/B +
-equivalence proofs. Before final release, finish the broader perf A/B.
+**GO for final implementation review.** Implementation pass 1 resolves the
+action-registration freshness and icon-signature soundness questions, the
+byte-equivalence and focused perf guards are in place, `org_full` is green, and
+the broader late-bubbled-toolbar A/B now confirms the intended resolved-work
+drop without terminal output changes.
