@@ -164,11 +164,10 @@ output. Measured on 2026-06-13:
 
 ## Required validation before landing (do not skip — crash-class hot path)
 
-- [x] **Byte-equivalence.** The committed tree AND the runtime-registration restore
-  order must be identical with the cache on vs off (cf. `normalizeScopedRestoreOrder`
-  discipline from the commit_ms fix). Covered by
+- [x] **Byte-equivalence.** The committed tree and action-registration summary
+  must be identical with the cache on vs off. Covered by
   `toolbarStripReuseIsFrameProductEquivalent`, which compares fresh vs cached
-  frame products and action-registration summaries.
+  frame products and sorted action-registration summaries.
 - [x] **Action freshness.** Add a regression where the toolbar item's visual
   signature is unchanged but its action closure changes across frames; activating
   the reused item must run the current action, not the cached one.
