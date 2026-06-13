@@ -1,6 +1,6 @@
 # Bug B: toolbar strip re-resolve — implementation proposal
 
-**Date:** 2026-06-13 · **Status:** designed, measurement-first implementation pending ·
+**Date:** 2026-06-13 · **Status:** implementation pass 1 in working tree; full gate/perf A/B pending ·
 **Depends on / follows:** [2026-06-13-bug-a-scoped-publication-task-drop-fix.md](../reports/2026-06-13-bug-a-scoped-publication-task-drop-fix.md) ·
 **Register item:** "reuse-host guard" (perf)
 
@@ -80,12 +80,13 @@ retained-reuse mechanism:
    current item configs. Without that refresh, a visually unchanged toolbar item
    whose action closure changed would replay the stale cached handler.
 
-2. **Cache** keyed by toolbar-host `Identity` → `(ToolbarStripSignature,
-   ResolvedNode)`. Store on the `ViewGraph` (survives frames; pruned with the
-   host identity) — *not* on the per-frame-rebuilt host node.
+2. **Cache** keyed by scoped toolbar-strip owner `Identity` →
+   `(ToolbarStripSignature, ResolvedNode)`. Store on the `ViewGraph` (survives
+   frames; pruned with removed graph subtrees) — *not* on the per-frame-rebuilt
+   host node.
 
 3. **In `reconciledToolbarHost`**, before building the strip: if
-   `cache[hostIdentity].signature == currentSignature`, reuse the cached strip
+   `cache[stripIdentity].signature == currentSignature`, reuse the cached strip
    `ResolvedNode` via `viewGraph.recordReusedSubtree(cachedStrip, invalidator:,
    retained: true)`, refresh any current-item runtime registrations that are not
    represented by the visual signature, and use the result as `stripNode`; else
@@ -94,35 +95,44 @@ retained-reuse mechanism:
    site needs separate timing verification (it runs in the frame tail before
    commit; confirm `frameOrder` is still open then).
 
-## Open implementation questions
+## Implementation pass 1 status (2026-06-13)
 
-1. **Action freshness.** A visual-signature-only cache is unsound unless the
-   reused path updates current toolbar button action registrations. A
-   conservative first cut can fall back to fresh resolve whenever the
-   implementation cannot refresh/prove the current action handlers; do not
-   replay stale `LocalActionRegistry` entries from the cached strip.
+Implemented in the `swift-tui` working tree:
 
-2. **Icon signature.** `ToolbarItemConfig.icon` is an `Image` (a `PrimitiveView`;
-   the public type does not currently conform to `Equatable`). The current stored
-   fields are descriptor-friendly (`source`, `isResizable`, `scalingMode`), but
-   the signature must remain **sound**: when it cannot prove items are unchanged
-   it must fall back to a fresh resolve, never reuse stale. Either derive a
-   stable image descriptor from those fields, or omit reuse when any item carries
-   an icon (conservative first cut).
+- `ViewGraph` now owns a scoped resolved-node reuse cache that is checkpointed,
+  debug-snapshotted, and pruned with removed graph subtrees.
+- `reconciledToolbarHost` resolves the strip through a visual signature gate and
+  reuses the cached strip through `recordReusedSubtree(..., retained: true)`.
+- The cache honors retained-reuse suppression for the strip identity.
+- Cache hits restore cached runtime registrations, then refresh current toolbar
+  button action registrations from the latest `ToolbarItemConfig` values.
+- The item signature includes `title`, `position`, `isEnabled`, `systemHint`, and
+  an icon descriptor (`Image.source`, `isResizable`, `scalingMode`). It enables
+  cache use for built-in item layouts and layouts with explicit reuse
+  signatures (`SendableLayout` or package reuse-providing layouts); otherwise it
+  falls back to a fresh resolve.
 
-## Required validation (do not skip — crash-class hot path)
+Focused validation completed:
 
-- **Byte-equivalence.** The committed tree AND the runtime-registration restore
+- `swift test --filter ToolbarTests`
+- `swift test --filter ToolbarTests/toolbarStripReuseRefreshesCurrentActionHandlers`
+- `swift test --filter DiagnosticsAndCacheTests/resolveReuseReplaysLocalHandlers`
+- `swift test --filter ViewGraphCheckpointTotalityTests`
+- `swift test --filter TabTaskActivationRuntimeTests`
+
+## Required validation before landing (do not skip — crash-class hot path)
+
+- [ ] **Byte-equivalence.** The committed tree AND the runtime-registration restore
   order must be identical with the cache on vs off (cf. `normalizeScopedRestoreOrder`
   discipline from the commit_ms fix). Add an equivalence test, verified RED.
-- **Action freshness.** Add a regression where the toolbar item's visual
+- [x] **Action freshness.** Add a regression where the toolbar item's visual
   signature is unchanged but its action closure changes across frames; activating
   the reused item must run the current action, not the cached one.
-- **Perf A/B.** Before/after on a late-bubbled-toolbar scenario (the gallery, or
+- [ ] **Perf A/B.** Before/after on a late-bubbled-toolbar scenario (the gallery, or
   a layout-dependent-toolbar harness) with the standard metrics.
-- **Full gate** (`bun run test`) + **gallery suite** (must stay green; the
+- [ ] **Full gate** (`bun run test`) + **gallery suite** (must stay green; the
   stamp-skip crash class lives here).
-- **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
+- [ ] **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
   `.build` if structs change (cf. memory).
 
 ## Measurement harness already in place
@@ -135,11 +145,9 @@ deferred content) is needed to exercise the late-reconcile site.
 
 ## Recommendation
 
-**GO** — the cost is confirmed real. Implement as a **focused pass** (own PR):
-the measurement harness exists, but action-registration freshness and
-icon-signature soundness must be resolved before landing. It is deliberately
-*not* bundled with Bug A because the change is in the byte-equivalence-sensitive
-retained-reuse hot path that every prior perf PR (H2/H3/place_ms/commit_ms)
-treated with A/B + equivalence proofs, and Bug A already removed the
-user-visible symptom — so the landing should get fresh context and the full
-equivalence/A-B gauntlet rather than a rushed same-session attempt.
+**GO with remaining landing gates.** Implementation pass 1 resolves the
+action-registration freshness and icon-signature soundness questions, but the
+change still lives in the byte-equivalence-sensitive retained-reuse hot path
+that every prior perf PR (H2/H3/place_ms/commit_ms) treated with A/B +
+equivalence proofs. Before landing, finish the byte-equivalence check, perf A/B,
+and full/gallery gates above.
