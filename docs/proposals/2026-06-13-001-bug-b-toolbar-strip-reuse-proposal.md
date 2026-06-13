@@ -1,6 +1,6 @@
 # Bug B: toolbar strip re-resolve — implementation proposal
 
-**Date:** 2026-06-13 · **Status:** implementation pass 1 committed; full gate rerun pending ·
+**Date:** 2026-06-13 · **Status:** implementation pass 1 committed; full gate green; broader perf A/B pending ·
 **Depends on / follows:** [2026-06-13-bug-a-scoped-publication-task-drop-fix.md](../reports/2026-06-13-bug-a-scoped-publication-task-drop-fix.md) ·
 **Register item:** "reuse-host guard" (perf)
 
@@ -142,6 +142,10 @@ Root follow-up fixed the pre-tag runners so they install and build the local
 - `mise exec -- bazel test //:site_pretag_native_gate`
 - `mise exec -- bazel test //:examples_pretag_native_gate`
 
+The clean-tree full rerun then passed:
+
+- `mise exec -- bazel test //:org_full`
+
 ## Required validation before landing (do not skip — crash-class hot path)
 
 - [x] **Byte-equivalence.** The committed tree AND the runtime-registration restore
@@ -156,10 +160,9 @@ Root follow-up fixed the pre-tag runners so they install and build the local
   reuses resolved strip work and produces no presentation output delta.
 - [ ] **Broader perf A/B.** Before/after on a late-bubbled-toolbar scenario (the
   gallery, or a layout-dependent-toolbar harness) with the standard metrics.
-- [ ] **Full gate** (`mise exec -- bazel test //:org_full`) + **gallery suite**
-  (must stay green; the stamp-skip crash class lives here). Attempted
-  2026-06-13; Swift/native targets passed, then targeted pre-tag reruns passed
-  after fixing overlay web package builds. Needs one clean full-gate rerun.
+- [x] **Full gate** (`mise exec -- bazel test //:org_full`) + **gallery suite**
+  (must stay green; the stamp-skip crash class lives here). Passed clean-tree
+  rerun on 2026-06-13 after fixing overlay web package builds.
 - [ ] **Stale-`.build` trap.** This area has hit SIGBUS on struct growth ×3 — clean
   `.build` if structs change (cf. memory).
 
@@ -177,5 +180,4 @@ deferred content) is needed to exercise the late-reconcile site.
 action-registration freshness and icon-signature soundness questions, but the
 change still lives in the byte-equivalence-sensitive retained-reuse hot path
 that every prior perf PR (H2/H3/place_ms/commit_ms) treated with A/B +
-equivalence proofs. Before final release, finish the broader perf A/B and get
-one clean full/gallery gate rerun from the committed root tree.
+equivalence proofs. Before final release, finish the broader perf A/B.
