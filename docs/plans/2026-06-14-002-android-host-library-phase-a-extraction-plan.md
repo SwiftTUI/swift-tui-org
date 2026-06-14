@@ -1,8 +1,12 @@
 # Android host library — Phase A internal-extraction plan
 
 - **Date:** 2026-06-14
-- **Status:** Proposed. Execution-ready task plan for **Phase A only** of the
-  extraction proposal. No new repo, no Maven, no public ABI freeze.
+- **Status:** **Phase A landed 2026-06-14** in `swift-tui-examples`
+  (`7b96daa`); the three §2 decisions are ratified. Verified end-to-end: 28 JVM
+  unit tests pass, library AAR + JNI shim build under `-Werror`, full
+  `:app:assembleDebug`, APK payload carries the renamed host `.so` + the shim
+  merged from the AAR, and the gallery launches/paints on the arm64 emulator.
+  No new repo, no Maven, no public ABI freeze. Phase B remains gated.
 - **Promotes:** [proposals/2026-06-14-001-android-host-library-extraction-proposal.md](../proposals/2026-06-14-001-android-host-library-extraction-proposal.md)
   (Phase A), with the decoupling gap and sequencing corrections found on review.
 - **Depends on / follows:**
@@ -28,24 +32,22 @@ while keeping everything internal to `swift-tui-examples` and reversible. After
 Phase A, an external consumer is a copy of `:app` (`MainActivity` + a one-line
 Swift entry + their root `View`), never a copy of the host internals.
 
-## 2. Decisions to pin before writing code
+## 2. Decisions — ratified 2026-06-14
 
-These are the proposal's open questions, resolved here with a recommendation so
-execution does not stall. Adjust if you disagree, but pin them first — steps 2–3
-depend on all three.
+The proposal's three open questions, now decided. Steps 2–3 depend on all three.
 
-| # | Decision | Recommendation | Why |
+| # | Decision | Ratified choice | Why |
 | --- | --- | --- | --- |
-| D1 | Library Gradle module + package | module `:swift-tui-host`; Kotlin package **`sh.swifttui.android.host`**; library `namespace = "sh.swifttui.android.host"` | Neutral, app-agnostic; matches the proposed `sh.swifttui.android` plugin id family. The package rename is what *forces* D3's binding switch. |
-| D2 | Which Swift product `.so` the JNI loads | **Parameterize, don't hardcode.** The consumer names their own Swift product lib; the library never references `libGalleryAndroidHost.so`. | The consumer's Swift entry compiles to a per-app `.so` name. A reusable library cannot bake in the gallery's name (cpp `kGalleryLibrary` today). |
-| D3 | Create-symbol binding | Fixed convention `@_cdecl("swift_tui_android_create_host")`, resolved by the library; bind all natives via `JNI_OnLoad`/`RegisterNatives`. Defer the `dlsym` vs link-time choice — `RegisterNatives` makes either safe. | Removes the app-specific `…_create_gallery_host`; `RegisterNatives` also dissolves the package-mangled-symbol problem D1 creates. |
+| D1 | Library module + namespace | module `:swift-tui-host`; Kotlin package + library `namespace = "sh.swifttui.android.host"` (example app keeps `applicationId = "org.swifttui.gallery.android"`) | Matches the `swifttui.sh` domain, the `sh.swifttui.android` plugin id, and the eventual Maven group `sh.swifttui`. The package rename is what *forces* D3's binding switch. |
+| D2 | How the JNI finds the consumer's Swift `.so` | **Canonical name, plugin-renamed.** The convention plugin standardizes the built Swift `.so` to `libswift_tui_app_host.so` in `jniLibs`; the library `dlopen`s that constant (overridable via a plugin property). The library never references `libGalleryAndroidHost.so`. | Zero consumer config — best serves "0 artifacts copied or configured." The plugin already owns `.so` placement (`copySwiftAndroidLibraries`), so it owns the name. Safe: the host `.so` is `dlopen`'d by path, never `DT_NEEDED`'d, so its soname is irrelevant after the rename. |
+| D3 | Create-symbol binding | Fixed `@_cdecl("swift_tui_android_create_host")`; all natives bound via `JNI_OnLoad`/`RegisterNatives`; symbols resolved by **`dlsym`** (not link-time). | Removes app-specific `…_create_gallery_host`; `RegisterNatives` dissolves the package-mangled-symbol fallout from D1. `dlsym` is **forced, not preferred**: a Phase-B AAR ships the shim *prebuilt*, but the consumer's Swift `.so` is built later/per-app, so a prebuilt shim can only resolve those symbols at runtime — choosing `dlsym` now keeps the binding model identical across Phase A→B. |
 
-For **D2**, the recommended concrete mechanism: the consumer calls
-`System.loadLibrary("<theirSwiftHostLib>")` (they know their own product name),
-and the library's JNI resolves the create symbol from the already-loaded image
-— either via a lib-name `String` passed through the `createHost` path into the
-shim's `dlopen`, or via `dlsym(RTLD_DEFAULT, "swift_tui_android_create_host")`.
-Decide the exact form in step 3; both keep the library name-agnostic.
+Only the **create** symbol and the **`.so` name** were app-coupled; D2 and D3
+remove both. The 7 handle ABI symbols (`swift_tui_android_start`, `…_stop`,
+`…_destroy`, `…_resize`, `…_copy_latest_frame`, `…_copy_clipboard_text`,
+`…_send_input`) are framework-owned — they come from `SwiftTUIAndroidHost` in
+`swift-tui` and stay hardcoded in the shim, resolved from the same cached
+`dlopen` handle as today.
 
 ## 3. Corrected coupling analysis (measured against `HEAD`)
 
@@ -63,7 +65,7 @@ convenience function:
 | # | Coupling (file:evidence) | Phase A fix |
 | --- | --- | --- |
 | C1 | C symbols `Java_org_swifttui_gallery_android_SwiftTUIJni_*` (8 fns, `swift_tui_jni.cpp:66,80,92,104,116,138,173,208`) bake in the gallery package | Switch to `JNI_OnLoad`/`RegisterNatives`; symbol names stop mattering (atomic with D1 rename) |
-| C2 | `dlopen("libGalleryAndroidHost.so")` (`swift_tui_jni.cpp:11,24`) | Parameterize per D2; library holds no app `.so` name |
+| C2 | `dlopen("libGalleryAndroidHost.so")` (`swift_tui_jni.cpp:11,24`) | Canonical `libswift_tui_app_host.so` per D2; plugin renames on copy, library holds no app `.so` name |
 | C3 | `dlsym("swift_tui_android_create_gallery_host")` (`swift_tui_jni.cpp:71`) + `SwiftTUIJni.createGalleryHost()` external + `GalleryAndroidHost.swift:13` `@_cdecl` | Rename Swift `@_cdecl` to `swift_tui_android_create_host`; library resolves the fixed name per D3 |
 | C4 | `rememberSwiftTUIHostState()` hardwires the gallery binding (`SwiftTUIHostState.kt:165–172`) | Move this convenience composable to `:app`, or parameterize it to accept `createHost`; the decoupled `SwiftTUIHostState` class stays in the library |
 
@@ -95,8 +97,9 @@ app-agnostic and move unchanged except for the package line.
 - [ ] Implement `JNI_OnLoad` + `RegisterNatives` for all 8 natives (C1). This
   must land in the same change as the package rename — implicit `Java_…` binding
   breaks the instant the package moves.
-- [ ] Remove the hardcoded `kGalleryLibrary`; parameterize the loaded Swift
-  product per D2 (C2).
+- [ ] Replace the hardcoded `kGalleryLibrary` with the canonical
+  `libswift_tui_app_host.so` constant per D2 (C2); the plugin's `.so` copy step
+  (Step 4) renames the built Swift product to that name.
 - [ ] Rename the Swift `@_cdecl` to `swift_tui_android_create_host` in
   `GalleryAndroidHost.swift`; library resolves the fixed name per D3 (C3).
 - [ ] Add `consumer-rules.pro` to `:swift-tui-host` keeping `SwiftTUIJni` and its
@@ -108,6 +111,9 @@ app-agnostic and move unchanged except for the package line.
   `sh.swifttui.android`).
 - [ ] Move `buildSwiftAndroid`, `copySwiftAndroidLibraries`,
   `prepareSwiftSdkSearchPath` (`app/build.gradle.kts:184,236,65`) into it.
+- [ ] In the moved `copySwiftAndroidLibraries`, rename the built Swift product
+  `.so` to the canonical `libswift_tui_app_host.so` as it lands in `jniLibs`
+  (D2); expose the target name as a plugin property for override.
 - [ ] Keep `configureSwiftPackageMirrors` and `abiFilters += "arm64-v8a"` as
   plugin **defaults / overlay-only** wiring (coordination-only; not a public
   consumer requirement).
@@ -134,9 +140,11 @@ prerequisite; it is not a planning gap.
   `SwiftTUIBoxDrawingTest`, `SwiftTUIDamagePlanTest`, `SwiftTUIFrameTest`,
   `SwiftTUIImeTest`, `SwiftTUIInputTest` (now under `:swift-tui-host`).
 - [ ] **Same-APK-payload check (falsifiable).** Capture
-  `unzip -l app-debug.apk | grep 'lib/arm64-v8a/'` before and after; the set of
-  packaged `.so`s (host lib, `libswift_tui_jni.so`, `libc++_shared.so`, Swift
-  runtime libs) must be identical. Record the diff (expected: empty) in the PR.
+  `unzip -l app-debug.apk | grep 'lib/arm64-v8a/'` before and after. The packaged
+  `.so` set must differ by **exactly one expected delta** from the D2 rename —
+  `libGalleryAndroidHost.so` → `libswift_tui_app_host.so` — with
+  `libswift_tui_jni.so`, `libc++_shared.so`, and the Swift runtime libs
+  unchanged. Any other difference fails the check. Record the diff in the PR.
 - [ ] **arm64 emulator smoke** on `SwiftTUI_AndroidGallery_api35_medium_arm64`
   (manual foreground process per the current-state report): install, launch
   returns `Status: ok`, process stays alive, first `GalleryView()` frame paints.
@@ -154,10 +162,11 @@ prerequisite; it is not a planning gap.
   check, not a payload check) — the emulator smoke is the guard.
 - **R8 in the consumer.** Without `consumer-rules.pro`, a consumer's release
   build can strip JNI-bound members silently. Ship it in Step 3, not Phase B.
-- **D2 mechanism choice.** `RTLD_DEFAULT` resolution depends on the consumer
-  having `System.loadLibrary`-ed their Swift host before host creation;
-  the lib-name-parameter form avoids that ordering assumption. Pick one in Step 3
-  and document the consumer contract.
+- **Canonical `.so` rename.** The plugin must rename the built Swift product to
+  `libswift_tui_app_host.so` as it copies into `jniLibs`; the same-APK-payload
+  check (§5) must therefore expect the new name, not `libGalleryAndroidHost.so`.
+  The rename is `dlopen`-safe (resolved by path; soname is unused for a
+  non-`DT_NEEDED` library).
 - **No scope creep into Phase B.** No Maven, no `swift-tui-android` population,
   no toolchain-compat manifest, no Prefab, no x86_64 — all explicitly deferred.
 
