@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | P1 | How far now | **B2 — full public release.** Move + wire + publish a tagged `0.1.0`. | Accepts `0.x` ABI churn (the frame protocol is still JSON; the C ABI is young). |
 | P2 | AAR contents | **Plugin-copied runtime.** AAR = JNI shim + Kotlin + `consumer-rules.pro` only (~hundreds of KB); the convention plugin copies the Swift runtime from the consumer's own SDK. | Refines the proposal's Design §1 default. Runtime always matches the consumer's toolchain → the Design §4 mismatch risk ~dissolves. AAR is tiny. |
-| P3 | Distribution | **Maven Central** (AAR) + **Gradle Plugin Portal** (plugin). Rule out GitHub Packages (public reads still need auth). | Frictionless consumer: one dependency + one plugin line, no extra repo. |
+| P3 | Distribution | **Static Maven repo on GitHub Pages** (AAR) + **Gradle Plugin Portal** (plugin); **Maven Central is a later graduation**. Rule out GitHub Packages (public reads still need auth). | No GPG/Sonatype now: Pages serves unsigned static artifacts I build locally (NDK present, so none of JitPack's build-the-`.so`-on-their-servers problem). Consumer adds one `maven { url }` line for the AAR; the plugin resolves from the default `gradlePluginPortal()`. |
 | P4 | Version | **0.1.0**, AAR + plugin versioned together. | Coupled; `0.x` signals instability. |
 | P5 | Gate | Org-root Bazel **JVM-test gate** now; emulator smoke stays the manual lane. | No GitHub Actions infra exists in the org yet; full emulator CI is a fast-follow, not a `0.1.0` blocker. |
 
@@ -30,13 +30,15 @@ publish** needs accounts only the maintainer controls. The plan is split so all
 non-credential work lands and is proven via `publishToMavenLocal` first.
 
 - **B2a — buildable now (no credentials):** seed the repo, build config, publish
-  config (reading secrets from env), example cutover with a coordination-owned
-  pre-tag override, org wiring, the gate, docs. **Verified by `publishToMavenLocal`
-  + the example building against the local artifact + the arm64 emulator smoke.**
-- **B2b — gated on maintainer credentials:** Sonatype Central namespace
-  `sh.swifttui` (verified via the `swifttui.sh` domain), a GPG signing key, and a
-  Gradle Plugin Portal API key. The maintainer supplies these (env/CI secrets)
-  and runs (or CI runs) the signed `publish` + pushes the `v0.1.0` tag.
+  config, example cutover with a coordination-owned pre-tag override, org wiring,
+  the gate, docs. **Verified by `publishToMavenLocal` + the example building
+  against the local artifact + the arm64 emulator smoke.**
+- **B2b — gated on a single maintainer credential.** GitHub Pages serves the AAR
+  as unsigned static files I build locally, so there is **no Sonatype namespace
+  and no GPG key** for `0.1.0` — only a **Gradle Plugin Portal API key** (for the
+  plugin), plus **enabling Pages** on `swift-tui-android` (repo push, which the
+  maintainer already has). The maintainer supplies the Portal key and runs (or CI
+  runs) `publishPlugins` + pushes the AAR to the Pages branch + the `v0.1.0` tag.
 
 ## 3. Plan
 
@@ -52,24 +54,32 @@ non-credential work lands and is proven via `publishToMavenLocal` first.
 - [ ] `bazel`/Gradle build green standalone; the existing 5 JVM tests pass.
 
 ### Step 2 — Publish config (B2a)
-- [ ] AAR: `maven-publish` + `signing` (GPG), coordinates
-  `sh.swifttui:android-host:0.1.0`; complete POM (name, description, license,
-  scm = `swift-tui-android`, developers, url = `https://swifttui.sh`).
+- [ ] AAR: `maven-publish`, coordinates `sh.swifttui:android-host:0.1.0`; complete
+  POM (name, description, license, scm = `swift-tui-android`, developers,
+  url = `https://swifttui.sh`). **No `signing` block for `0.1.0`** — Pages serves
+  unsigned artifacts (signing is added only at the Maven Central graduation), but
+  keep the POM Central-ready so graduation is just a publish-target change.
+- [ ] Serve the AAR as a **static Maven repo layout** from GitHub Pages:
+  `maven-publish` writes to a local repo dir, which a publish step pushes to the
+  `gh-pages` branch of `swift-tui-android` (a `git worktree`, or the
+  `org.ajoberstar.git-publish` plugin), **appending** to prior versions, not
+  clobbering. Public URL: `https://swifttui.github.io/swift-tui-android`.
 - [ ] Plugin: `com.gradle.plugin-publish` for `sh.swifttui.android` `0.1.0`
-  (Plugin Portal), with plugin metadata (display name, description, tags, vcsUrl).
-- [ ] Sign + credentials read from env/`gradle.properties` secrets (never
-  committed); document the required keys.
+  (Plugin Portal), with plugin metadata (display name, description, tags, vcsUrl);
+  the Portal API key is read from env/`gradle.properties` (never committed).
 - [ ] **Verify:** `publishToMavenLocal` produces the AAR (confirm payload =
-  shim + Kotlin + `consumer-rules.pro`, **no** Swift runtime) and the plugin
-  marker in `~/.m2`.
+  shim + Kotlin + `consumer-rules.pro`, **no** Swift runtime); a dry-run publish
+  populates the local static-repo dir with the expected layout.
 
 ### Step 3 — Cut the example over (B2a)
 - [ ] Delete the in-tree `:swift-tui-host` + `build-logic` from `AndroidGallery`
   (single source of truth now in `swift-tui-android`).
-- [ ] Example consumes the **tagged Maven coordinates** in its committed
-  manifest: `implementation("sh.swifttui:android-host:0.1.0")` +
-  `plugins { id("sh.swifttui.android") version "0.1.0" }`. (Public child repos
-  consume siblings only via tagged artifacts — invariant.)
+- [ ] Example consumes the **published artifacts** in its committed manifest: add
+  the Pages repo `maven { url = uri("https://swifttui.github.io/swift-tui-android") }`
+  to `dependencyResolutionManagement` + `implementation("sh.swifttui:android-host:0.1.0")`;
+  apply `id("sh.swifttui.android") version "0.1.0"` (resolves from the default
+  `gradlePluginPortal()`). (Public child repos consume siblings only via published
+  artifacts — invariant.)
 - [ ] **Pre-tag dev resolution is coordination-owned, not committed to the
   example.** The overlay injects a Gradle init script / `pluginManagement` +
   `dependencyResolutionManagement` override that substitutes the local
@@ -98,13 +108,14 @@ non-credential work lands and is proven via `publishToMavenLocal` first.
   root `View`, `SwiftTUIHostView()`.
 
 ### Step 6 — Public publish (B2b — maintainer-gated)
-- [ ] Maintainer: register the `sh.swifttui` Sonatype Central namespace (verify
-  `swifttui.sh`), generate the GPG key, create the Plugin Portal API key; load
-  them as secrets.
-- [ ] Run the signed `publishAllPublicationsToMavenCentral` + `publishPlugins`;
-  push the `v0.1.0` tag in `swift-tui-android`.
+- [ ] Maintainer one-time: enable **GitHub Pages** on `swift-tui-android` (serve
+  the `gh-pages` branch) and create a **Gradle Plugin Portal API key**; load the
+  Portal key as a secret. (No Sonatype, no GPG for `0.1.0`.)
+- [ ] Publish: push the built AAR's static-repo layout to the `gh-pages` branch;
+  run `publishPlugins`; push the `v0.1.0` tag in `swift-tui-android`.
 - [ ] Remove the overlay pre-tag override; confirm the example resolves `0.1.0`
-  from the **public** Maven Central + Plugin Portal (fresh `~/.m2`, no override).
+  from the **public** Pages repo + Plugin Portal (fresh clone, empty caches, no
+  override).
 
 ## 4. Verification & completion criteria
 
@@ -113,9 +124,9 @@ non-credential work lands and is proven via `publishToMavenLocal` first.
   via the overlay override, assembles and paints on the arm64 emulator.
 - [ ] **Org gate:** `//:android_host_native_gate` green; `//:org_full` green.
 - [ ] **B2b (release):** a fresh external Android app embeds a SwiftTUI view by
-  adding one Maven dependency + applying one Gradle plugin + writing one Swift
-  entry, with **no files copied** out of any SwiftTUI repo, resolving everything
-  from public Maven Central + Plugin Portal.
+  adding the Pages Maven repo + one dependency + applying one Gradle plugin +
+  writing one Swift entry, with **no files copied** out of any SwiftTUI repo,
+  resolving everything from the public GitHub Pages repo + Plugin Portal.
 
 ## 5. Risks
 
@@ -127,8 +138,15 @@ non-credential work lands and is proven via `publishToMavenLocal` first.
   the coordination root/overlay; the public example manifest must ship tagged
   coords. A committed `mavenLocal()`/`includeBuild` in the example would break a
   fresh public clone — guard against it.
-- **Credential setup is the critical path to B2b** and is entirely maintainer-side;
-  B2a should be fully green first so the only remaining variable is signing/publishing.
+- **Static-repo distribution trade-offs.** Pages serves unsigned artifacts and
+  makes consumers add one `maven { url }` line (vs Central's zero-config
+  `mavenCentral()`); the `gh-pages` branch must accumulate the Maven layout across
+  releases (append, never clobber prior versions). The only B2b credential is the
+  Plugin Portal key, so the path to release is short.
+- **Maven Central graduation (later).** When the ABI stabilizes, re-publish the
+  same coordinates to Central (adds the Sonatype namespace + GPG signing); consumers
+  then drop the Pages repo line. Keeping the POM/coordinates Central-ready now makes
+  graduation only a publish-target change.
 - **AAR↔plugin version skew.** Always release the AAR and plugin together at the
   same version; a consumer mixing versions could hit a frame-format mismatch.
 
@@ -136,5 +154,6 @@ non-credential work lands and is proven via `publishToMavenLocal` first.
 
 - Proposal (Phase B source): [proposals/2026-06-14-001-android-host-library-extraction-proposal.md](../proposals/2026-06-14-001-android-host-library-extraction-proposal.md)
 - Phase A plan (landed): [plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md](2026-06-14-002-android-host-library-phase-a-extraction-plan.md)
-- Maven Central publishing: <https://central.sonatype.org/publish/publish-portal-gradle/>
+- GitHub Pages static Maven repo (git-publish): <https://github.com/ajoberstar/gradle-git-publish>
 - Gradle Plugin Portal publishing: <https://plugins.gradle.org/docs/publish-plugin>
+- Maven Central (later graduation): <https://central.sonatype.org/publish/publish-portal-gradle/>

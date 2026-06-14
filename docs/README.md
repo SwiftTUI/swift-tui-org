@@ -103,12 +103,13 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 - [plans/2026-06-14-004-android-host-library-phase-b-publication-plan.md](plans/2026-06-14-004-android-host-library-phase-b-publication-plan.md) -
   Phase B of the Android host-library extraction: populate the empty
   `swift-tui-android` submodule and publish the host AAR
-  (`sh.swifttui:android-host`) + the `sh.swifttui.android` Gradle plugin to
-  Maven Central + the Gradle Plugin Portal at `0.1.0`. Ratified decisions:
-  full public release now; plugin-copied Swift runtime (tiny AAR); Maven
-  Central + Plugin Portal. Split into B2a (all machinery, verifiable via
-  `publishToMavenLocal` + the emulator smoke) and B2b (the signed public
-  publish + tag, gated on maintainer Sonatype/GPG/Plugin-Portal credentials).
+  (`sh.swifttui:android-host`) + the `sh.swifttui.android` Gradle plugin at
+  `0.1.0`. Ratified decisions: full public release now; plugin-copied Swift
+  runtime (tiny AAR); **static Maven repo on GitHub Pages for the AAR + Gradle
+  Plugin Portal for the plugin, Maven Central as a later graduation** (no
+  GPG/Sonatype for `0.1.0`). Split into B2a (all machinery, verifiable via
+  `publishToMavenLocal` + the emulator smoke) and B2b (push the AAR to Pages +
+  `publishPlugins` + tag, gated only on a Plugin Portal key).
 - [plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md](plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md) -
   execution-ready task plan for **Phase A** of the Android host-library
   extraction proposal: extract the 11 Kotlin host files + JNI shim into an
