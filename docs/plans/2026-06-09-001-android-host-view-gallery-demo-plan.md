@@ -95,11 +95,13 @@ The framework already contains many Android-specific imports and POSIX shims:
 `canImport(Android)` branches exist in `SwiftTUICore`, `SwiftTUIRuntime`,
 `SwiftTUIProfiling`, CLI support, terminal I/O, and vendored `UnixSignals`.
 
-`swift-tui/docs/HOSTS-AND-PLATFORMS.md` already says `aarch64` Android
-cross-compilation works and that `x86_64` is blocked by vendored `swift-png`
-SIMD. That document points at a missing `swift-tui/VISION-GAP.md`, so explicit
-Android support needs a doc cleanup in the child repo once the real build
-results are known.
+`swift-tui/docs/HOSTS-AND-PLATFORMS.md` documents `aarch64` Android
+cross-compilation. It once also claimed `x86_64` was blocked by the vendored
+`swift-png` SIMD path; that blocker was verified resolved on 2026-06-14 —
+`PNG`, `JPEG`, `SwiftTUIAnimatedImage`, and the full `SwiftTUIAndroidHost`
+closure all cross-compile for `x86_64-unknown-linux-android28` (the SIMD pixel
+path was replaced by a scalar reimplementation). The child docs were updated to
+match.
 
 ### 2.5 Current local toolchain state
 
@@ -250,8 +252,10 @@ provide Android content URI routing cleanly.
   SwiftPM builds.
 - Do not make Android consumers import the `SwiftTUI` convenience product for
   the first host. Start from host-compatible products.
-- Start with `arm64-v8a` / `aarch64-unknown-linux-android28`. Treat `x86_64`
-  emulator support as a follow-up until the `swift-png` SIMD gap is resolved.
+- Start with `arm64-v8a` / `aarch64-unknown-linux-android28`. `x86_64` also
+  cross-compiles (the `swift-png` SIMD blocker was resolved 2026-06-14), so
+  `x86_64` emulator support is an example-app packaging/smoke follow-up, not a
+  build blocker.
 - Prefer a narrow manually-owned JNI/C ABI for the first production path.
   `swift-java` can become a code-generation helper later, but the host should
   not require generated bindings before the lifecycle, frame, and measurement
@@ -880,8 +884,11 @@ mise exec -- bazel test //:android_gallery_native_gate
 - **Accessibility focus:** Android accessibility focus routing may not map
   one-to-one with SwiftTUI focused identity. Implement node projection first,
   then focus synchronization.
-- **x86_64 emulator:** current docs identify an x86_64 gap. Keep `arm64-v8a`
-  as the supported first target unless this is resolved.
+- **x86_64 emulator:** the prior `swift-png` SIMD build blocker was verified
+  resolved on 2026-06-14 — all products cross-compile for
+  `x86_64-unknown-linux-android28`. The remaining x86_64 work is example-app
+  packaging plus emulator smoke, not a framework blocker; `arm64-v8a` stays the
+  first packaged target.
 - **Packaging Swift libraries:** the current Gradle task copies the gallery
   `.so` plus all Swift Android runtime `.so` files into generated `jniLibs`.
   This is simple and verified at APK-build time, but should be tightened to the

@@ -212,6 +212,14 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 
 Investigated design proposals (not yet implemented).
 
+- [proposals/2026-06-14-001-android-host-library-extraction-proposal.md](proposals/2026-06-14-001-android-host-library-extraction-proposal.md) -
+  the reusable Android host layer (11 Kotlin files + JNI shim + Gradle Swift-build
+  logic) is trapped in the `AndroidGallery` example, forcing library users to
+  copy-paste; proposes a phased extraction into an Android host library (AAR) +
+  Gradle convention plugin, with the create-symbol decoupling, JNI/R8 hardening,
+  Swift-toolchain compatibility contract, and a `swift-tui-android` repo-placement
+  recommendation. Phase A (internal module, now) vs Phase B (published AAR, after
+  ABI stabilizes).
 - [proposals/COMMAND_PALETTE_OPEN_PERFORMANCE.md](proposals/COMMAND_PALETTE_OPEN_PERFORMANCE.md) -
   why presenting an overlay (e.g. the command palette) re-resolves the whole
   host subtree on `isPresented` toggle, the measured evidence, and three
