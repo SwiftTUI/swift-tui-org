@@ -100,6 +100,13 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 
 ### Other planning documents
 
+- [plans/2026-06-14-001-invalidation-gap-test-plan.md](plans/2026-06-14-001-invalidation-gap-test-plan.md) -
+  test-first plan for the invalidation gap analysis: package-owned
+  `swift-tui` coverage for state reader/no-reader behavior, binding plumbing,
+  observable object-token fan-out, observable environment values,
+  Observation draft/discard safety, dirty-frontier gates, retained reuse under
+  ancestor invalidation, and transaction/scheduler guards. Explicitly treats
+  `swift-tui-examples` tests as optional smoke only, not acceptance coverage.
 - [plans/2026-06-10-001-perf-workstream-assessment-next-wave-proposal.md](plans/2026-06-10-001-perf-workstream-assessment-next-wave-proposal.md) -
   full perf-workstream assessment at `bc63495a` (live-measured): all landed
   wins holding and reader-attribution reproducing, but `resolve_ms` regressed
