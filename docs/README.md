@@ -100,6 +100,15 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 
 ### Other planning documents
 
+- [plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md](plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md) -
+  execution-ready task plan for **Phase A** of the Android host-library
+  extraction proposal: extract the 11 Kotlin host files + JNI shim into an
+  internal `:swift-tui-host` module and the three Swift-build tasks into a
+  `build-logic` convention plugin, leaving `:app` a thin consumer. Closes the
+  proposal's gaps — the three app-name JNI couplings (not one), the atomic
+  package-rename + `RegisterNatives` switch, and a falsifiable same-APK-payload
+  check. Stays inside `swift-tui-examples`; no Maven, no `swift-tui-android`
+  population, no ABI freeze (all Phase B).
 - [plans/2026-06-14-001-invalidation-gap-test-plan.md](plans/2026-06-14-001-invalidation-gap-test-plan.md) -
   test-first plan for the invalidation gap analysis: package-owned
   `swift-tui` coverage for state reader/no-reader behavior, binding plumbing,

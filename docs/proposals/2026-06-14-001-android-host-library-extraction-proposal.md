@@ -167,6 +167,15 @@ repo nor publication (see below).
 
 ### Phase A — internal extraction (now; low-risk; resolves the concern)
 
+> **Execution plan:** promoted to an ordered, verifiable task plan in
+> [plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md](../plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md),
+> which corrects this section: the create-symbol coupling is **three** app-name
+> JNI bindings (not one), the package rename and `RegisterNatives` switch must
+> land atomically, and "same APK payload" gets a falsifiable check. The Kotlin
+> `SwiftTUIHostState` is also already factored over an injected `createHost`
+> lambda, so only the JNI layer + the `rememberSwiftTUIHostState()` convenience
+> need decoupling.
+
 Establish and *prove* the consumer boundary with zero copy-paste and **without
 publishing or freezing a public ABI**:
 
