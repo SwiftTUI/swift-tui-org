@@ -46,11 +46,14 @@ plan is satisfied by adding or updating only `swift-tui-examples` tests.
 
 The current implementation already has meaningful coverage:
 
-- `ReaderAttributionTests` proves projection-only owners are spared in
+- `StateInvalidationDependencyTests` proves projection-only owners are spared in
   reader-attributed mode and that writes invalidate the genuine reader rather
   than the projecting owner.
-- `DependencyTrackingTests` proves state, environment, and observable-backed
-  reads populate graph dependencies.
+- `BindingDependencyModelTests` proves bindings do not own invalidation:
+  projection alone records no dependency, manual closure bindings get no
+  framework magic, and dynamic-member bindings track through their source.
+- `DependencyModelTests` proves state, environment, and observable-backed reads
+  populate graph dependencies.
 - `ViewGraphTests` prove dependency reindexing and object-token observation
   fan-out behavior.
 - runtime and phase tests cover focus, presentation, frame dropping, retained
@@ -76,7 +79,7 @@ only if the project already accepts known-issue tests in normal gates.
 
 ## 5. Work package A: `@State` no-reader and conditional-reader coverage
 
-**Owner suite:** `swift-tui/Tests/SwiftTUIViewsTests/ReaderAttributionTests.swift`
+**Owner suite:** `swift-tui/Tests/SwiftTUIViewsTests/StateInvalidationDependencyTests.swift`
 
 **Why:** The report's G2 says SwiftTUI still falls back to owner invalidation when
 a state slot has no recorded readers. That is a defensive current behavior. Any
@@ -146,8 +149,7 @@ can lose the live owner if authoring and graph contexts drift.
 
 ## 6. Work package B: `@Binding` plumbing coverage
 
-**Owner suite:** `swift-tui/Tests/SwiftTUIViewsTests/ReaderAttributionTests.swift`
-or a new `BindingDependencyTests.swift` in `SwiftTUIViewsTests`.
+**Owner suite:** `swift-tui/Tests/SwiftTUIViewsTests/BindingDependencyModelTests.swift`.
 
 **Why:** The report says SwiftTUI is strong here, but future wrapper work can
 accidentally turn binding projection into a subscription-like invalidation owner.
@@ -187,7 +189,7 @@ observable source.
 
 **Owner suites:**
 
-- `swift-tui/Tests/SwiftTUIViewsTests/DependencyTrackingTests.swift`
+- `swift-tui/Tests/SwiftTUIViewsTests/DependencyModelTests.swift`
 - `swift-tui/Tests/SwiftTUICoreTests/Graph/ViewGraphTests.swift`
 - possibly a new `ObservationDependencyTests.swift` in `SwiftTUIViewsTests`
 
@@ -252,7 +254,7 @@ precision until a design can prove it.
 
 ## 8. Work package D: observable environment coverage
 
-**Owner suite:** `swift-tui/Tests/SwiftTUIViewsTests/DependencyTrackingTests.swift`
+**Owner suite:** `swift-tui/Tests/SwiftTUIViewsTests/DependencyModelTests.swift`
 or a new `ObservableEnvironmentDependencyTests.swift`.
 
 **Why:** Environment-injected observable objects use the same object-token gap as
@@ -500,12 +502,13 @@ Run focused package tests from the child repo or with `--package-path` from the
 root. These commands intentionally do not enter `swift-tui-examples`.
 
 ```bash
-swiftly run swift test --package-path swift-tui --filter ReaderAttributionTests
-swiftly run swift test --package-path swift-tui --filter DependencyTrackingTests
+swiftly run swift test --package-path swift-tui --filter StateInvalidationDependencyTests
+swiftly run swift test --package-path swift-tui --filter BindingDependencyModelTests
+swiftly run swift test --package-path swift-tui --filter DependencyModelTests
 swiftly run swift test --package-path swift-tui --filter ViewGraphTests
 swiftly run swift test --package-path swift-tui --filter Observation
-swiftly run swift test --package-path swift-tui --filter Transaction
-swiftly run swift test --package-path swift-tui --filter Scheduler
+swiftly run swift test --package-path swift-tui --filter TransactionSnapshotTests
+swiftly run swift test --package-path swift-tui --filter FrameSchedulerIntentCoalescingTests
 ```
 
 Then run the org-level fast gate:
