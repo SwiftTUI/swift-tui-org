@@ -14,3 +14,6 @@
 	path = swift-tui-site
 	url = git@github.com:SwiftTUI/swift-tui-site.git
   branch = main
+[submodule "swift-tui-android"]
+	path = swift-tui-android
+	url = git@github.com:SwiftTUI/swift-tui-android.git
