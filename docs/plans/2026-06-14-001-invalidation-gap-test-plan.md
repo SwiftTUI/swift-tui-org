@@ -1,7 +1,8 @@
 # SwiftTUI Invalidation Gap Test Plan
 
 - **Date:** 2026-06-14
-- **Status:** Proposed. Test-first plan; no behavior change is included here.
+- **Status:** Package-owned test baseline implemented in `swift-tui`; follow-up
+  behavior changes are not included here.
 - **Input report:** [../reports/2026-06-13-swifttui-invalidation-gap-analysis.md](../reports/2026-06-13-swifttui-invalidation-gap-analysis.md)
 - **Scope:** `swift-tui` package tests, plus org-root gates that exercise the
   pinned `swift-tui` checkout.
@@ -48,20 +49,26 @@ The current implementation already has meaningful coverage:
 
 - `StateInvalidationDependencyTests` proves projection-only owners are spared in
   reader-attributed mode and that writes invalidate the genuine reader rather
-  than the projecting owner.
+  than the projecting owner. It also characterizes the conservative no-reader
+  fallback, hidden conditional-reader fallback, and deferred-builder binding
+  reader attribution.
 - `BindingDependencyModelTests` proves bindings do not own invalidation:
   projection alone records no dependency, manual closure bindings get no
   framework magic, and dynamic-member bindings track through their source.
 - `DependencyModelTests` proves state, environment, and observable-backed reads
-  populate graph dependencies.
-- `ViewGraphTests` prove dependency reindexing and object-token observation
-  fan-out behavior.
+  populate graph dependencies. It now includes a wrapper dependency manifest and
+  explicit observable-environment object-token characterization.
+- `ViewGraphTests` prove dependency reindexing, object-token observation
+  fan-out behavior, and observable-environment object-token fan-out behavior.
 - runtime and phase tests cover focus, presentation, frame dropping, retained
-  reuse, animation, and environment behavior in scattered suites.
+  reuse, animation, and environment behavior in scattered suites. The current
+  package tests now include observation draft/discard/re-arm coverage, collection
+  mutation fan-out characterization, runtime selective-evaluation gate coverage,
+  and an explicit captured-binding hazard name for ancestor invalidation.
 
-The missing piece is an adversarial matrix that says which behaviors are
-intentional current limits, which are safety invariants, and which are expected
-to flip only after a deliberate behavior-change plan.
+The test baseline now provides an adversarial matrix that says which behaviors
+are intentional current limits, which are safety invariants, and which are
+expected to flip only after a deliberate behavior-change plan.
 
 ## 4. Test taxonomy
 
