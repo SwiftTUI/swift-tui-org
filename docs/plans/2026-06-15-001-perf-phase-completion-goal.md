@@ -181,12 +181,20 @@ default-to-silence:
    ([sizing](../reports/2026-06-15-items-b-c-sizing-and-pivot-to-e.md)).
 3. **C (`processResolvedTree`)** — ⏸️ DEFERRED: only skippable on unchanged-tree
    frames; hot-path walk needed and root-evaluation-bounded; high blast radius.
-4. **E (frontier narrowing)** — now the primary active item. A/B/C have quantified
-   that the every-frame root force-queue (reuse ≈ 0, all nodes touched on sheet)
-   is what bounds them; E is the lever that unlocks the sheet hot path. Design-first
-   per the entry condition below.
-5. **D (raster)** — parallel track, decoupled from the root-evaluation entanglement;
-   the cleanest place for an independent code win if E's design runs long.
+4. **E (frontier narrowing)** — ✅ DESIGN CAPTURED, implementation deferred
+   ([design + reframing](../reports/2026-06-15-item-e-frontier-design-and-reframing.md)).
+   Key finding: per-frame data + reuse-trace show the dominant sheet residual is
+   the **~18 ms full-recompute frames driven by the sheet-toggle invalidation
+   cone** (reuse *works* on stable frames: 883/921 at 6.4 ms). The force-queue
+   only governs walk *reach*, not the cone — so E is necessary-but-not-sufficient,
+   and the real lever is **item 4b**.
+4b. **Invalidation-cone narrowing (the actual sheet lever)** — reduce what the
+   sheet open/close toggle invalidates (~898 identities today). Reader-attribution
+   / Lever territory (see `sheet-open-latency` memory). Deep structural work;
+   next concrete step is a proper reuse/cone diagnostic (the leaf reuse-trace was
+   empty → cone-driven, not leaf-denial).
+5. **D (raster)** — parallel track, decoupled from the cone entanglement; the
+   cleanest place for an independent code win. **Not yet started.**
 6. **F** decisions recorded as items land (the create-split probe is the first
    productizable diagnostic).
 
