@@ -257,7 +257,7 @@ restore as the larger remaining head-prepare target, so Stage 1B is accepted as
 the baseline and Stage 2 checkpoint scoping is the next stage. Registry-family
 publication fingerprints are not justified by the current data.
 
-## Stage 2 - Checkpoint scoping
+## Stage 2 - Applied-mutation checkpoint delta
 
 Stage 1 now makes publication behavior explainable and accepted. The checkpoint
 work should use Stage 1B as the baseline and must not hide publication
@@ -265,13 +265,19 @@ regressions.
 
 ### Approach
 
-- Measure prepared checkpoint size and restore cost on abortable frame heads.
-- Split graph checkpoint content into identity-stable state that can be shared
-  and mutable per-frame state that must copy.
-- If the graph can prove a frame has a dirty frontier, checkpoint only the
-  affected graph ranges plus the global counters needed for rollback.
-- Keep a full checkpoint when the frame is `.all`, when dirty roots are unknown,
-  or when presentation portal state cannot provide a stable owner.
+- Keep the current full `ViewGraph.Checkpoint` as oracle and fallback.
+- Track actual applied graph/node mutations during frame-head evaluation, not
+  dirty-frontier membership.
+- Start with a shadow per-node mutation-generation tracker under
+  `ViewGraphFrameDraft` that records touched node IDs plus baseline/prepared
+  before/after checkpoints while full checkpoints still drive behavior.
+- Enable guarded delta restore only after the tracker proves total coverage
+  across materialize/suspend/discard, indexed-child snapshotting,
+  late-preference re-recording, and live `@State` mutation overlays.
+- Fall back to the full checkpoint on untracked mutation, graph mutation epoch
+  mismatch, high touched-node ratio, created/removed-node accounting mismatch,
+  debug oracle mismatch, or any overlapping graph mutation outside the active
+  draft.
 
 ### Exit criteria
 
@@ -293,6 +299,16 @@ frames have no safe dirty-frontier scope. The next Stage 2 implementation should
 therefore use a distinct applied-mutation/delta checkpoint design, with the
 current total checkpoint retained as fallback, instead of weakening
 `ViewGraph.Checkpoint` into a partial restore type.
+
+### Stage 2 design investigation result
+
+The applied-mutation design investigation is documented in
+[`2026-06-15-stage-2-applied-mutation-delta-checkpoint-design.md`](../reports/2026-06-15-stage-2-applied-mutation-delta-checkpoint-design.md).
+The chosen next slice is Stage 2A: a shadow mutation tracker that records actual
+touched nodes and graph mutation epochs next to the full checkpoint. Dirty
+frontiers remain useful diagnostics, but they are not a correctness proof for
+checkpoint restore. Transaction logs and persistent graph/state splitting remain
+deferred alternatives.
 
 ## Stage 3 - Restore-walk sizing and retained-registration index
 
