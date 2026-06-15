@@ -1,7 +1,7 @@
 # Stage 1B `.all` Publication Diffing
 
 - **Date:** 2026-06-15
-- **Status:** Stage 1B first cut landed; broader registry-family coverage remains a follow-up
+- **Status:** Stage 1B accepted as baseline; Stage 2 checkpoint scoping is next
 - **Plan:** [`2026-06-14-003-frontier-publication-narrowing-plan.md`](../plans/2026-06-14-003-frontier-publication-narrowing-plan.md)
 - **Measured code:** `swift-tui` `de49e2df` (`perf: diff runtime publication registrations`)
 - **Baseline:** Stage 1A.2 artifact root `/tmp/swifttui-stage1a2-publication-2026-06-15-060316-bb2a047f`
@@ -105,16 +105,56 @@ The first cut is intentionally conservative:
 - task publication remains globally republished after scoped restores, matching
   the existing `.subtrees` safety rule.
 
-## Remaining Work
+## Coverage Follow-up
 
-Before deeper Stage 1B specialization, add broader byte-equivalence coverage for
-registry families beyond the focused tests and existing scoped-restore guards:
-key/action, pointer/hover, gesture/gesture state, scroll, and task island
-variants. After that, consider registry-family-specific fingerprints if
-end-to-end perf data shows the remaining `.all` restore work still matters.
+The immediate coverage follow-up is now in
+`RuntimeRegistrationRestoreScopingTests`: `.all` diffed publication is compared
+against a full rebuild across key/action, termination, pointer/hover, gesture,
+gesture state, focus, focused values, scroll, lifecycle, task, preference,
+command, and drop registrations. The fixture mutates one non-root sibling,
+keeps the diagnostics mode at `all`, verifies only that changed subtree is
+restored, and then checks the live registries against a full rebuild.
+
+This is a test-only broadening of the Stage 1B baseline. It does not include a
+new perf run. Further Stage 1B specialization should now be limited to cases
+where end-to-end perf data shows the remaining `.all` restore work still
+matters enough to justify registry-family-specific fingerprints.
 
 Stage 2 checkpoint scoping should still wait until this publication behavior is
 accepted as the new baseline.
+
+## Stage 2 Decision Rerun
+
+After adding the broader registry-family coverage, the same diagnostic inventory
+was rerun against the same production sources (`swift-tui` `de49e2df`; test-only
+coverage changes present).
+
+- **Artifact root:**
+  `/tmp/swifttui-stage1b-decision-2026-06-15-104545-de49e2df`
+- **Decision:** accept Stage 1B as the publication baseline and proceed to
+  Stage 2 checkpoint scoping. Do not start registry-family-specific publication
+  fingerprints now.
+
+Publication work stayed stable:
+
+| scenario | `.all` frames | `.all` restored sum | `.all` mean | `.subtrees` restored sum |
+| --- | ---: | ---: | ---: | ---: |
+| `sheet-open-latency` | 80 | 2,240 | 28.00 | 15,296 |
+| `synthetic-narrow-invalidation` | 59 | 7,538 | 127.76 | 110,400 |
+
+Aggregate medians improved modestly from the original Stage 1B run:
+
+| scenario | total CPU s | CPU s/frame | input p95 ms | head prepare p50 ms | checkpoint create p50 ms | checkpoint restore p50 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `sheet-open-latency` | 0.4611 | 0.02562 | 411.38 | 6.60 | 0.39 | 0.89 |
+| `synthetic-narrow-invalidation` | 0.2591 | 0.01440 | 204.24 | 2.51 | 0.61 | 1.33 |
+
+The checkpoint columns are now the better next target than publication
+specialization. Checkpoint create + restore is roughly 19% of
+`sheet-open-latency` head prepare p50 and roughly 78% of
+`synthetic-narrow-invalidation` head prepare p50. That points at Stage 2's
+checkpoint scoping work, with Stage 1B's publication behavior serving as the
+correctness and perf baseline.
 
 ## Validation
 

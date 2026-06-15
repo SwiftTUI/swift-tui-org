@@ -1,8 +1,8 @@
 # Frontier and Publication Narrowing Plan
 
 - **Date:** 2026-06-14
-- **Status:** Stage 1B first cut complete; broader registry-family coverage remains
-  before deeper specialization
+- **Status:** Stage 1B accepted as baseline; proceed to Stage 2 checkpoint
+  scoping
 - **Owner repo:** this coordination root
 - **Implementation repo:** `swift-tui`
 - **Starting pin:** `swift-tui` `2479cac9` via org root `1378b00`
@@ -245,15 +245,23 @@ only changed non-root subtrees when safe. Final pushed-commit perf artifacts sho
 `synthetic-narrow-invalidation`; aggregate CPU/latency moved only modestly and is
 mixed on the synthetic case.
 
-Before further Stage 1B specialization, add broader byte-equivalence coverage for
-the remaining registry families and then decide whether registry-family-specific
-fingerprints are worth the complexity. Stage 2 checkpoint scoping should still
-wait until this publication baseline is accepted.
+The broader byte-equivalence follow-up now extends
+`RuntimeRegistrationRestoreScopingTests` with a `.all` diffed-publication fixture
+covering key/action, termination, pointer/hover, gesture, gesture state, focus,
+focused values, scroll, lifecycle, task, preference, command, and drop
+registrations against a full rebuild. Further Stage 1B work should decide
+whether registry-family-specific fingerprints are worth the complexity only if
+new end-to-end perf data shows the remaining `.all` restore work still matters.
+A decision rerun kept publication work stable and showed checkpoint create +
+restore as the larger remaining head-prepare target, so Stage 1B is accepted as
+the baseline and Stage 2 checkpoint scoping is the next stage. Registry-family
+publication fingerprints are not justified by the current data.
 
 ## Stage 2 - Checkpoint scoping
 
-Start only after Stage 1 changes make publication behavior explainable. The
-checkpoint work should not hide publication regressions.
+Stage 1 now makes publication behavior explainable and accepted. The checkpoint
+work should use Stage 1B as the baseline and must not hide publication
+regressions.
 
 ### Approach
 
