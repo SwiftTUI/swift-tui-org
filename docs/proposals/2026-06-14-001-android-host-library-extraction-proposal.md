@@ -1,8 +1,14 @@
 # Android host: extract a reusable library from the example — proposal
 
-**Date:** 2026-06-14 · **Status:** Proposed — repo placement **decided**
-(new dedicated `swift-tui-android` repo, 2026-06-14); Phase A extraction deferred
-(docs-only for now), no code yet ·
+**Date:** 2026-06-14 · **Status:** **Shipped.** Phase A landed
+(`swift-tui-examples@7b96daa`); Phase B published **`sh.swifttui:android-host`
+0.0.19** + the `sh.swifttui.android` Gradle plugin via a credential-free GitHub
+Pages Maven repo (`https://swifttui.github.io/swift-tui-android`), AndroidGallery
+consumes them, the org is wired (5th submodule + Bazel module + native gate). The
+non-goal *"No public AAR publication before the demo app and ABI stabilize"* is
+**retired** (published at `0.x`, accepting ABI churn). Plans:
+[plans/2026-06-14-002-…phase-a…](../plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md),
+[plans/2026-06-14-004-…phase-b…](../plans/2026-06-14-004-android-host-library-phase-b-publication-plan.md) ·
 **Depends on / follows:** [plans/2026-06-09-001-android-host-view-gallery-demo-plan.md](../plans/2026-06-09-001-android-host-view-gallery-demo-plan.md),
 [reports/2026-06-09-android-host-current-state.md](../reports/2026-06-09-android-host-current-state.md) ·
 **Incorporates:** the 2026-06-14 finding that the `swift-png` x86_64 build blocker

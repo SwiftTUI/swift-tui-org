@@ -1,9 +1,14 @@
 # Android host library — Phase B publication plan
 
 - **Date:** 2026-06-14
-- **Status:** Proposed; decisions ratified 2026-06-14. Phase B of the Android
-  host-library extraction. Follows the landed Phase A
-  (`swift-tui-examples@7b96daa`).
+- **Status:** **B2a shipped 2026-06-15.** Decided (during execution) to release
+  credential-free at the org's coordinated version **`0.0.19`** via a GitHub
+  Pages static Maven repo for **both** the AAR and the plugin (Plugin Portal /
+  Maven Central deferred to a later graduation). Done: `swift-tui-android` seeded
+  + tagged `0.0.19` + `gh-pages` live; AndroidGallery consumes the published
+  artifacts (verified resolving from the public URL with no override); org wired
+  (5th submodule + Bazel module + `//:native_gates` gate); docs. The only thing
+  not done is the optional emulator CI lane (manual smoke stands).
 - **Promotes:** [proposals/2026-06-14-001-android-host-library-extraction-proposal.md](../proposals/2026-06-14-001-android-host-library-extraction-proposal.md)
   (Phase B), [plans/2026-06-14-002-android-host-library-phase-a-extraction-plan.md](2026-06-14-002-android-host-library-phase-a-extraction-plan.md)
 - **Scope:** populate the (empty) `swift-tui-android` submodule; publish the AAR
