@@ -1,12 +1,14 @@
 # Stage 2B Guarded Delta Checkpoint Restore
 
 - **Date:** 2026-06-15
-- **Status:** Stage 2B complete; next decision slice is Stage 2C graph-field
-  deltas after perf measurement
+- **Status:** Stage 2B budgeted delta restore complete; next decision slice is
+  Stage 2C graph-field/checkpoint-create deltas
 - **Plan:** [`2026-06-14-003-frontier-publication-narrowing-plan.md`](../plans/2026-06-14-003-frontier-publication-narrowing-plan.md)
 - **Design:** [`2026-06-15-stage-2-applied-mutation-delta-checkpoint-design.md`](2026-06-15-stage-2-applied-mutation-delta-checkpoint-design.md)
 - **Stage 2A report:** [`2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md`](2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md)
-- **Implemented code:** `swift-tui` `6b971435` (`Guard delta checkpoint restores`)
+- **Implemented code:** `swift-tui` `6b971435` (`Guard delta checkpoint
+  restores`) plus budgeted-delta/no-op-overlay follow-up in the current working
+  tree
 
 ## What Changed
 
@@ -22,10 +24,17 @@ The child implementation adds:
 - `ViewGraph.checkpointMutationStateMatches(_:)`, which validates source graph
   epoch, node ID set, and per-node checkpoint mutation generations before a
   delta restore is allowed;
+- a draft-owned current-source mutation state so repeated materialize/suspend
+  cycles that preserve live `@State` mutation overlays can keep using the
+  guarded delta path instead of falling back after the first overlay restore;
 - touched before/after node checkpoint payloads in
   `ViewGraphDeltaCheckpointShadow`;
 - full fallback reasons for missing prepared checkpoints, source checkpoint
-  mismatch, incomplete touched checkpoint payloads, and debug-oracle mismatch;
+  mismatch, incomplete touched checkpoint payloads, near-full delta budget
+  exhaustion, and debug-oracle mismatch;
+- no-op state-mutation overlays are skipped instead of recording an empty graph
+  mutation during restore, preserving abort purity and avoiding useless
+  checkpoint-generation churn;
 - restore diagnostics on the runtime publication record and TSV output:
   `runtime_graph_checkpoint_restore_strategy`,
   `runtime_graph_checkpoint_restore_fallback_reason`,
@@ -57,49 +66,95 @@ snapshots. A mismatch records `debug_oracle_mismatch` and leaves the graph
 full-restored. In release builds, a proven delta restore remains the final graph
 state.
 
-The existing `stateMutationOverlay` behavior is preserved around both delta and
-full restores, so live state writes that occur while an async frame tail is
-suspended remain outside the frame-head checkpoint and are reapplied afterward.
+The existing non-empty `stateMutationOverlay` behavior is preserved around both
+delta and full restores, so live state writes that occur while an async frame
+tail is suspended remain outside the frame-head checkpoint and are reapplied
+afterward.
+
+The final follow-up also adds a touched-node budget: for non-trivial graphs, the
+delta path is skipped when it would replay more than 70% of the full checkpoint's
+node payloads. This keeps near-full restore frames on the full path, where a
+single full checkpoint replay is cheaper than proving and replaying a large
+delta.
+
+## Final Budgeted-Delta Measurement
+
+- **Baseline artifact root:**
+  `/tmp/swifttui-stage2b-measure-2026-06-15-132146-6b971435`
+- **Final artifact root:**
+  `/tmp/swifttui-stage2b-budgeted-delta-noop-overlay-2026-06-15-140523-6b971435-wt`
+- **Code measured:** `swift-tui` `6b971435` plus the budgeted-delta/no-op-overlay
+  working-tree follow-up
+
+The first measurement showed the Stage 2B path was present but not effective in
+release perf: every measured restore fell back with
+`current_checkpoint_mismatch`. The follow-up records the draft's current
+mutation-state source after each restore plus preserved state overlay, then uses
+that state for the next guarded proof.
+
+Final restore-strategy split:
+
+| scenario | strategy | fallback reason | frames |
+| --- | --- | --- | ---: |
+| `sheet-open-latency` | - | - | 63 |
+| `sheet-open-latency` | `delta_node` | - | 31 |
+| `sheet-open-latency` | `full_fallback` | `delta_node_budget_exceeded` | 112 |
+| `synthetic-narrow-invalidation` | `delta_node` | - | 337 |
+| `synthetic-narrow-invalidation` | `full_fallback` | `delta_node_budget_exceeded` | 20 |
+
+Aggregate median comparison:
+
+| scenario | stage | total CPU s | CPU s/frame | input p95 ms | head prepare p50 ms | checkpoint create p50 ms | checkpoint restore p50 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `sheet-open-latency` | prior Stage 2B | 0.5016 | 0.02822 | 448.21 | 7.89 | 1.13 | 1.50 |
+| `sheet-open-latency` | budgeted delta | 0.4877 | 0.02729 | 434.16 | 7.68 | 1.20 | 0.89 |
+| `synthetic-narrow-invalidation` | prior Stage 2B | 0.2569 | 0.01432 | 201.80 | 2.95 | 0.97 | 1.21 |
+| `synthetic-narrow-invalidation` | budgeted delta | 0.2503 | 0.01402 | 195.11 | 2.95 | 1.12 | 0.56 |
+
+The safe conclusion is that budgeted delta restore captures the node-restore
+win without regressing near-full restore frames. Checkpoint creation is now the
+larger remaining Stage 2 target in both measured scenarios.
 
 ## Validation
 
 From `swift-tui`:
 
 ```bash
-swift test --filter 'ViewGraphDeltaCheckpointShadowTests|ViewGraphCheckpointTotalityTests|RuntimeRegistrationRestoreScopingTests|ViewGraphTests|FrameResolveStateTests|TSVFileSinkTests' --jobs 1
+swiftly run swift test --filter 'ViewGraphDeltaCheckpointShadowTests|ViewGraphCheckpointTotalityTests|RuntimeRegistrationRestoreScopingTests|ViewGraphTests|FrameResolveStateTests|TSVFileSinkTests|ResolvePurityTests' --jobs 1
 
 SWIFTTUI_PUBLICATION_DIAGNOSTICS=1 \
-  swift test --filter 'AsyncFrameTailRenderingTests' --jobs 1
+  swiftly run swift test --filter 'AsyncFrameTailRenderingTests' --jobs 1
 
-swift test --filter 'AsyncFrameTailRenderingTests' --jobs 1
+swiftly run swift test --filter 'AsyncFrameTailRenderingTests' --jobs 1
 
 ./Scripts/check_concurrency_safety_policies.sh
 ./Scripts/generate_public_api_inventory.sh --check
 
-swift build -c release --package-path Tools/TermUIPerf --product termui-perf
+swiftly run swift build -c release --package-path Tools/TermUIPerf --product termui-perf
 ```
 
 Results:
 
-- focused graph/diagnostics suite: 55 tests passed;
+- focused graph/diagnostics/purity suite: 58 tests passed;
 - diagnostics-enabled async suite: 54 tests passed;
 - diagnostics-disabled async suite: 54 tests passed;
 - concurrency policy check: passed;
 - public API inventory: baseline current, 739 top-level public symbols;
 - `termui-perf` release build: passed.
+- `bun run test` was attempted after the child changes. It still fails in the
+  SwiftTUI runtime shard on
+  `PreferenceSurfaceTests/resolveReuseReplaysStablePreferenceObserversForReusedSubtrees`;
+  that focused test also fails on a clean `swift-tui` `6b971435` worktree, so it
+  is not a regression from this follow-up.
 
 Notes:
 
-- An earlier incremental async shard hit a `swiftpm-testing-helper` signal 11
-  in `swift_release` while destroying frame artifacts. A clean package rebuild
-  made the same single async test pass before the final Stage 2B validation, and
-  both full async shards passed afterward.
 - The release perf build emitted existing unused-import warnings in
   `PresentationTriggerLeaf.swift` and `ProfiledMemoryAccess.swift`.
 
 ## Next
 
-Stage 2C should be a measurement decision, not an automatic implementation
-step. The Stage 2B runtime columns can now separate delta node restores from
-full fallbacks. Use them to decide whether full graph-field assignment remains
-hot enough to justify graph-field deltas.
+Stage 2C should focus on checkpoint creation and graph-field copying, not more
+node restore specialization. The final Stage 2B data shows restore cost dropped
+materially, while `head_graph_checkpoint_create_p50_ms` is still about 1.1-1.2
+ms in both hot scenarios.

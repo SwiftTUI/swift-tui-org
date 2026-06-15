@@ -310,6 +310,19 @@ frontiers remain useful diagnostics, but they are not a correctness proof for
 checkpoint restore. Transaction logs and persistent graph/state splitting remain
 deferred alternatives.
 
+### Stage 2B result
+
+Guarded node-delta restore is documented in
+[`2026-06-15-stage-2b-guarded-delta-checkpoint-restore.md`](../reports/2026-06-15-stage-2b-guarded-delta-checkpoint-restore.md).
+The final budgeted/no-op-overlay follow-up keeps delta restore for proven,
+smaller touched-node sets, skips empty state-mutation overlays, and falls back
+to full restore when the delta would replay more than 70% of a non-trivial
+checkpoint. The final measurement reduced checkpoint-restore p50 from 1.50 ms
+to 0.89 ms on `sheet-open-latency` and from 1.21 ms to 0.56 ms on
+`synthetic-narrow-invalidation`, with no frame-count or publication-shape
+regression. The next Stage 2 target is checkpoint creation and graph-field
+copying, not further node-restore specialization.
+
 ## Stage 3 - Restore-walk sizing and retained-registration index
 
 Start only if Stage 0 or Stage 1 still shows `restoreResolvedSubtree` walking

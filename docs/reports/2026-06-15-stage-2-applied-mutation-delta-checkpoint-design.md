@@ -1,8 +1,8 @@
 # Stage 2 Applied-Mutation Delta Checkpoint Design
 
 - **Date:** 2026-06-15
-- **Status:** Stage 2B guarded node-delta restore complete; next decision slice
-  is Stage 2C graph-field deltas after perf measurement
+- **Status:** Stage 2B budgeted node-delta restore complete; next decision slice
+  is Stage 2C checkpoint-create and graph-field deltas
 - **Plan:** [`2026-06-14-003-frontier-publication-narrowing-plan.md`](../plans/2026-06-14-003-frontier-publication-narrowing-plan.md)
 - **Baseline report:** [`2026-06-15-stage-2-checkpoint-scope-probe.md`](2026-06-15-stage-2-checkpoint-scope-probe.md)
 - **Stage 2A report:** [`2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md`](2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md)
@@ -30,9 +30,9 @@ The implementation should land in slices:
    use touched-node checkpoints only when the tracker proves complete coverage;
    fall back to full checkpoints on any ambiguity. Complete in `swift-tui`
    `6b971435`.
-3. **Stage 2C - graph-field deltas:** split or delta graph maps/counters only
-   after node-delta behavior is proven and diagnostics show graph field copying
-   still matters.
+3. **Stage 2C - checkpoint-create / graph-field deltas:** split or delta graph
+   maps/counters only after node-delta behavior is proven and diagnostics show
+   checkpoint creation or graph field copying still matters.
 
 ## Why This Design
 
@@ -260,8 +260,11 @@ without behavior changes and tests prove the shadow state is equivalent to full
 checkpoint restore across mixed graph/node mutation, materialize/suspend cycles,
 and fallback paths.
 
-Stage 2B is complete in `swift-tui` `6b971435`: guarded delta restore is enabled
-for proven frames, falls back to full restore for unproven cases, and preserves
-publication plus async-frame semantics in the focused validation suite. The
-remaining performance decision is whether Stage 2C graph-field deltas are worth
-the extra complexity after measuring the Stage 2B columns.
+Stage 2B is complete in `swift-tui` `6b971435` plus the current working-tree
+budgeted-delta/no-op-overlay follow-up: guarded delta restore is enabled for
+proven frames, falls back to full restore for unproven or near-full cases, skips
+empty state-mutation overlays during restore, and preserves publication plus
+async-frame semantics in the focused validation suite. The remaining Stage 2C
+target is checkpoint creation and graph-field copying; the final Stage 2B
+measurement shows restore p50 dropped materially while checkpoint-create p50
+remains about 1.1-1.2 ms in the hot scenarios.
