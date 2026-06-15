@@ -158,12 +158,18 @@ test_suite(
 )
 
 test_suite(
+    name = "swift_tui_android_native_gate",
+    tests = ["@swift_tui_android//:native_gate"],
+)
+
+test_suite(
     name = "native_gates",
     tests = [
         ":swift_tui_native_gate",
         ":swift_tui_web_native_gate",
         ":swift_tui_examples_native_gate",
         ":swift_tui_site_native_gate",
+        ":swift_tui_android_native_gate",
     ],
 )
 
