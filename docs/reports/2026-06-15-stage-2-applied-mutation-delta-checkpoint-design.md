@@ -1,13 +1,14 @@
 # Stage 2 Applied-Mutation Delta Checkpoint Design
 
 - **Date:** 2026-06-15
-- **Status:** Stage 2A shadow tracker complete; next implementation slice is
-  guarded node-delta restore with the full checkpoint retained as oracle and
-  fallback
+- **Status:** Stage 2B guarded node-delta restore complete; next decision slice
+  is Stage 2C graph-field deltas after perf measurement
 - **Plan:** [`2026-06-14-003-frontier-publication-narrowing-plan.md`](../plans/2026-06-14-003-frontier-publication-narrowing-plan.md)
 - **Baseline report:** [`2026-06-15-stage-2-checkpoint-scope-probe.md`](2026-06-15-stage-2-checkpoint-scope-probe.md)
 - **Stage 2A report:** [`2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md`](2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md)
+- **Stage 2B report:** [`2026-06-15-stage-2b-guarded-delta-checkpoint-restore.md`](2026-06-15-stage-2b-guarded-delta-checkpoint-restore.md)
 - **Reference code:** `swift-tui` `3348cae5` (`Instrument checkpoint scope candidates`)
+- **Current Stage 2B code:** `swift-tui` `6b971435` (`Guard delta checkpoint restores`)
 
 ## Decision
 
@@ -24,10 +25,11 @@ The implementation should land in slices:
 
 1. **Stage 2A - shadow tracker:** record touched nodes, graph mutation epochs,
    and before/after node checkpoints next to the full checkpoint. Full
-   checkpoints still drive behavior.
+   checkpoints still drive behavior. Complete in `swift-tui` `bc9d11a6`.
 2. **Stage 2B - guarded node-delta restore:** allow prepared/baseline restore to
    use touched-node checkpoints only when the tracker proves complete coverage;
-   fall back to full checkpoints on any ambiguity.
+   fall back to full checkpoints on any ambiguity. Complete in `swift-tui`
+   `6b971435`.
 3. **Stage 2C - graph-field deltas:** split or delta graph maps/counters only
    after node-delta behavior is proven and diagnostics show graph field copying
    still matters.
@@ -231,6 +233,15 @@ runtime_graph_checkpoint_fallback_reason
 runtime_graph_checkpoint_fallback_count
 ```
 
+Stage 2B shipped these restore-specific TSV columns:
+
+```text
+runtime_graph_checkpoint_restore_strategy
+runtime_graph_checkpoint_restore_fallback_reason
+runtime_graph_checkpoint_delta_restore_count
+runtime_graph_checkpoint_fallback_restore_count
+```
+
 Measure at least:
 
 - `sheet-open-latency`;
@@ -249,6 +260,8 @@ without behavior changes and tests prove the shadow state is equivalent to full
 checkpoint restore across mixed graph/node mutation, materialize/suspend cycles,
 and fallback paths.
 
-Stage 2B is complete when guarded delta restore is enabled for proven frames,
-falls back to full restore for every unproven case, and improves the hot
-checkpoint columns without changing publication or async-frame semantics.
+Stage 2B is complete in `swift-tui` `6b971435`: guarded delta restore is enabled
+for proven frames, falls back to full restore for unproven cases, and preserves
+publication plus async-frame semantics in the focused validation suite. The
+remaining performance decision is whether Stage 2C graph-field deltas are worth
+the extra complexity after measuring the Stage 2B columns.
