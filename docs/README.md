@@ -20,6 +20,12 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-15-stage-1a2-selective-gate-attribution.md](reports/2026-06-15-stage-1a2-selective-gate-attribution.md) -
+  Stage 1A.2 outcome for frontier/publication narrowing: published
+  `swift-tui` gate-attribution diagnostics, ranked the remaining
+  `nil_selective_evaluation_disabled` `.all` frames, and recommends Stage 1B
+  because the dominant causes are explicit root-evaluation guards rather than
+  remaining portal identity translation misses.
 - [reports/2026-06-15-stage-1a-frontier-publication-narrowing.md](reports/2026-06-15-stage-1a-frontier-publication-narrowing.md) -
   Stage 1A outcome for frontier/publication narrowing: safe portal invalidation
   translation landed in `swift-tui`, portal-hosted unmapped samples are gone,

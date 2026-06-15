@@ -1,7 +1,7 @@
 # Frontier and Publication Narrowing Plan
 
 - **Date:** 2026-06-14
-- **Status:** Stage 1A identity bridge landed; Stage 1A.2 selective-gate attribution next
+- **Status:** Stage 1A.2 attribution complete; Stage 1B recommended next
 - **Owner repo:** this coordination root
 - **Implementation repo:** `swift-tui`
 - **Starting pin:** `swift-tui` `2479cac9` via org root `1378b00`
@@ -181,6 +181,17 @@ It removes the portal-hosted unmapped-identity bucket, but it does not reduce
 `.all` frame share: the remaining `.all` frames are now attributed to
 `nil_selective_evaluation_disabled`. Continue with a small Stage 1A.2
 attribution pass before choosing a behavior change or moving to Stage 1B.
+
+### Stage 1A.2 result
+
+Selective-gate attribution landed in `swift-tui` `bb2a047f` and is documented in
+[`2026-06-15-stage-1a2-selective-gate-attribution.md`](../reports/2026-06-15-stage-1a2-selective-gate-attribution.md).
+The dominant `.all` causes are explicit root-evaluation guards:
+`frame_state_force_root`, focus/pressed changes, startup/root invalidation, and
+context/proposal force-root frames. These are not remaining safe portal identity
+translation misses, so the next implementation stage should be Stage 1B:
+reduce the cost of unavoidable `.all` publication without weakening those
+selective-evaluation gates.
 
 ## Stage 1B - Make unavoidable `.all` publication cheaper
 
