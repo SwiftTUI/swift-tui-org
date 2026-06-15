@@ -20,6 +20,11 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-15-stage-1a-frontier-publication-narrowing.md](reports/2026-06-15-stage-1a-frontier-publication-narrowing.md) -
+  Stage 1A outcome for frontier/publication narrowing: safe portal invalidation
+  translation landed in `swift-tui`, portal-hosted unmapped samples are gone,
+  remaining `.all` frames are attributed to disabled selective evaluation, and
+  Stage 1A.2 should identify the exact disabling gates before Stage 1B.
 - [reports/2026-06-09-android-host-current-state.md](reports/2026-06-09-android-host-current-state.md) -
   current state of the Android host effort after the parity pass: implemented
   `SwiftTUIAndroidHost`/Compose Gallery scaffolding, styled-cell/image/semantics

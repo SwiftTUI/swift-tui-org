@@ -1,7 +1,7 @@
 # Frontier and Publication Narrowing Plan
 
 - **Date:** 2026-06-14
-- **Status:** Planned
+- **Status:** Stage 1A identity bridge landed; Stage 1A.2 selective-gate attribution next
 - **Owner repo:** this coordination root
 - **Implementation repo:** `swift-tui`
 - **Starting pin:** `swift-tui` `2479cac9` via org root `1378b00`
@@ -172,6 +172,15 @@ Prefer tests near the existing graph and runtime seams:
 - `sheet-open-latency` shows a material reduction in `commit_ms` or confirmed
   reduction in `.all` frame share. If commit time does not improve, stop and
   diagnose before expanding the mapping.
+
+### Stage 1A result
+
+The safe identity bridge landed in `swift-tui` `294b2404` and is documented in
+[`2026-06-15-stage-1a-frontier-publication-narrowing.md`](../reports/2026-06-15-stage-1a-frontier-publication-narrowing.md).
+It removes the portal-hosted unmapped-identity bucket, but it does not reduce
+`.all` frame share: the remaining `.all` frames are now attributed to
+`nil_selective_evaluation_disabled`. Continue with a small Stage 1A.2
+attribution pass before choosing a behavior change or moving to Stage 1B.
 
 ## Stage 1B - Make unavoidable `.all` publication cheaper
 
