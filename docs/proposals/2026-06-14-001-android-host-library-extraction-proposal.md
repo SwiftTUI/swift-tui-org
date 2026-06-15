@@ -169,6 +169,38 @@ a Gradle subtree inside `swift-tui/Platforms/Android/` — saves a repo but mixe
 package-manager contracts and risks that invariant. Phase A needs neither the new
 repo nor publication (see below).
 
+### Generalization: when does a host get its own repo?
+
+The precedent above is **not** "one repo per host." The partition key is the
+host's **package-manager / distribution contract**, not the existence of a host:
+
+- **SwiftPM-consumable host → stays in `swift-tui`.** The Swift side of *every*
+  host already lives here — `SwiftUIHost`, `SwiftTUIWebHost`, and
+  `SwiftTUIAndroidHost` are all SwiftPM targets under `Platforms/`. `SwiftUIHost`
+  is *only* a SwiftPM target (pure Swift, Apple-SDK-gated — `includeSwiftUIHost`
+  excludes it on Linux at compile time), so it has no foreign half to move out.
+- **Non-SwiftPM distribution contract → dedicated sibling repo.** `swift-tui-web`
+  (Bun/npm) and `swift-tui-android` (Gradle/Maven AAR + plugin) exist to keep a
+  *foreign* package manager and toolchain out of the SwiftPM package — not to
+  give a backend its own home. Each couples back to `swift-tui` only through
+  tagged releases / released artifacts.
+
+So `SwiftUIHost` should **not** be extracted by analogy to Android. It has no
+foreign contract to externalize, and a hypothetical `swift-tui-swiftui` repo
+would, by this root's own "consume siblings only through tagged HTTPS"
+invariant, insert a release-tag version-skew seam between the framework and the
+very host that serves as its **Apple parity reference** — today built and tested
+in the same `swift test` graph against `HEAD` — with none of the packaging
+upside that justified the web/Android splits. The dependency-cost argument that
+*could* motivate splitting a SwiftPM target (forcing unwanted platform deps on
+other consumers) is already handled in-package by the `includeSwiftUIHost`
+compile gate plus the `.macOS`/`.iOS` platform restriction.
+
+**Trigger to revisit (narrow):** if `SwiftUIHost` ever needs to ship as a
+**non-SwiftPM artifact** — a binary `.xcframework`, a CocoaPods/Carthage
+contract, or an Xcode-project-only build step — it acquires a foreign
+distribution contract and the same rule then points to extraction. Not before.
+
 ## Phased plan
 
 ### Phase A — internal extraction (now; low-risk; resolves the concern)
