@@ -175,17 +175,20 @@ default-to-silence:
 
 0. **Re-baseline ritual** — ✅ done 2026-06-15
    ([report](../reports/2026-06-15-perf-phase-rebaseline.md)).
-1. **A (Stage 2C)** — ⏸️ DEFERRED 2026-06-15: cheap lever is a no-op; real win is
-   structural (see section A). Parked behind E / persistent graph-state split.
-2. **C (`processResolvedTree`)** — now the primary active item: a similar-magnitude
-   unconditional walk that should be skippable with a low-risk guard.
-3. **B sizing probe** (cheap) in parallel with C; commit B's cache only if the
-   probe justifies it.
-4. **D** on a parallel track throughout.
-5. **E** only as a designed successor once C/B quantify what the root walk still
-   costs (and it also unblocks the deferred Item A create work).
+1. **A (Stage 2C create)** — ⏸️ DEFERRED: cheap lever no-op; structural (section A).
+2. **B (restore-walk)** — ✅ CLOSED 2026-06-15, not justified: median-0 reuse on
+   sheet (walk absent on hot path), narrow-only ~0.3 ms
+   ([sizing](../reports/2026-06-15-items-b-c-sizing-and-pivot-to-e.md)).
+3. **C (`processResolvedTree`)** — ⏸️ DEFERRED: only skippable on unchanged-tree
+   frames; hot-path walk needed and root-evaluation-bounded; high blast radius.
+4. **E (frontier narrowing)** — now the primary active item. A/B/C have quantified
+   that the every-frame root force-queue (reuse ≈ 0, all nodes touched on sheet)
+   is what bounds them; E is the lever that unlocks the sheet hot path. Design-first
+   per the entry condition below.
+5. **D (raster)** — parallel track, decoupled from the root-evaluation entanglement;
+   the cleanest place for an independent code win if E's design runs long.
 6. **F** decisions recorded as items land (the create-split probe is the first
-   such productizable diagnostic).
+   productizable diagnostic).
 
 ## References
 
