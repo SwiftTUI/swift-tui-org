@@ -20,6 +20,11 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-15-gallery-example-invariant-map.md](reports/2026-06-15-gallery-example-invariant-map.md) -
+  inventory and push-down map for framework-level invariants previously proven
+  indirectly by gallery/example tests; adds focused package coverage for alert
+  base-placement stability and `ZStack` Spacer neutrality while leaving
+  app/demo-owned assertions in the example suites.
 - [reports/2026-06-15-stage-1b-all-publication-diffing.md](reports/2026-06-15-stage-1b-all-publication-diffing.md) -
   Stage 1B outcome for frontier/publication narrowing: committed
   graph-level runtime-registration fingerprints keep unavoidable root frames
