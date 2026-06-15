@@ -1,11 +1,12 @@
 # Stage 2 Applied-Mutation Delta Checkpoint Design
 
 - **Date:** 2026-06-15
-- **Status:** Design checkpoint complete; next implementation slice is a shadow
-  applied-mutation delta checkpoint with the full checkpoint retained as oracle
-  and fallback
+- **Status:** Stage 2A shadow tracker complete; next implementation slice is
+  guarded node-delta restore with the full checkpoint retained as oracle and
+  fallback
 - **Plan:** [`2026-06-14-003-frontier-publication-narrowing-plan.md`](../plans/2026-06-14-003-frontier-publication-narrowing-plan.md)
 - **Baseline report:** [`2026-06-15-stage-2-checkpoint-scope-probe.md`](2026-06-15-stage-2-checkpoint-scope-probe.md)
+- **Stage 2A report:** [`2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md`](2026-06-15-stage-2a-shadow-delta-checkpoint-tracker.md)
 - **Reference code:** `swift-tui` `3348cae5` (`Instrument checkpoint scope candidates`)
 
 ## Decision
