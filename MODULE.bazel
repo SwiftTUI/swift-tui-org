@@ -8,6 +8,7 @@ bazel_dep(name = "swift_tui", version = "0.0.19")
 bazel_dep(name = "swift_tui_web", version = "0.0.19")
 bazel_dep(name = "swift_tui_examples", version = "0.0.19")
 bazel_dep(name = "swift_tui_site", version = "0.0.19")
+bazel_dep(name = "swift_tui_android", version = "0.0.19")
 
 local_path_override(
     module_name = "swift_tui",
@@ -27,4 +28,9 @@ local_path_override(
 local_path_override(
     module_name = "swift_tui_site",
     path = "swift-tui-site",
+)
+
+local_path_override(
+    module_name = "swift_tui_android",
+    path = "swift-tui-android",
 )

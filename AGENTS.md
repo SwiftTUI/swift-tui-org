@@ -22,6 +22,7 @@ repos' native package managers (SwiftPM, Bun/npm, Astro/DocC). The root provides
 | `swift-tui-web/` | `SwiftTUI/swift-tui-web` | Bun/npm workspace | `swift_tui_web` |
 | `swift-tui-examples/` | `SwiftTUI/swift-tui-examples` | Runnable Swift examples | `swift_tui_examples` |
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site + DocC | `swift_tui_site` |
+| `swift-tui-android/` | `SwiftTUI/swift-tui-android` | Gradle/Maven AAR + plugin | `swift_tui_android` |
 
 Submodules are the checkout/pinning layer; Bazel owns cross-repo contracts. Each
 child repo remains the source of truth for its own manifests and release tags.
