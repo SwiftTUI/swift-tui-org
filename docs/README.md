@@ -20,6 +20,13 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-15-stage-1b-all-publication-diffing.md](reports/2026-06-15-stage-1b-all-publication-diffing.md) -
+  Stage 1B outcome for frontier/publication narrowing: committed
+  graph-level runtime-registration fingerprints keep unavoidable root frames
+  reported as `.all` while restoring only changed non-root registration subtrees,
+  cutting `.all` restored-node totals 88.8% on `sheet-open-latency` and 64.6% on
+  `synthetic-narrow-invalidation`; broader registry-family equivalence remains a
+  follow-up before deeper specialization.
 - [reports/2026-06-15-stage-1a2-selective-gate-attribution.md](reports/2026-06-15-stage-1a2-selective-gate-attribution.md) -
   Stage 1A.2 outcome for frontier/publication narrowing: published
   `swift-tui` gate-attribution diagnostics, ranked the remaining

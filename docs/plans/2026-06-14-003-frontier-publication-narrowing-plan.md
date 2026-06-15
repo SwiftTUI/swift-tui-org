@@ -1,7 +1,8 @@
 # Frontier and Publication Narrowing Plan
 
 - **Date:** 2026-06-14
-- **Status:** Stage 1A.2 attribution complete; Stage 1B recommended next
+- **Status:** Stage 1B first cut complete; broader registry-family coverage remains
+  before deeper specialization
 - **Owner repo:** this coordination root
 - **Implementation repo:** `swift-tui`
 - **Starting pin:** `swift-tui` `2479cac9` via org root `1378b00`
@@ -231,6 +232,23 @@ Add byte-equivalence tests against a full rebuild for:
 - Full-rebuild equivalence tests cover every registry family touched by the
   optimization.
 - No public API changes.
+
+### Stage 1B result
+
+Graph-level runtime-registration fingerprinting landed in `swift-tui`
+`de49e2df` and is documented in
+[`2026-06-15-stage-1b-all-publication-diffing.md`](../reports/2026-06-15-stage-1b-all-publication-diffing.md).
+The first cut keeps unavoidable root-evaluation frames reported as `.all`, but
+diffs registration owners against the last committed publication and restores
+only changed non-root subtrees when safe. Final pushed-commit perf artifacts show
+`.all` restored-node totals dropping 88.8% on `sheet-open-latency` and 64.6% on
+`synthetic-narrow-invalidation`; aggregate CPU/latency moved only modestly and is
+mixed on the synthetic case.
+
+Before further Stage 1B specialization, add broader byte-equivalence coverage for
+the remaining registry families and then decide whether registry-family-specific
+fingerprints are worth the complexity. Stage 2 checkpoint scoping should still
+wait until this publication baseline is accepted.
 
 ## Stage 2 - Checkpoint scoping
 
