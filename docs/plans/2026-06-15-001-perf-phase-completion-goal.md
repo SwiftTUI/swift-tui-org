@@ -29,21 +29,25 @@ decisions are recorded rather than left silent.
 
 ## Scope — the remaining residuals
 
-Freshest per-interaction-frame costs at `30fc38bf` (Stage 2B final
-measurement); these are the numbers each item must move:
+Per-interaction-frame costs at `30fc38bf`, re-baselined on AC 2026-06-15
+([report](../reports/2026-06-15-perf-phase-rebaseline.md)). **Row count matters:**
+sheet costs scale ~linearly (~0.025 ms/row of `ckpt_create`), so numbers are
+only comparable at identical `TERMUI_PERF_SHEET_TREE_ROWS`. Sheet shown at 44
+(default; the Stage 2B / `~1.2ms` reference) and 176 (amplified signal).
 
-| residual | sheet (rows 176) | narrow (rows 40) | owning item |
-| --- | ---: | ---: | --- |
-| checkpoint **create** p50 | ~1.20 ms | ~1.12 ms | A (Stage 2C) |
-| `restoreRuntimeRegistrations` reuse walk | (sheet settle) | ~0.2–0.5 ms | B (Stage 3) |
-| `processResolvedTree` (unconditional) | ~1.30 ms | ~0.35–0.65 ms | C |
-| raster | ~1.29 ms (flat in rows) | ~0.75–0.78 ms | D (parallel) |
-| root force-queue (upstream cause) | structural | structural | E (design-first) |
+| residual | sheet 44 | sheet 176 | narrow 40 | owning item |
+| --- | ---: | ---: | ---: | --- |
+| checkpoint **create** p50 (×2/frame) | 1.18 ms | 4.33 ms | 1.06 ms | A (Stage 2C) |
+| `restoreRuntimeRegistrations` reuse walk | (in resolve) | (in resolve) | ~0.2–0.5 ms | B (Stage 3) |
+| `processResolvedTree` (unconditional) | 0.47 ms | 1.74 ms | 0.58 ms | C |
+| raster | (per-frame TSV) | (per-frame TSV) | ~0.75–0.78 ms | D (parallel) |
+| root force-queue (upstream cause) | structural | structural | structural | E (design-first) |
 
-Checkpoint **restore** (the Stage 2B win: sheet 1.50→0.89 ms, narrow
-1.21→0.56 ms) and the `.all` publication restore-node totals (Stage 1B:
-−88.8% sheet / −64.6% narrow) are **done** and serve as the no-regression
-canaries.
+Checkpoint **restore** is already Stage-2B-low (0.86 ms @44 / 3.20 ms @176 sheet;
+0.54 ms narrow-40) and the `.all` publication restore-node totals (Stage 1B:
+−88.8% sheet / −64.6% narrow) are **done** — both serve as no-regression
+canaries. The narrow path (narrow-40 total_cpu 0.2412 ≈ documented 0.250) is the
+primary canary that must not move.
 
 ### A. Stage 2C — checkpoint creation + graph-field copy
 
