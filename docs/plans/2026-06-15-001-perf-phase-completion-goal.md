@@ -121,20 +121,28 @@ hazard.
   of A and the Stage 1 publication work. Treat animation-tick frames as a
   distinct, under-tested frame class throughout.
 
-### F. §4 infrastructure decisions (recorded, not silent)
+### F. §4 infrastructure decisions — RECORDED 2026-06-15
 
-Each needs an explicit decision in the first implementation update, not a
-default-to-silence:
-- **Productize the breakdown probes** — land env-gated sub-phase timers behind
-  `SWIFTTUI_PROFILE` permanently (4 archived-probe re-applications and counting),
-  or re-defer with a named owner condition.
-- **Memory occupancy budget** — H2/H3 reuse, presence carry-forward, the
-  retained index, and now per-node checkpoint sets all grow retained state; at
-  minimum an explicit "not now" with a number to watch (`memory_growth.tsv`).
-- **Real-terminal validation** — every win across the last waves is
-  headless-measured; re-affirm or schedule kitty Route B.
-- **Body re-evaluation cost** — keep in VISION-GAP as design-only unless the
-  re-baseline shows body time dominating a scenario.
+- **Productize the breakdown probes — DECISION: productize, in a dedicated infra
+  PR (not inline with a perf win).** This session added a 6th archived probe
+  (create-split) and proved its value within the hour (it disproved the Item A
+  premise). The reuse-trace (`SWIFTTUI_REUSE_TRACE`) already exists but **did not
+  fire on the release perf path** (empty output on sheet) — so step one of the
+  infra PR is to fix that gap, then land create-split + a working reuse/cone trace
+  as permanent `SWIFTTUI_PROFILE` sub-phase diagnostics. Owner condition: before
+  the next checkpoint/resolve optimization that needs sub-phase attribution.
+- **Memory occupancy budget — DECISION: not now; watch `memory_growth.tsv`.** No
+  retained-state growth landed this session (Item A's per-node checkpoint store
+  was *not* built). Revisit when the persistent copy-on-mutation store or the
+  graph/state split is taken up (both grow retained state materially).
+- **Real-terminal validation — DECISION: still deferred (kitty Route B).** No
+  shipped win this session needs real-terminal confirmation (all closures were
+  analysis/no-op). Re-affirm when a measured win actually lands.
+- **Body re-evaluation cost — DECISION: keep VISION-GAP design-only, but
+  ELEVATED relevance.** The Item E reframing shows the sheet-toggle invalidation
+  cone re-runs ~898 bodies; cone-narrowing (item 4b) and body re-eval cost are
+  the same frontier. Promote to an active investigation if/when item 4b is taken
+  up.
 
 ## Definition of done (phase exit)
 
