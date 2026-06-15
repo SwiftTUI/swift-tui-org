@@ -27,6 +27,30 @@ win and green guards, or been explicitly closed with a recorded reason ("no-op
 disproven", "deferred with named owner condition"), and the §4 infrastructure
 decisions are recorded rather than left silent.
 
+## Phase status — 2026-06-15 (every item to an evidence-based disposition)
+
+The cheap/safe head-residual levers are exhausted; all converge on one dominant
+lever. No `swift-tui` code landed (correctly — the cheap attempt was a measured
+no-op); the deliverables are the re-baseline, six evidence-based dispositions,
+and a reframing of the dominant lever.
+
+| item | disposition | evidence |
+| --- | --- | --- |
+| 0 re-baseline | ✅ done | [report](../reports/2026-06-15-perf-phase-rebaseline.md); reconciled a phantom 3× (row-count + battery) |
+| A checkpoint create | ⏸️ deferred | cheap reuse = no-op; cost is the O(N) dict build; structural ([finding](../reports/2026-06-15-stage-2c-checkpoint-create-finding.md)) |
+| B restore-walk | ✅ closed | median-0 reuse on sheet → walk absent on hot path; narrow-only ([sizing](../reports/2026-06-15-items-b-c-sizing-and-pivot-to-e.md)) |
+| C processResolvedTree | ⏸️ deferred | only skippable on unchanged frames; root-eval-bounded; high blast radius |
+| D raster | ⏸️ deferred | `raster_ms` 0.74–1.44 ms (2–5.5% frame); worker compute overlapped |
+| E frontier narrowing | ✅ design captured | reuse *works* on stable frames; the cost is the toggle cone, not the force-queue ([design](../reports/2026-06-15-item-e-frontier-design-and-reframing.md)) |
+| F infra decisions | ✅ recorded | section F below |
+
+**Dominant lever (the session's headline finding):** the ~18 ms full-recompute
+sheet frames are driven by the **sheet open/close invalidation cone** (~898
+identities), *not* head bookkeeping and *not* the force-queue. Reuse already
+works on structurally-stable frames (883/921 reused, 6.4 ms). The genuine next
+work is **item 4b — invalidation-cone narrowing** (reader-attribution territory),
+which is deep structural work warranting its own carefully-measured effort.
+
 ## Scope — the remaining residuals
 
 Per-interaction-frame costs at `30fc38bf`, re-baselined on AC 2026-06-15
@@ -201,8 +225,10 @@ hazard.
    / Lever territory (see `sheet-open-latency` memory). Deep structural work;
    next concrete step is a proper reuse/cone diagnostic (the leaf reuse-trace was
    empty → cone-driven, not leaf-denial).
-5. **D (raster)** — parallel track, decoupled from the cone entanglement; the
-   cleanest place for an independent code win. **Not yet started.**
+5. **D (raster)** — ⏸️ DEFERRED 2026-06-15 (low-EV): main-thread `raster_ms` is
+   0.74 ms narrow / 1.44 ms sheet (2–5.5% of frame), and `worker_raster_compute_ms`
+   (5.29 ms) runs on an overlapped worker thread (enqueue 0, off critical path).
+   Small win in a deep subsystem; below the cone lever (4b).
 6. **F** decisions recorded as items land (the create-split probe is the first
    productizable diagnostic).
 
