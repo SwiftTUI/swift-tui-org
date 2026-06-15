@@ -150,11 +150,17 @@ hazard.
 - **Productize the breakdown probes — DECISION: productize, in a dedicated infra
   PR (not inline with a perf win).** This session added a 6th archived probe
   (create-split) and proved its value within the hour (it disproved the Item A
-  premise). The reuse-trace (`SWIFTTUI_REUSE_TRACE`) already exists but **did not
-  fire on the release perf path** (empty output on sheet) — so step one of the
-  infra PR is to fix that gap, then land create-split + a working reuse/cone trace
-  as permanent `SWIFTTUI_PROFILE` sub-phase diagnostics. Owner condition: before
-  the next checkpoint/resolve optimization that needs sub-phase attribution.
+  premise). **UPDATE 2026-06-15 — reuse-trace step DONE**
+  ([report](../reports/2026-06-15-reuse-trace-productization-and-cone-confirmation.md)):
+  the reuse-trace (`SWIFTTUI_REUSE_TRACE`) was **not** broken — the "empty output
+  on sheet" was a capture artifact (it writes stderr-only, which is not collected
+  with `frames.tsv`). It now has a durable file sink (`SWIFTTUI_REUSE_TRACE_FILE`)
+  auto-captured by the harness as `<artifacts-root>/reuse-trace.log`, plus a test,
+  and already produced its first result: the open-frame cone is
+  `invalidation-conflict≈890` rooted at the `@State`-owner ancestor `Layout[0]`,
+  SPIKE-de-amplified 890→14. Remaining productization (create-split + a
+  `SWIFTTUI_PROFILE` sub-phase trace) is still future infra. Owner condition:
+  before the next checkpoint/resolve optimization that needs sub-phase attribution.
 - **Memory occupancy budget — DECISION: not now; watch `memory_growth.tsv`.** No
   retained-state growth landed this session (Item A's per-node checkpoint store
   was *not* built). Revisit when the persistent copy-on-mutation store or the

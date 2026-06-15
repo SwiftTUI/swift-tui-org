@@ -85,6 +85,17 @@ inequality). That reason determines the real lever:
 
 ## Reuse-trace result (run, not just recommended)
 
+> **CORRECTION 2026-06-15** (see
+> [reuse-trace productization + cone confirmation](2026-06-15-reuse-trace-productization-and-cone-confirmation.md)):
+> the empty-output observation below was a **capture artifact, not a code gap**.
+> The trace writes only to stderr (not collected with `frames.tsv`); re-running it
+> with stderr captured produces 100 lines and the cone diagnostic is intact. The
+> measured open-frame cone is `invalidation-conflict≈890` rooted at the toggled
+> `@State` owner `App/sheet-open-latency/Layout[0]` (the background's ancestor),
+> de-amplified to 14 by the SPIKE sibling shape (−98.4%). The "cone, not
+> leaf-denial" *conclusion* still holds and is now measured rather than inferred;
+> the trace has been productized to a captured `reuse-trace.log` artifact.
+
 `SWIFTTUI_REUSE_TRACE=1` on sheet 176 (release, 3 iters) produced **no
 `[REUSE-TRACE]` lines** — `ReuseDenialTrace.reasonCounts` was empty every frame
 despite the trace being armed (env parsed, non-"0"). The trace fires at the
