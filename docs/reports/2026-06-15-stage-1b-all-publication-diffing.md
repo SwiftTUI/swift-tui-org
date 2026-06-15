@@ -1,7 +1,9 @@
 # Stage 1B `.all` Publication Diffing
 
 - **Date:** 2026-06-15
-- **Status:** Stage 1B accepted as baseline; Stage 2 checkpoint scoping is next
+- **Status:** Stage 1B accepted as baseline; Stage 2 checkpoint scope probe
+  completed in
+  [`2026-06-15-stage-2-checkpoint-scope-probe.md`](2026-06-15-stage-2-checkpoint-scope-probe.md)
 - **Plan:** [`2026-06-14-003-frontier-publication-narrowing-plan.md`](../plans/2026-06-14-003-frontier-publication-narrowing-plan.md)
 - **Measured code:** `swift-tui` `de49e2df` (`perf: diff runtime publication registrations`)
 - **Baseline:** Stage 1A.2 artifact root `/tmp/swifttui-stage1a2-publication-2026-06-15-060316-bb2a047f`

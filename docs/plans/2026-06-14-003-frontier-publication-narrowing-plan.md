@@ -1,8 +1,8 @@
 # Frontier and Publication Narrowing Plan
 
 - **Date:** 2026-06-14
-- **Status:** Stage 1B accepted as baseline; proceed to Stage 2 checkpoint
-  scoping
+- **Status:** Stage 2 checkpoint scope probe complete; dirty-frontier subtree
+  checkpointing rejected as the behavior slice
 - **Owner repo:** this coordination root
 - **Implementation repo:** `swift-tui`
 - **Starting pin:** `swift-tui` `2479cac9` via org root `1378b00`
@@ -278,6 +278,21 @@ regressions.
 - Async frame abort tests prove rollback equivalence.
 - Checkpoint create/restore timing drops on the hot scenarios without changing
   commit/publication correctness.
+
+### Stage 2 probe result
+
+The diagnostic-only Stage 2 probe landed in `swift-tui` `3348cae5` and is
+documented in
+[`2026-06-15-stage-2-checkpoint-scope-probe.md`](../reports/2026-06-15-stage-2-checkpoint-scope-probe.md).
+It added `runtime_graph_checkpoint_dirty_subtree_candidate_nodes` while keeping
+full checkpoint behavior unchanged. The probe showed that dirty-frontier subtree
+checkpointing is not the right behavior slice: on `.subtrees` frames the
+candidate scope is already 94.3% of full prepared nodes for
+`sheet-open-latency` and 98.5% for `synthetic-narrow-invalidation`, while `.all`
+frames have no safe dirty-frontier scope. The next Stage 2 implementation should
+therefore use a distinct applied-mutation/delta checkpoint design, with the
+current total checkpoint retained as fallback, instead of weakening
+`ViewGraph.Checkpoint` into a partial restore type.
 
 ## Stage 3 - Restore-walk sizing and retained-registration index
 
