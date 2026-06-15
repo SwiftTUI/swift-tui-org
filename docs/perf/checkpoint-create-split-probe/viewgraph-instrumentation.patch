@@ -1,0 +1,37 @@
+diff --git a/Sources/SwiftTUICore/Resolve/ViewGraph.swift b/Sources/SwiftTUICore/Resolve/ViewGraph.swift
+index 68032731..71566e6c 100644
+--- a/Sources/SwiftTUICore/Resolve/ViewGraph.swift
++++ b/Sources/SwiftTUICore/Resolve/ViewGraph.swift
+@@ -1,6 +1,11 @@
+ extension ViewGraph {
+   package func makeCheckpoint() -> Checkpoint {
+-    return Checkpoint(
++    // THROWAWAY PROBE: split node-checkpoint build vs graph-field copy.
++    let probe = CheckpointCreateProbe.enabled
++    let t0 = probe ? MonotonicInstant.now() : .zero
++    let nodeCheckpoints = ViewGraphNodeCheckpointing.makeNodeCheckpoints(nodesByNodeID)
++    let t1 = probe ? MonotonicInstant.now() : .zero
++    let checkpoint = Checkpoint(
+       root: root,
+       nodesByNodeID: nodesByNodeID,
+       nodeIDByIdentity: nodeIDByIdentity,
+@@ -38,10 +43,16 @@ extension ViewGraph {
+       resolvedNodeReuseCache: resolvedNodeReuseCache,
+       committedRuntimeRegistrationFingerprint: committedRuntimeRegistrationFingerprint,
+       checkpointMutationEpoch: checkpointMutationEpoch,
+-      nodeCheckpoints: ViewGraphNodeCheckpointing.makeNodeCheckpoints(
+-        nodesByNodeID
+-      )
++      nodeCheckpoints: nodeCheckpoints
+     )
++    if probe {
++      let t2 = MonotonicInstant.now()
++      CheckpointCreateProbe.record(
++        nodes: t0.duration(to: t1),
++        fields: t1.duration(to: t2)
++      )
++    }
++    return checkpoint
+   }
+ 
+   package func restoreCheckpoint(_ checkpoint: Checkpoint) {

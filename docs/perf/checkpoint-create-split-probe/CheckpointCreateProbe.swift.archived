@@ -1,0 +1,60 @@
+#if canImport(Darwin)
+  import Darwin
+#elseif canImport(Glibc)
+  import Glibc
+#elseif canImport(Android)
+  import Android
+#elseif canImport(WASILibc)
+  import WASILibc
+#elseif canImport(ucrt)
+  import ucrt
+#endif
+
+// THROWAWAY PROBE (SWIFTTUI_CKPT_PROBE=1): splits ViewGraph.makeCheckpoint cost
+// into node-checkpoint build vs graph-field copy to localize the create
+// residual. Revert before landing.
+@MainActor
+enum CheckpointCreateProbe {
+  static let enabled: Bool = {
+    #if canImport(Darwin) || canImport(Glibc) || canImport(Android)
+      guard let raw = unsafe "SWIFTTUI_CKPT_PROBE".withCString({ unsafe getenv($0) }) else {
+        return false
+      }
+      return unsafe String(cString: raw) == "1"
+    #else
+      return false
+    #endif
+  }()
+
+  static var nodeNanos: Int64 = 0
+  static var fieldNanos: Int64 = 0
+  static var count: Int = 0
+
+  static func record(nodes: Duration, fields: Duration) {
+    nodeNanos &+= nanos(nodes)
+    fieldNanos &+= fields == .zero ? 0 : nanos(fields)
+    count &+= 1
+    if count % 200 == 0 {
+      let nAvg = Double(nodeNanos) / Double(count) / 1000.0
+      let fAvg = Double(fieldNanos) / Double(count) / 1000.0
+      writeStderr(
+        "CKPT_PROBE count=\(count) node_us_avg=\(nAvg) field_us_avg=\(fAvg)\n"
+      )
+    }
+  }
+
+  private static func nanos(_ d: Duration) -> Int64 {
+    let (secs, atto) = d.components
+    return secs &* 1_000_000_000 &+ atto / 1_000_000_000
+  }
+
+  private static func writeStderr(_ message: String) {
+    #if canImport(Darwin) || canImport(Glibc) || canImport(Android)
+      var message = message
+      message.withUTF8 { buffer in
+        guard let base = buffer.baseAddress, buffer.count > 0 else { return }
+        _ = unsafe write(STDERR_FILENO, base, buffer.count)
+      }
+    #endif
+  }
+}

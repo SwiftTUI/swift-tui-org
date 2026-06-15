@@ -49,7 +49,18 @@ Checkpoint **restore** is already Stage-2B-low (0.86 ms @44 / 3.20 ms @176 sheet
 canaries. The narrow path (narrow-40 total_cpu 0.2412 ≈ documented 0.250) is the
 primary canary that must not move.
 
-### A. Stage 2C — checkpoint creation + graph-field copy
+### A. Stage 2C — checkpoint creation + graph-field copy — DEFERRED 2026-06-15
+
+**Status: parked behind the structural work.** A create-split probe localized the
+cost to ~99.9% in the per-node checkpoint dictionary build (graph-field copy is
+COW-cheap), and the cheap node-image-reuse lever (Stage 2C.1) measured as a no-op
+because it still reconstructs the N-entry dictionary. The only create wins that
+remove that O(N) build are structural — a persistent copy-on-mutation
+node-checkpoint store (the design doc's deferred high-blast-radius slice) or the
+persistent graph/state split — and both compound with Item E. Parked here; full
+write-up:
+[reports/2026-06-15-stage-2c-checkpoint-create-finding.md](../reports/2026-06-15-stage-2c-checkpoint-create-finding.md).
+Probe archived at [docs/perf/checkpoint-create-split-probe/](../perf/checkpoint-create-split-probe/README.md).
 
 The remaining half of the abortable-frame checkpoint cost. Stage 2B scoped
 *restore* to proven touched nodes; *create* still snapshots the full graph
@@ -162,19 +173,19 @@ default-to-silence:
 
 ## Sequencing
 
-0. **Re-baseline ritual** (mandatory opener) — re-run the residual map at
-   `30fc38bf` (narrow 20/40, sheet 176 co-located + sibling + popover overlay,
-   layout-scroll-burst, 15–20 iterations, one session) before starting A. Every
-   target above inherits these numbers.
-1. **A (Stage 2C)** — largest measured remaining head cost, mechanism already
-   scoped by Stage 2B's boundary.
-2. **B sizing probe** (cheap) in parallel with A; commit B's cache only if the
+0. **Re-baseline ritual** — ✅ done 2026-06-15
+   ([report](../reports/2026-06-15-perf-phase-rebaseline.md)).
+1. **A (Stage 2C)** — ⏸️ DEFERRED 2026-06-15: cheap lever is a no-op; real win is
+   structural (see section A). Parked behind E / persistent graph-state split.
+2. **C (`processResolvedTree`)** — now the primary active item: a similar-magnitude
+   unconditional walk that should be skippable with a low-risk guard.
+3. **B sizing probe** (cheap) in parallel with C; commit B's cache only if the
    probe justifies it.
-3. **C** opportunistically after A.
 4. **D** on a parallel track throughout.
-5. **E** only as a designed successor once A–C quantify what the root walk still
-   costs.
-6. **F** decisions recorded in the first implementation update.
+5. **E** only as a designed successor once C/B quantify what the root walk still
+   costs (and it also unblocks the deferred Item A create work).
+6. **F** decisions recorded as items land (the create-split probe is the first
+   such productizable diagnostic).
 
 ## References
 
