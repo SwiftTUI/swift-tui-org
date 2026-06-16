@@ -20,6 +20,11 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-16-perf-tranche-diagnostics-start.md](reports/2026-06-16-perf-tranche-diagnostics-start.md) -
+  first diagnostic pass for the new post-0.0.20 performance tranche; records the
+  rows=176 co-located/sibling sheet comparison and the new
+  `example-app-shell-workflow` calibration, then narrows the next implementation
+  slice to focus/press dirty-frontier planning before checkpoint policy.
 - [reports/2026-06-16-perf-signal-representativeness.md](reports/2026-06-16-perf-signal-representativeness.md) -
   representativeness pass over the committed `TermUIPerf` scenarios against
   Gallery, Layouts, File Previewer, GIF editor, and host-example usage; classifies
