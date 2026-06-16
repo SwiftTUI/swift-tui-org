@@ -20,6 +20,12 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-16-focus-press-dirty-frontier-results.md](reports/2026-06-16-focus-press-dirty-frontier-results.md) -
+  outcome for the focus/press dirty-frontier tranche: finite focus/press
+  retained-reuse safety now enters graph-local dirty work, animation safety stays
+  root-forced, sheet metrics remain worse than baseline despite smaller
+  head/checkpoint phase medians, and the next tranche should instrument
+  `frame_state_force_root` attribution before checkpoint policy.
 - [reports/2026-06-16-perf-tranche-diagnostics-start.md](reports/2026-06-16-perf-tranche-diagnostics-start.md) -
   first diagnostic pass for the new post-0.0.20 performance tranche; records the
   rows=176 co-located/sibling sheet comparison and the new

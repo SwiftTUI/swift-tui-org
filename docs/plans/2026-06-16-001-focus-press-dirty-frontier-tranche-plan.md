@@ -68,3 +68,19 @@ Decision rule: if sheet frames stop reporting `frame_state_force_root` for
 ordinary focus/press safety and head-prep narrows without correctness
 regressions, continue this line. If checkpoint restore remains dominant,
 split a later checkpoint-policy tranche validated by `example-app-shell-workflow`.
+
+## Outcome
+
+Implemented in `swift-tui` stages `e25b1d06` and `d9065efe`.
+`e25b1d06` added graph-local dirty work for finite retained-reuse safety scopes
+and the focused correctness coverage. The follow-up `d9065efe` kept animation
+safety root-forced after measurement showed the finite-scope exemption was too
+broad.
+
+Results are recorded in
+[`docs/reports/2026-06-16-focus-press-dirty-frontier-results.md`](../reports/2026-06-16-focus-press-dirty-frontier-results.md).
+The correctness behavior landed, but the performance threshold did not clear:
+the sheet paths still report `frame_state_force_root` disabled selective
+evaluation frames and regress in input p95/total CPU versus the tranche-start
+baseline. The next tranche should add force-root source diagnostics before any
+checkpoint-restore policy change.
