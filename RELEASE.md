@@ -1,7 +1,8 @@
 # Releasing the SwiftTUI org
 
 How to cut a new lockstep release (`swift-tui`, `swift-tui-web`,
-`swift-tui-examples`, `swift-tui-site` all move to the same version together).
+`swift-tui-android`, `swift-tui-examples`, `swift-tui-site` all move to the
+same version together).
 This is the runbook the `bump_version.sh` tool deliberately stops short of —
 everything here is **irreversible / outward-facing** (tags, GitHub releases, npm
 publishes) and is the maintainer's to drive.
@@ -13,13 +14,13 @@ publishes) and is the maintainer's to drive.
 
 Two facts drive the entire procedure:
 
-1. **The version string is denormalized across four repos.** `package.json`
+1. **The version string is denormalized across child repos.** `package.json`
    versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
-   `exactVersion`, GitHub release tarball URLs, `tree`/`blob`/`tag` links, site
-   display strings, and the canonical `swift-tui-site/docs/releases.yml` manifest
-   all hardcode it. `tools/coordination/bump_version.sh --write` rewrites the
-   *authored* occurrences. It never touches generated lockfiles, tags, or
-   publishes.
+   `exactVersion`, Android Gradle plugin/AAR coordinates, GitHub release
+   tarball URLs, `tree`/`blob`/`tag` links, site display strings, and the
+   canonical `swift-tui-site/docs/releases.yml` manifest all hardcode it.
+   `tools/coordination/bump_version.sh --write` rewrites the *authored*
+   occurrences. It never touches generated lockfiles, tags, or publishes.
 
 2. **The cross-repo dependency path is the GitHub release tarball, not npm.**
    `swift-tui-examples/WebExample` and `swift-tui-site` install `@swifttui/web`
@@ -49,8 +50,8 @@ examples and site gates fail no matter what npm says.
 Release in this order — each step depends on the previous one being pushed:
 
 ```
-swift-tui-web  →  swift-tui  →  swift-tui-examples  →  swift-tui-site  →  swift-tui-org (root)
-   (leaf artifact)                (consumes web tag + swift-tui tag)        (records pins)
+swift-tui-web  →  swift-tui  →  swift-tui-android  →  swift-tui-examples  →  swift-tui-site  →  swift-tui-org
+   (web tgz)       (Swift tag)       (Gradle artifacts)      (consumes all three)       (site)          (pins)
 ```
 
 ## Prerequisites
@@ -180,10 +181,27 @@ git tag 0.0.13
 git push origin main && git push origin 0.0.13
 ```
 
-## 3. swift-tui-examples
+## 3. swift-tui-android
 
-Needs **both** lockfiles regenerated now that web's release and swift-tui's tag
-exist.
+The Android host publishes the AAR plus the Gradle plugin marker into the
+GitHub Pages Maven repository.
+
+```sh
+cd ../swift-tui-android
+./gradlew :swift-tui-host:testDebugUnitTest publishAllPublicationsToGithubPagesRepository
+git add -A && git commit -m "0.0.13"
+git tag 0.0.13
+git push origin main && git push origin 0.0.13
+```
+
+Publish the generated `build/github-pages-repo` contents to the `gh-pages`
+branch before updating examples, because `AndroidGallery` resolves
+`sh.swifttui.android` and `sh.swifttui:android-host` from that static Maven repo.
+
+## 4. swift-tui-examples
+
+Needs **both** lockfiles regenerated now that web's release, swift-tui's tag,
+and the Android Maven artifacts exist.
 
 a. **Bun** (web tarballs — required; the gate runs `bun install --frozen-lockfile`):
 
@@ -225,7 +243,7 @@ c. Commit + tag + push:
    git push origin main && git push origin 0.0.13
    ```
 
-## 4. swift-tui-site
+## 5. swift-tui-site
 
 The site fetches `swift-tui-examples` at `current.examplesRef` from
 `docs/releases.yml` (the bump sets it to `0.0.13`), then builds the WASI example.
@@ -251,14 +269,14 @@ git tag 0.0.13
 git push origin main && git push origin 0.0.13
 ```
 
-## 5. swift-tui-org (root) — record the pins
+## 6. swift-tui-org (root) — record the pins
 
 The submodule working trees now point at the new tagged commits. Record them:
 
 ```sh
 cd ..
 git add MODULE.bazel README.md tools/coordination/bump_version.sh \
-        swift-tui swift-tui-web swift-tui-examples swift-tui-site
+        swift-tui swift-tui-web swift-tui-android swift-tui-examples swift-tui-site
 git commit -m "0.0.13"
 git tag 0.0.13
 git push origin main && git push origin 0.0.13
@@ -272,7 +290,10 @@ bazel test  //:release_candidate     # full org gate (needs native toolchains)
 - [ ] `swift-tui-web` has a `0.0.13` **git tag** and a **GitHub release** whose
       two `.tgz` assets return **HTTP 200**.
 - [ ] `npm view @swifttui/web version` and `@swifttui/build` both show `0.0.13`.
-- [ ] `swift-tui`, `swift-tui-examples`, `swift-tui-site` each have a `0.0.13` tag.
+- [ ] `swift-tui`, `swift-tui-android`, `swift-tui-examples`, `swift-tui-site`
+      each have a `0.0.13` tag.
+- [ ] `swift-tui-android` published `sh.swifttui.android` and
+      `sh.swifttui:android-host` to the GitHub Pages Maven repository.
 - [ ] `bun install --frozen-lockfile` passes in `swift-tui-web`,
       `swift-tui-examples`, and `swift-tui-site/Website`.
 - [ ] `swift-tui-site` `bun run prepare:webexample` prints

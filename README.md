@@ -19,6 +19,7 @@ The root repo provides three things:
 | `swift-tui-web/` | `SwiftTUI/swift-tui-web` | Bun/npm package workspace | `swift_tui_web` |
 | `swift-tui-examples/` | `SwiftTUI/swift-tui-examples` | Runnable Swift examples and demo gates | `swift_tui_examples` |
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site and DocC composition | `swift_tui_site` |
+| `swift-tui-android/` | `SwiftTUI/swift-tui-android` | Gradle/Maven AAR + plugin | `swift_tui_android` |
 
 Submodules are only the checkout and pinning layer. Bazel owns cross-repo
 contracts for the pinned organization state. The child repositories remain the
@@ -49,22 +50,26 @@ repos.
 
 ## Current Public Pre-Release State
 
-All child repositories are public and tagged at `0.0.19`. Public child defaults
+All child repositories are public and tagged at `0.0.20`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.19` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.0.20` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.19` release.
-- `swift-tui-examples` uses the `swift-tui` `0.0.19` tag and the web `0.0.19`
-  release tarballs by default.
+  the GitHub `0.0.20` release.
+- `swift-tui-android` publishes the `sh.swifttui:android-host` AAR and
+  `sh.swifttui.android` Gradle plugin at `0.0.20`.
+- `swift-tui-examples` uses the `swift-tui` `0.0.20` tag and the web `0.0.20`
+  release tarballs by default; AndroidGallery also uses the Android `0.0.20`
+  artifacts.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.19` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.20` tag.
 
-As of `0.0.19`, `@swifttui/web` and `@swifttui/build` are published to npm and
+As of `0.0.20`, `@swifttui/web` and `@swifttui/build` are published to npm and
 also attached to the GitHub release as tarballs. In-org consumers
 (`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
 release tarball URLs; external consumers can install the npm package names
-directly.
+directly. Android consumers resolve the host AAR and Gradle plugin from the
+SwiftTUI GitHub Pages Maven repository.
 
 For cross-repo development before the next tag, the org root materializes a
 **coordination overlay** under `.build/coordination/`. The overlay is a
@@ -339,7 +344,7 @@ To update all submodules to their tracked remote branches:
 ```sh
 git submodule update --remote --merge
 git status
-git add swift-tui swift-tui-web swift-tui-examples swift-tui-site
+git add swift-tui swift-tui-web swift-tui-android swift-tui-examples swift-tui-site
 git commit -m "chore: update SwiftTUI org pins"
 ```
 
@@ -353,10 +358,11 @@ bazel test //:org_full
 
 ## Bumping the Org Version
 
-The release version (currently `0.0.19`) is denormalized across every child:
+The release version (currently `0.0.20`) is denormalized across every child:
 `package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
-`exactVersion`, GitHub release tarball URLs, `tree`/`blob`/`tag` links, site
-display strings, and the canonical `swift-tui-site/docs/releases.yml` manifest.
+`exactVersion`, Android Gradle plugin/AAR coordinates, GitHub release tarball
+URLs, `tree`/`blob`/`tag` links, site display strings, and the canonical
+`swift-tui-site/docs/releases.yml` manifest.
 
 `tools/coordination/bump_version.sh` rewrites all of those authored sites in one
 pass. The current version is read from `releases.yml` (override with `--from`).
@@ -380,9 +386,10 @@ What it deliberately does **not** do — these stay maintainer-owned:
 - It leaves dated history (`docs/plans`, `docs/reports`, `PUBLIC-REPO-READINESS.md`,
   `VISION*.md`) as a record, reporting them as skipped.
 
-Run order is web → swift-tui → examples → site → record pins here, because the
-web release tarballs are the artifact leaf the other repos consume. The tool
-prints this runbook; finish with `bazel test //:release_candidate`.
+Run order is web → swift-tui → android → examples → site → record pins here,
+because examples consume the web, framework, and Android artifacts, and the site
+then consumes examples. The tool prints this runbook; finish with
+`bazel test //:release_candidate`.
 
 ## Editing Child Repositories
 

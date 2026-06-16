@@ -43,11 +43,13 @@ fi
 cd "$repo_root"
 
 # Submodules whose working trees carry version strings, in release dependency
-# order (web is the leaf others consume via release artifacts; site consumes
-# everything). The root "." is scanned too for its README coordination prose.
+# order (web is the leaf others consume via release artifacts; examples consume
+# the Android artifact, and site consumes the examples). The root "." is scanned
+# too for its README coordination prose.
 child_repos=(
   "swift-tui-web"
   "swift-tui"
+  "swift-tui-android"
   "swift-tui-examples"
   "swift-tui-site"
 )
@@ -167,6 +169,8 @@ is_generated() {
 # past. Surfaced as skipped so a human decides, never rewritten automatically.
 is_history() {
   case "$1" in
+    docs/README.md) return 0 ;;
+    RELEASE.md) return 0 ;;
     docs/plans/*|docs/reports/*|docs/proposals/*) return 0 ;;
     docs/PUBLIC-REPO-READINESS.md) return 0 ;;
     */docs/plans/*|*/docs/reports/*|*/docs/proposals/*) return 0 ;;
@@ -290,18 +294,21 @@ fi
 cat <<EOF
 
 [bump_version] release runbook (the tool does NOT do these — they are yours):
-  Dependency order matters: web is the artifact leaf, site consumes everything.
+  Dependency order matters: web is the artifact leaf; examples consume SwiftTUI,
+  web, and Android artifacts; site consumes examples.
 
   1. swift-tui-web : commit the bump, run \`bun install\`, tag $new_version,
                      push, then publish the npm tarballs / GitHub release assets
                      (the .tgz URLs the other repos now point at).
   2. swift-tui     : commit the bump, tag $new_version, push.
-  3. swift-tui-examples : after swift-tui $new_version is tagged, regenerate the
+  3. swift-tui-android : commit the bump, tag $new_version, publish the Gradle
+                     plugin/AAR artifacts, push.
+  4. swift-tui-examples : after swift-tui $new_version is tagged, regenerate the
                      Package.resolved files (above) + \`bun install\`, commit,
                      tag $new_version, push.
-  4. swift-tui-site: \`bun install\` under Website/, commit, tag $new_version, push.
-  5. THIS repo     : record the new submodule pins, then validate:
-                       git add swift-tui swift-tui-web swift-tui-examples swift-tui-site
+  5. swift-tui-site: \`bun install\` under Website/, commit, tag $new_version, push.
+  6. THIS repo     : record the new submodule pins, then validate:
+                       git add swift-tui swift-tui-web swift-tui-android swift-tui-examples swift-tui-site
                        git commit -m "chore: bump org to $new_version"
                        bazel fetch //:org_full
                        bazel test  //:release_candidate
