@@ -12,6 +12,7 @@ run from a clean `swift-tui` checkout with no coordination overlay:
 
 | Scenario (`--scenario`) | Reproduces | Shape (verified) |
 | --- | --- | --- |
+| `example-app-shell-workflow` | app chrome/pane/presentation composition | scrollable main pane plus side inspector, dropdown/popover, sheet, and panel boundary |
 | `gallery-animation-click` | H1/H4 representative gallery interaction | framework-only approximation of clicking into an animated gallery surface |
 | `layout-scroll-burst` | layout invalidation under bursty input | short scroll/input burst that exercises coalescing and retained layout |
 | `synthetic-offscreen-phase-animator` | H1 | perpetual off-screen `PhaseAnimator` → many committed frames at `damage_cells = 0` |
@@ -88,6 +89,10 @@ sleep 15; kitty @ --to unix:/tmp/k close-window
 
 ## Baselines
 
+- [`../reports/2026-06-16-perf-signal-representativeness.md`](../reports/2026-06-16-perf-signal-representativeness.md) —
+  maps the committed framework-only scenarios, including
+  `example-app-shell-workflow`, to real example-app usage and marks which signals
+  are representative, amplified diagnostics, or missing app-flow coverage.
 - [`2026-05-28-gallery-baseline/`](2026-05-28-gallery-baseline/) — the original
   18-tab data-collection pass (in-process + kitty cross-check).
 - Report: [`../reports/2026-05-28-gallery-performance-report.md`](../reports/2026-05-28-gallery-performance-report.md).

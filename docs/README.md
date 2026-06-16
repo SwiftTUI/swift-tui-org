@@ -20,6 +20,13 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-16-perf-signal-representativeness.md](reports/2026-06-16-perf-signal-representativeness.md) -
+  representativeness pass over the committed `TermUIPerf` scenarios against
+  Gallery, Layouts, File Previewer, GIF editor, and host-example usage; classifies
+  `sheet-open-latency` rows=176 as an amplified diagnostic, records the added
+  `example-app-shell-workflow` calibration signal, identifies remaining missing
+  app-flow signals, and confirms the next tranche should start with focused
+  publication/invalidation diagnostics before code.
 - [reports/2026-06-16-perf-phase-rebaseline-0-0-20.md](reports/2026-06-16-perf-phase-rebaseline-0-0-20.md) -
   current `swift-tui 0.0.20` perf re-baseline on AC power: confirms the sheet
   cone fixes hold, narrow canary is flat-to-slightly-better, sheet total CPU is
