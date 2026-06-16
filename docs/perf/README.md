@@ -20,6 +20,9 @@ run from a clean `swift-tui` checkout with no coordination overlay:
 | `synthetic-continuous-animation` | H4 (borders) | continuous `Spinner` repaint → committed frames at `damage_cells = 1` every tick |
 | `synthetic-text-shimmer` | H4 (task-progress) / H5 | `TimelineView(.animation)` changing text → fresh `TextLayoutCache` key per tick |
 | `synthetic-observable-fanout` | observable key-path fan-out / sub-body memo | mutates one `@Observable` key path while same-object peers read other key paths; opt-in `large-body` shape measures one body rebuilding a large cold payload |
+| `gallery-tab-switch` | gallery tab/sidebar switch (focus-navigation) | stable tab bar + per-tab content pane swapped on click → focus/press change plus a structural content swap; revisits exercise reuse (`TERMUI_PERF_TAB_SWITCH_TABS`, `_CONTENT_ROWS`) |
+| `file-browser-selection` | file-previewer multi-column selection-move | miller-columns browser; a selection move is a narrow invalidation over a large static tree with sibling-column retention; descending re-derives the child column (`TERMUI_PERF_BROWSER_COLUMNS`, `_ROWS`) |
+| `text-input-editing` | text-field / editor keystroke editing | focused `TextField` in a large static form; per-keystroke type/backspace/caret-move under focus → `TextLayoutCache` churn; `buf:<text>\|` mirror is the settle marker (`TERMUI_PERF_TEXT_EDIT_TREE_ROWS`) |
 
 ```bash
 cd swift-tui
