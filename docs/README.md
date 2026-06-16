@@ -20,11 +20,25 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-16-perf-phase-rebaseline-0-0-20.md](reports/2026-06-16-perf-phase-rebaseline-0-0-20.md) -
+  current `swift-tui 0.0.20` perf re-baseline on AC power: confirms the sheet
+  cone fixes hold, narrow canary is flat-to-slightly-better, sheet total CPU is
+  down 21-32% versus `30fc38bf`, and ranks the next work as diagnostics before
+  any checkpoint or force-root/focus implementation.
 - [reports/2026-06-15-gallery-example-invariant-map.md](reports/2026-06-15-gallery-example-invariant-map.md) -
   inventory and push-down map for framework-level invariants previously proven
   indirectly by gallery/example tests; adds focused package coverage for alert
   base-placement stability and `ZStack` Spacer neutrality while leaving
   app/demo-owned assertions in the example suites.
+- [reports/2026-06-15-sheet-open-cone-mechanism-2-portal-translation-fix.md](reports/2026-06-15-sheet-open-cone-mechanism-2-portal-translation-fix.md) -
+  second sheet-cone follow-up: stops unmapped overlay-entry invalidations from
+  translating to the portal root, eliminates steady-state sheet
+  `invalidation-conflict`, and records the cumulative sheet-176 `total_cpu`
+  drop from `1.441` to `0.970`.
+- [reports/2026-06-15-sheet-open-cone-followup-fix-results.md](reports/2026-06-15-sheet-open-cone-followup-fix-results.md) -
+  first sheet-cone follow-up: pins the dominant `Layout[0]` cone to redundant
+  post-action owner invalidation, skips that follow-up when the action already
+  invalidated, and records the same-session sheet-176 CPU/head-prep wins.
 - [reports/2026-06-15-stage-1b-all-publication-diffing.md](reports/2026-06-15-stage-1b-all-publication-diffing.md) -
   Stage 1B outcome for frontier/publication narrowing: committed
   graph-level runtime-registration fingerprints keep unavoidable root frames
@@ -123,6 +137,16 @@ the entry point, which holds the *why* and indexes the per-stage *how*.
 
 ### Other planning documents
 
+- [plans/2026-06-15-001-perf-phase-completion-goal.md](plans/2026-06-15-001-perf-phase-completion-goal.md) -
+  current perf-phase status at `swift-tui 0.0.20`: original A-F residuals are
+  either landed, closed, or deferred with evidence; the later sheet-cone work
+  landed in two measured fixes; any new optimization tranche should begin with a
+  fresh current-pin re-baseline.
+- [plans/2026-06-15-002-sheet-open-cone-narrowing-design.md](plans/2026-06-15-002-sheet-open-cone-narrowing-design.md) -
+  design/history entry point for the sheet-open invalidation cone: records the
+  diagnostic path, superseded scene-level hypothesis, landed post-action and
+  portal-translation fixes, and lower-EV follow-up areas after the steady-state
+  cone was eliminated.
 - [plans/2026-06-14-004-android-host-library-phase-b-publication-plan.md](plans/2026-06-14-004-android-host-library-phase-b-publication-plan.md) -
   Phase B of the Android host-library extraction: populate the empty
   `swift-tui-android` submodule and publish the host AAR
