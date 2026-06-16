@@ -56,6 +56,7 @@ Representative usage in `swift-tui-examples` currently includes:
 | `example-app-shell-workflow` | Gallery command palette/chrome, GIF-editor shell and menu/save flows, file-previewer pane chrome, Layouts app-shell composition | High for app-shell composition; medium for exact app behavior | New committed calibration signal. It combines scrollable main content, a side inspector, a dropdown/popover, a sheet, and a panel boundary without depending on `swift-tui-examples`. It is still not a substitute for real gallery or GIF-editor overlay runs. |
 | `sheet-open-latency` | Gallery command palette, Presentation Lab, Popovers tab, GIF editor save/resize sheets, menu overlays | High for presentation mechanics; amplified for size | Default rows are smoke-friendly. Rows=176 is a stress lens for root/frontier, publication, checkpoint, raster, and portal bookkeeping. Treat it as diagnostic, not average UI latency. |
 | `synthetic-narrow-invalidation` | Counter-like leaf controls, layout toggles, file-preview selection, small GIF-editor toolbar/palette actions | High as a retained-reuse canary; medium as a user flow | It isolates one local `@State` change beside a large static sibling tree. It intentionally omits focus, text input, observable models, and app-level command routing. |
+| `synthetic-observable-fanout` | Observable reference-model panes, forms, inspectors, and large model-backed bodies | High as an observable invalidation canary; synthetic as a user flow | Added after the initial representativeness pass to quantify key-path fan-out and sub-body memo opportunities. Default shape mutates one `@Observable` key path while same-object peers read other properties; `TERMUI_PERF_OBSERVABLE_SHAPE=large-body` measures one body rebuilding a large cold payload. |
 | `layout-scroll-burst` | Gallery Scroll Control, Layouts scrolling examples, file previewer columns, GIF-editor canvas/body scroll areas | Medium | It measures a simple vertical scroll burst. It does not cover multi-column keep-selection-visible behavior, terminal preview churn, or nested scroll/pane composition. |
 | `gallery-animation-click` | Gallery Animations tab first `withAnimation` curve buttons | Medium | It is an exact shape for a single simple animation click, but it does not cover transitions, matched geometry, PhaseAnimator sections, or animation completion behavior. |
 | `synthetic-offscreen-phase-animator` | Gallery Animations offscreen/scrolling cases, Borders & Shapes animated tile | Medium as an idle-frame canary | Good for "offscreen animation should not keep painting" policy. Less representative of visible animation quality. |
@@ -72,6 +73,9 @@ These gaps matter when interpreting the current ranking:
 - **Text editing and focus.** Text fields, editors, focus scopes, and paste paths
   are heavily used in Gallery and GIF editor but are not a committed perf
   scenario.
+- **Real observable app models.** `synthetic-observable-fanout` now covers the
+  graph-level object-token fan-out shape, but not a full app-owned reference
+  model such as GIF editor state, form editing, or multi-pane selection models.
 - **Collections and navigation.** List/table selection, navigation destination
   changes, and file-browser column updates are covered by correctness tests but
   not timed as perf scenarios.
@@ -87,9 +91,10 @@ These gaps matter when interpreting the current ranking:
 ## Interpretation for the New Tranche
 
 The 0.0.20 rebaseline remains a valid opener. The current `swift-tui` checkout
-adds only import-visibility cleanup plus the `TermUIPerf` app-shell calibration
-scenario; it does not change runtime framework behavior. The representative
-conclusion does not change the next step, but it narrows how to read it:
+adds perf-harness calibration coverage (`example-app-shell-workflow` and
+`synthetic-observable-fanout`) without changing runtime framework behavior. The
+representative conclusion does not change the next step, but it narrows how to
+read it:
 
 1. **Run focused diagnostics first.** Use `SWIFTTUI_PUBLICATION_DIAGNOSTICS=1`
    and `SWIFTTUI_INVAL_TRACE=1` on `sheet-open-latency` at rows=176 for
@@ -100,10 +105,10 @@ conclusion does not change the next step, but it narrows how to read it:
 3. **Treat checkpoint storage as design work.** The cheap checkpoint-create lever
    was already disproven; a real create win implies a persistent checkpoint store
    or graph/state split.
-4. **Do not start a general SwiftUI-style dependency engine yet.** Observable
-   key-path fan-out, no-reader `@State` elision, and ancestor-invalidation reuse
-   are still architecture projects. They should follow a workload that proves
-   they beat the current portal/checkpoint/process-tree residuals.
+4. **Do not start a general SwiftUI-style dependency engine from sheet data.**
+   Observable key-path fan-out now has `synthetic-observable-fanout` as its
+   calibration workload; no-reader `@State` elision and ancestor-invalidation
+   reuse remain architecture projects that need their own workload or proof.
 
 ## New-Tranche Opener
 

@@ -19,6 +19,7 @@ run from a clean `swift-tui` checkout with no coordination overlay:
 | `synthetic-narrow-invalidation` | H2/H3 | one small state change in a retained tree; resolve reuse should stay flat while tail work exposes scaling |
 | `synthetic-continuous-animation` | H4 (borders) | continuous `Spinner` repaint → committed frames at `damage_cells = 1` every tick |
 | `synthetic-text-shimmer` | H4 (task-progress) / H5 | `TimelineView(.animation)` changing text → fresh `TextLayoutCache` key per tick |
+| `synthetic-observable-fanout` | observable key-path fan-out / sub-body memo | mutates one `@Observable` key path while same-object peers read other key paths; opt-in `large-body` shape measures one body rebuilding a large cold payload |
 
 ```bash
 cd swift-tui
@@ -34,6 +35,33 @@ Each run writes per-iteration `frames.tsv`, `cpu.tsv`, `memory.tsv`,
 
 These scenarios are auto-covered by `ScenarioSmokeTests` (it iterates
 `PerfScenarioRegistry.all`), so they cannot silently rot.
+
+### Observable fan-out workload
+
+Use `synthetic-observable-fanout` before taking on SwiftUI-style observable
+key-path indexing or sub-body memoization. The default `fanout` shape measures
+current object-token expansion: mutating `hot` should only require hot readers,
+but the current graph dirties all readers of the same observable object. The
+`large-body` shape measures a different cost: one view body reads `hot` and
+builds a large payload derived from `cold`, so key-path fan-out alone is not
+enough.
+
+```bash
+cd swift-tui
+swiftly run swift run -c release --package-path Tools/TermUIPerf termui-perf \
+  run --scenario synthetic-observable-fanout --modes async \
+  --iterations 20 --configuration release
+
+TERMUI_PERF_OBSERVABLE_ROWS=80 TERMUI_PERF_OBSERVABLE_COLUMNS=4 \
+  swiftly run swift run -c release --package-path Tools/TermUIPerf termui-perf \
+  run --scenario synthetic-observable-fanout --modes async \
+  --iterations 20 --configuration release
+
+TERMUI_PERF_OBSERVABLE_SHAPE=large-body TERMUI_PERF_OBSERVABLE_ROWS=80 \
+  swiftly run swift run -c release --package-path Tools/TermUIPerf termui-perf \
+  run --scenario synthetic-observable-fanout --modes async \
+  --iterations 20 --configuration release
+```
 
 ## Tier 2 — Full fidelity: the real 18-tab gallery (overlay)
 
