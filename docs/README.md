@@ -93,6 +93,12 @@ documentation in their own `docs/` trees.
 
 ## Planning Documents
 
+- [plans/2026-06-16-001-focus-press-dirty-frontier-tranche-plan.md](plans/2026-06-16-001-focus-press-dirty-frontier-tranche-plan.md) -
+  execution plan for the next performance tranche: keep hard root-evaluation
+  blockers, but let finite focus/press reuse-safety scopes enter dirty-frontier
+  planning instead of forcing root evaluation; includes the measurement matrix
+  for the follow-up report.
+
 ### Structural Identity Migration (7-stage plan set)
 
 A staged migration that splits SwiftTUI's overloaded `Identity` into four distinct
