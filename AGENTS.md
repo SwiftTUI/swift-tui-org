@@ -24,9 +24,12 @@ repos' native package managers (SwiftPM, Bun/npm, Astro/DocC). The root provides
 | `swift-tui-examples/` | `SwiftTUI/swift-tui-examples` | Runnable Swift examples | `swift_tui_examples` |
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site + DocC | `swift_tui_site` |
 | `swift-tui-android/` | `SwiftTUI/swift-tui-android` | Gradle/Maven AAR + plugin | `swift_tui_android` |
+| `github/` | `SwiftTUI/.github` | GitHub org profile README (docs only) | — |
 
 Submodules are the checkout/pinning layer; Bazel owns cross-repo contracts. Each
 child repo remains the source of truth for its own manifests and release tags.
+`github/` (the `SwiftTUI/.github` org-profile repo) is a pinning-only submodule:
+docs only, no Bazel module or native gate.
 
 ## Public vs coordination contracts
 

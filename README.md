@@ -21,6 +21,7 @@ The root repo provides three things:
 | `swift-tui-examples/` | `SwiftTUI/swift-tui-examples` | Runnable Swift examples and demo gates | `swift_tui_examples` |
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site and DocC composition | `swift_tui_site` |
 | `swift-tui-android/` | `SwiftTUI/swift-tui-android` | Gradle/Maven AAR + plugin | `swift_tui_android` |
+| `github/` | `SwiftTUI/.github` | GitHub org profile README (docs only) | — |
 
 Submodules are only the checkout and pinning layer. Bazel owns cross-repo
 contracts for the pinned organization state. The child repositories remain the
