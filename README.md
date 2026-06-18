@@ -460,7 +460,7 @@ regenerate — not a hand-edit across half a dozen files.
 5. Regenerate the derived files and review the diff:
 
    ```sh
-   python3 tools/registry/generate.py --write
+   mise run generate            # or: python3 tools/registry/generate.py --write
    ```
 
 6. Verify the registry is consistent (also run by `//:org_fast`):

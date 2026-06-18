@@ -15,6 +15,10 @@ run = "bazel fetch //:org_full"
 description = "Verify submodules are initialized and expose Bazel metadata"
 run = "bazel test //:submodule_status"
 
+[tasks.generate]
+description = "Regenerate org-registry files from tools/registry/repos.json (root MODULE.bazel/BUILD.bazel, README table, repos.generated.sh) after editing the manifest. CI verifies they are current via //:repo_registry_contract (mise run org-fast)."
+run = "python3 tools/registry/generate.py --write"
+
 [tasks.org-fast]
 description = "Run the cheap organization contract checks"
 run = "bazel test //:org_fast"
