@@ -13,6 +13,7 @@ The root repo provides three things:
 
 ## Repository Model
 
+<!-- >>> GENERATED:repos-table — edit tools/registry/repos.json, then `python3 tools/registry/generate.py --write` -->
 | Path | GitHub repo | Native contract | Bazel module |
 | --- | --- | --- | --- |
 | `swift-tui/` | `SwiftTUI/swift-tui` | SwiftPM package for framework consumers | `swift_tui` |
@@ -22,6 +23,8 @@ The root repo provides three things:
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site and DocC composition | `swift_tui_site` |
 | `swift-tui-android/` | `SwiftTUI/swift-tui-android` | Gradle/Maven AAR + plugin | `swift_tui_android` |
 | `github/` | `SwiftTUI/.github` | GitHub org profile README (docs only) | — |
+<!-- <<< GENERATED:repos-table -->
+
 
 Submodules are only the checkout and pinning layer. Bazel owns cross-repo
 contracts for the pinned organization state. The child repositories remain the
@@ -300,11 +303,14 @@ Release candidates add a published-pin check:
 bazel test //:release_candidate
 ```
 
-CI runs `//:org_fast` by default from `.github/workflows/org-gate.yml`. The same
-workflow exposes a manual full gate that fetches and runs `//:org_full`. Child
-repositories still own their native workflow definitions; the root workflow
-checks the pinned submodule combination by running Bazel contract targets over
-those child-owned gates.
+This coordination root has **no CI of its own**: `//:org_fast`, `//:org_full`,
+and `//:release_candidate` are run locally and at release time (see the release
+workflow below). Each child repository owns and runs its own GitHub Actions for
+its native gate. To enforce the org-level contract checks (registry staleness,
+pin cleanliness, public-dependency contracts) automatically, add a root
+`.github/workflows/org-gate.yml` that checks out submodules recursively and runs
+`mise run org-fast`; until then, run `bazel test //:org_fast` by hand before
+recording new pins.
 
 ## What The Native Gates Run
 
@@ -314,9 +320,11 @@ repo:
 | Target | Native command |
 | --- | --- |
 | `//:swift_tui_native_gate` | `bun run test` |
+| `//:swift_tui_swiftui_native_gate` | `swift test` (SwiftUIHost suite) |
 | `//:swift_tui_web_native_gate` | `bun run ci` |
 | `//:swift_tui_examples_native_gate` | `Scripts/check_examples.sh --skip-clean` |
-| `//:swift_tui_site_native_gate` | `Scripts/check_site.sh` |
+| `//:swift_tui_site_native_gate` | `Scripts/check_site.sh` + DocC site build |
+| `//:swift_tui_android_native_gate` | `./gradlew :swift-tui-host:testDebugUnitTest` + plugin validation |
 
 The wrapper targets are marked `local` and `no-sandbox` because these first
 entrypoints intentionally run the existing repo-native build systems in their
@@ -430,7 +438,14 @@ the child repo release tags that SwiftPM, npm, or the site workflow consume.
 
 ## Adding A Repository
 
-1. Add a minimal `MODULE.bazel` to the child repo.
+The module set is single-sourced in
+[`tools/registry/repos.json`](tools/registry/repos.json); the root `MODULE.bazel`
+deps, the `BUILD.bazel` native-gate suites, the Repository Model table above, and
+the `tools/registry/repos.generated.sh` arrays the contract scripts read are all
+**generated** from it. Adding a repo is therefore one manifest edit plus a
+regenerate — not a hand-edit across half a dozen files.
+
+1. Add a minimal `MODULE.bazel` to the child repo (declares `module(name = ...)`).
 2. Add a `BUILD.bazel` target that exposes a public `native_gate`.
 3. Add the repo as a submodule:
 
@@ -438,12 +453,20 @@ the child repo release tags that SwiftPM, npm, or the site workflow consume.
    git submodule add git@github.com:SwiftTUI/<repo>.git <repo>
    ```
 
-4. Add `bazel_dep(...)` and `local_path_override(...)` to this repo's
-   `MODULE.bazel`.
-5. Add an alias to `BUILD.bazel` and include it in `//:native_gates`.
-6. Update this README.
-7. Run `bazel test //:repo_registry_contract` to verify the registry stays
-   consistent.
+4. Add one entry to `tools/registry/repos.json` (`name`, `module`, `github`,
+   `url`, `native_contract`, `bazel_module`). Set `bazel_module: false` for a
+   pinning-only repo with no Bazel module or native gate (e.g. the org profile).
+5. Regenerate the derived files and review the diff:
+
+   ```sh
+   python3 tools/registry/generate.py --write
+   ```
+
+6. Verify the registry is consistent (also run by `//:org_fast`):
+
+   ```sh
+   bazel test //:repo_registry_contract
+   ```
 
 ## Troubleshooting
 

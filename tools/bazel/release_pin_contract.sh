@@ -20,13 +20,12 @@ fail() {
   exit 1
 }
 
-repos=(
-  "swift-tui"
-  "swift-tui-swiftui"
-  "swift-tui-web"
-  "swift-tui-examples"
-  "swift-tui-site"
-)
+# Single-sourced from tools/registry/repos.json via the generated bash arrays.
+# BAZEL_MODULE_REPOS covers every Bazel-module child (now incl. swift-tui-android,
+# which was previously missing from this release-reachability check).
+# shellcheck source=tools/registry/repos.generated.sh
+source "$repo_root/tools/registry/repos.generated.sh"
+repos=("${BAZEL_MODULE_REPOS[@]}")
 
 for repo in "${repos[@]}"; do
   head_commit="$(git -C "$repo" rev-parse --verify HEAD^{commit})"

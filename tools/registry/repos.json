@@ -1,0 +1,61 @@
+{
+  "$schema_note": "Single source of truth for the SwiftTUI org submodule registry. Edit THIS file, then run `python3 tools/registry/generate.py --write`. CI / `//:repo_registry_contract` run `--check`. The generator owns marked regions in MODULE.bazel, BUILD.bazel, and README.md, and emits tools/registry/repos.generated.sh for the contract scripts. Fields: name (submodule path), module (Bazel module name, null for non-Bazel repos), github (owner/repo as shown in the README table), url (.gitmodules URL), native_contract (README table prose), bazel_module (true = has a MODULE.bazel + @module//:native_gate wired into //:native_gates and is validated by every git-state contract check; false = pinning-only submodule, e.g. the org-profile repo).",
+  "repos": [
+    {
+      "name": "swift-tui",
+      "module": "swift_tui",
+      "github": "SwiftTUI/swift-tui",
+      "url": "git@github.com:SwiftTUI/swift-tui.git",
+      "native_contract": "SwiftPM package for framework consumers",
+      "bazel_module": true
+    },
+    {
+      "name": "swift-tui-swiftui",
+      "module": "swift_tui_swiftui",
+      "github": "SwiftTUI/swift-tui-swiftui",
+      "url": "git@github.com:SwiftTUI/swift-tui-swiftui.git",
+      "native_contract": "SwiftPM package: native SwiftUI host (macOS/iOS)",
+      "bazel_module": true
+    },
+    {
+      "name": "swift-tui-web",
+      "module": "swift_tui_web",
+      "github": "SwiftTUI/swift-tui-web",
+      "url": "git@github.com:SwiftTUI/swift-tui-web.git",
+      "native_contract": "Bun/npm package workspace",
+      "bazel_module": true
+    },
+    {
+      "name": "swift-tui-examples",
+      "module": "swift_tui_examples",
+      "github": "SwiftTUI/swift-tui-examples",
+      "url": "git@github.com:SwiftTUI/swift-tui-examples.git",
+      "native_contract": "Runnable Swift examples and demo gates",
+      "bazel_module": true
+    },
+    {
+      "name": "swift-tui-site",
+      "module": "swift_tui_site",
+      "github": "SwiftTUI/swift-tui-site",
+      "url": "git@github.com:SwiftTUI/swift-tui-site.git",
+      "native_contract": "Astro site and DocC composition",
+      "bazel_module": true
+    },
+    {
+      "name": "swift-tui-android",
+      "module": "swift_tui_android",
+      "github": "SwiftTUI/swift-tui-android",
+      "url": "git@github.com:SwiftTUI/swift-tui-android.git",
+      "native_contract": "Gradle/Maven AAR + plugin",
+      "bazel_module": true
+    },
+    {
+      "name": "github",
+      "module": null,
+      "github": "SwiftTUI/.github",
+      "url": "git@github.com:SwiftTUI/.github.git",
+      "native_contract": "GitHub org profile README (docs only)",
+      "bazel_module": false
+    }
+  ]
+}

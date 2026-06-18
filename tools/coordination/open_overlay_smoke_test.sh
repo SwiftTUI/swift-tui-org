@@ -65,16 +65,30 @@ else
 fi
 
 # Rewrites run after copy and are mode-independent — verifying once is enough.
+# Enumerate EVERY Package.swift at full depth (not a maxdepth-2 sample) and assert
+# both (a) the localization actually applied and (b) NO manifest still carries an
+# un-localized public SwiftTUI sibling pin. (b) mirrors the materializer's own
+# fail-loud guard, re-checked here so the smoke test still catches a regression if
+# that internal guard is ever weakened.
 rewritten_count=0
+unlocalized=()
 while IFS= read -r -d '' pkg; do
   if grep -q '"swift-tui", path:' "$pkg"; then
     rewritten_count=$((rewritten_count + 1))
   fi
-done < <(find "$worktree_overlay/swift-tui-examples" -maxdepth 2 -name Package.swift -print0)
+  if grep -Eq 'url:[[:space:]]*"https://github\.com/SwiftTUI/swift-tui(-swiftui)?(\.git)?"' "$pkg"; then
+    unlocalized+=("${pkg#$worktree_overlay/}")
+  fi
+done < <(find "$worktree_overlay" -name Package.swift -print0)
 if [[ "$rewritten_count" -ge 1 ]]; then
-  ok "examples Package.swift rewrites applied to $rewritten_count file(s)"
+  ok "examples Package.swift rewrites applied to $rewritten_count file(s) (full-depth scan)"
 else
   err "no examples Package.swift rewrites found"
+fi
+if [[ "${#unlocalized[@]}" -eq 0 ]]; then
+  ok "no un-localized SwiftTUI sibling pins remain in the overlay"
+else
+  err "un-localized SwiftTUI sibling pins remain: ${unlocalized[*]}"
 fi
 
 webexample_package="$worktree_overlay/swift-tui-examples/WebExample/package.json"

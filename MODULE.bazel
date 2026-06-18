@@ -1,15 +1,23 @@
-module(
-    name = "swift_tui_org",
-    version = "0.0.21",
-)
+module(name = "swift_tui_org")
 
 bazel_dep(name = "rules_shell", version = "0.6.1")
-bazel_dep(name = "swift_tui", version = "0.0.22")
-bazel_dep(name = "swift_tui_swiftui", version = "0.0.22")
-bazel_dep(name = "swift_tui_web", version = "0.0.21")
-bazel_dep(name = "swift_tui_examples", version = "0.0.22")
-bazel_dep(name = "swift_tui_site", version = "0.0.21")
-bazel_dep(name = "swift_tui_android", version = "0.0.21")
+
+# The child module declarations below are GENERATED from tools/registry/repos.json
+# by tools/registry/generate.py. Do not hand-edit between the markers; run
+# `python3 tools/registry/generate.py --write` (or `--check` in CI) instead.
+#
+# No versions are declared on these bazel_dep()s: every child is supplied by a
+# local_path_override, so Bazel resolves them as `@_` (override) and ignores any
+# version string. Carrying versions here was inert bookkeeping that drifted out of
+# sync with the real release tags; the release version lives solely in
+# swift-tui-site/docs/releases.yml and is applied by tools/coordination/bump_version.sh.
+# >>> GENERATED:module-deps (tools/registry/generate.py)
+bazel_dep(name = "swift_tui")
+bazel_dep(name = "swift_tui_swiftui")
+bazel_dep(name = "swift_tui_web")
+bazel_dep(name = "swift_tui_examples")
+bazel_dep(name = "swift_tui_site")
+bazel_dep(name = "swift_tui_android")
 
 local_path_override(
     module_name = "swift_tui",
@@ -40,3 +48,4 @@ local_path_override(
     module_name = "swift_tui_android",
     path = "swift-tui-android",
 )
+# <<< GENERATED:module-deps

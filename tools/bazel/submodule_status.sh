@@ -15,13 +15,11 @@ fi
 
 cd "$repo_root"
 
-expected_repos=(
-  "swift-tui"
-  "swift-tui-swiftui"
-  "swift-tui-web"
-  "swift-tui-examples"
-  "swift-tui-site"
-)
+# Single-sourced from tools/registry/repos.json via the generated bash arrays.
+# BAZEL_MODULE_REPOS covers every Bazel-module child (now incl. swift-tui-android).
+# shellcheck source=tools/registry/repos.generated.sh
+source "$repo_root/tools/registry/repos.generated.sh"
+expected_repos=("${BAZEL_MODULE_REPOS[@]}")
 
 if git submodule status --recursive | grep -E '^-'; then
   echo "One or more submodules are not initialized." >&2

@@ -90,6 +90,12 @@ if [[ "$source_mode" == "worktree" ]] && ! command -v rsync >/dev/null 2>&1; the
   fail "--source-mode worktree requires rsync, which was not found on PATH"
 fi
 
+# The SwiftPM version-requirement forms a public sibling manifest may use. The
+# overlay localizes the dependency regardless of which form it is in; if a child
+# adopts a form not listed here, verify_overlay_rewrites() below fails loud rather
+# than letting the overlay silently keep an un-localized (stale/未tagged) pin.
+req_re='(?:exact:\s*"[^"]+"|from:\s*"[^"]+"|\.upToNext(?:Minor|Major)\(from:\s*"[^"]+"\))'
+
 mkdir -p "$(dirname "$output")"
 output_parent="$(cd "$(dirname "$output")" && pwd)"
 output="$output_parent/$(basename "$output")"
@@ -152,10 +158,10 @@ rewrite_examples_overlay() {
     # `swift-tui-swiftui`; the `swift-tui` patterns below are anchored on
     # `swift-tui(.git)?"` and therefore never match it.
     perl -0pi -e \
-      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui-swiftui(?:\.git)?",\s*exact:\s*"[^"]+"\s*\)#.package(name: "swift-tui-swiftui", path: "'"$swiftui_rel"'")#sg' \
+      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui-swiftui(?:\.git)?",\s*'"$req_re"'\s*\)#.package(name: "swift-tui-swiftui", path: "'"$swiftui_rel"'")#sg' \
       "$manifest"
     perl -0pi -e \
-      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui(?:\.git)?",\s*exact:\s*"[^"]+"\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#sg;
+      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui(?:\.git)?",\s*'"$req_re"'\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#sg;
        s#\.package\(name:\s*"swift-tui",\s*path:\s*"[^"]*swift-tui"\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#g' \
       "$manifest"
   done < <(find "$examples_dir" -name Package.swift -print0)
@@ -214,8 +220,39 @@ rewrite_swiftui_overlay() {
   if [[ -f "$manifest" ]]; then
     swift_tui_rel="$(relative_path "$swift_tui_dir" "$swiftui_dir")"
     perl -0pi -e \
-      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui(?:\.git)?",\s*exact:\s*"[^"]+"\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#sg' \
+      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui(?:\.git)?",\s*'"$req_re"'\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#sg' \
       "$manifest"
+  fi
+}
+
+# Fail loud if any sibling dependency was NOT localized. The rewrites above match
+# specific manifest forms; if a child changes its manifest (a new requirement
+# form, a reflow, a renamed file) a rewrite silently no-ops and the overlay would
+# then build against a stale or not-yet-existent public tag, defeating the entire
+# pre-tag gate. This inverts that failure mode: a missed rewrite is an immediate,
+# explanatory error instead of a green build of the wrong sources.
+verify_overlay_rewrites() {
+  problems=()
+
+  # After localization, NO overlay Package.swift may still pin a SwiftTUI sibling
+  # (swift-tui / swift-tui-swiftui) through a public HTTPS URL.
+  while IFS= read -r -d '' manifest; do
+    if grep -Eq 'url:[[:space:]]*"https://github\.com/SwiftTUI/swift-tui(-swiftui)?(\.git)?"' "$manifest"; then
+      problems+=("un-localized SwiftPM sibling pin in ${manifest#$output/}")
+    fi
+  done < <(find "$output" -name Package.swift -print0 2>/dev/null)
+
+  # WebExample must consume the local web packages, not the released tarball URLs.
+  webexample_package="$output/swift-tui-examples/WebExample/package.json"
+  if [[ -f "$webexample_package" ]] && \
+     grep -Eq '"@swifttui/(web|build)":[[:space:]]*"https?://' "$webexample_package"; then
+    problems+=("un-localized @swifttui web tarball dep in swift-tui-examples/WebExample/package.json")
+  fi
+
+  if [[ "${#problems[@]}" -gt 0 ]]; then
+    printf '[materialize_pretag_overlay] overlay rewrite verification FAILED:\n' >&2
+    printf '  - %s\n' "${problems[@]}" >&2
+    fail "a sibling dependency was not localized; update the rewrite patterns in this script for the new manifest form"
   fi
 }
 
@@ -241,5 +278,6 @@ esac
 rewrite_swiftui_overlay
 rewrite_examples_overlay
 rewrite_site_overlay
+verify_overlay_rewrites
 
 printf '%s\n' "$output"
