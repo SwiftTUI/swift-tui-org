@@ -230,6 +230,12 @@ complete platform parity:
   alive, paints the first SwiftTUI gallery frame, renders all 19 tabs, and
   responds to the representative interaction sweep on the API 36.1
   `SwiftTUI_AndroidGallery_arm64` AVD.
+- **Autonomous `.task` loops and animation now run** (previously frozen). A
+  host-driven Swift main-actor executor is installed in the JNI bring-up and
+  drained from the render poll loop, because Android has no OS run loop to drain
+  the Swift main executor. Verified on-device: `Life` advances generations and
+  `Progress`/animation demos animate. See
+  [`2026-06-18-android-main-executor-drive-fix.md`](2026-06-18-android-main-executor-drive-fix.md).
 
 ## Next Work
 
