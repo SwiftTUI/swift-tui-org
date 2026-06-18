@@ -32,6 +32,12 @@ Copies pinned child-repo state into a temporary coordination-owned overlay and
 rewrites dependencies in that overlay only, so pre-tag integration gates can
 test the root-pinned sibling sources before public release tags exist.
 
+Every registered Bazel-module repo (from tools/registry/repos.json) is
+materialized, so the overlay always reflects the full org. The positional
+[all|examples|site] argument is accepted for the gate/open_overlay calling
+convention but no longer narrows which repos are copied (the per-scope rewrites
+self-guard on directory presence).
+
 Options:
   --output DIR         Place the overlay at DIR (default:
                        .build/coordination/pretag-overlay).
@@ -286,21 +292,22 @@ PY
 rm -rf "$output"
 mkdir -p "$output"
 
-case "$scope" in
-  examples)
-    copy_repo swift-tui
-    copy_repo swift-tui-swiftui
-    copy_repo swift-tui-web
-    copy_repo swift-tui-examples
-    ;;
-  site|all)
-    copy_repo swift-tui
-    copy_repo swift-tui-swiftui
-    copy_repo swift-tui-web
-    copy_repo swift-tui-examples
-    copy_repo swift-tui-site
-    ;;
-esac
+# Materialize every registered Bazel-module child repo, single-sourced from
+# tools/registry/repos.json via the generated array, so the overlay always
+# reflects the full org -- including swift-tui-android (which the AndroidGallery
+# example's Gradle build consumes) and any repo added to the registry later. The
+# per-gate rewrite functions below self-guard on directory presence, so copying
+# the full set is safe regardless of `scope` (now retained only for the
+# open_overlay/--print-env calling convention, not to gate the copy). github
+# (docs-only, bazel_module:false) carries no build contract and is not copied.
+registry="$repo_root/tools/registry/repos.generated.sh"
+[[ -f "$registry" ]] || fail "missing generated registry: ${registry#$repo_root/} (run: python3 tools/registry/generate.py --write)"
+# shellcheck source=../registry/repos.generated.sh
+source "$registry"
+
+for repo in "${BAZEL_MODULE_REPOS[@]}"; do
+  copy_repo "$repo"
+done
 
 rewrite_swiftui_overlay
 rewrite_examples_overlay
