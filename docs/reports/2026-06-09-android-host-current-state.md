@@ -1,6 +1,6 @@
 # Android Host Current State
 
-**Date:** 2026-06-10
+**Date:** 2026-06-18
 
 This report records the current state of the Android host effort after the
 latest parity pass. The execution plan remains
@@ -190,14 +190,24 @@ count from `0` to `1`. Screenshots were captured at
 `/tmp/swifttui-overlay-02-life.png`, and
 `/tmp/swifttui-overlay-04-counter-after-plus.png`.
 
+The same day, a broader dev-overlay sweep ran on the
+`SwiftTUI_AndroidGallery_arm64` AVD. It selected and rendered all 19 Gallery tabs
+through physical visible-tab or overflow-menu taps, then exercised representative
+interactions: Counter `+` taps, Text Input focus and text entry, a physical
+scroll on Text Input, Scroll Control's `Down 2` command, Pointer Lab spatial tap,
+drag, and long press, and command-palette navigation to Progress. Local artifacts
+were captured under `/tmp/swifttui-android-sweep-20260618/`; the durable summary
+is [`2026-06-18-android-interaction-sweep.md`](2026-06-18-android-interaction-sweep.md).
+
 ## Current Blockers
 
-- Broader interaction verification has not run tab-by-tab yet; the current
-  device proof covers first paint, tab taps to Counter and Life, and one Counter
-  button tap.
-- Automated accessibility-tree verification is still shallow:
-  `uiautomator dump` exposed the focused Compose host, not the per-node semantic
-  labels from the transparent overlay.
+- Automated accessibility-tree verification is still shallow. `uiautomator dump`
+  now sees generic Compose groups/buttons and a few descriptions such as
+  `Reset counter` and `^K Palette`, but not full per-node SwiftTUI labels,
+  values, and actions.
+- Android Back is not routed through the SwiftTUI presentation/menu stack yet;
+  pressing Back from the app sent the emulator to the launcher in the
+  2026-06-18 sweep.
 
 ## Known Gaps
 
@@ -209,22 +219,25 @@ complete platform parity:
   binary frame protocol.
 - The Compose renderer now paints styled cells and embedded images. It consumes
   damage metadata but does not yet maintain a retained bitmap damage cache.
-- Input bridging covers hardware keys/text and basic touch activation, and the
-  dev-overlay APK now has emulator proof for physical tab/button taps. IME
-  composition, device-level clipboard verification, link opening, broader
-  drag/scroll gesture sweeps, accessibility focus feedback, and Android content
-  URI import remain follow-up work.
+- Input bridging covers hardware keys/text, basic touch activation, physical
+  tab/overflow taps, Counter button taps, Text Input entry, Text Input physical
+  scrolling, Scroll Control button commands, Pointer Lab spatial tap/drag/long
+  press, and command-palette filtering/selection on the dev-overlay APK. IME
+  composition, device-level clipboard verification, link opening, accessibility
+  focus feedback, Android Back routing, and Android content URI import remain
+  follow-up work.
 - Device/emulator behavior is still partial but current. The app opens, stays
-  alive, paints the first SwiftTUI gallery frame, and responds to basic taps on
-  the API 36.1 `SwiftTUI_AndroidGallery_arm64` AVD. It has not yet survived a
-  full tab-by-tab or broader interaction sweep.
+  alive, paints the first SwiftTUI gallery frame, renders all 19 tabs, and
+  responds to the representative interaction sweep on the API 36.1
+  `SwiftTUI_AndroidGallery_arm64` AVD.
 
 ## Next Work
 
-1. Run a full tab-by-tab device/emulator smoke for the styled-cell/image/
-   semantics renderer and record interaction results.
-2. Extend Android input from basic activation to IME composition, drag/scroll,
-   clipboard, links, and accessibility focus feedback.
+1. Promote the useful subset of the 2026-06-18 manual sweep into a repeatable
+   Gradle/ADB smoke lane.
+2. Extend Android semantics and input from the current proof to accessibility
+   labels/actions/values, IME composition, clipboard, links, Android Back
+   routing, and content URI import.
 3. Decide whether JSON remains acceptable or whether the Android host needs a
    binary frame protocol before broader animation profiling.
 4. Add an examples native gate around the wrapper assemble, including explicit

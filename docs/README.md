@@ -20,6 +20,12 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-18-android-interaction-sweep.md](reports/2026-06-18-android-interaction-sweep.md) -
+  dev-overlay emulator sweep for the Android host: all 19 Gallery tabs rendered
+  through physical visible-tab or overflow taps; Counter, Text Input, Scroll
+  Control, Pointer Lab tap/drag/long-press, and command palette interactions
+  update SwiftTUI state; accessibility, Back routing, IME composition,
+  clipboard, links, and content URI import remain gaps.
 - [reports/2026-06-16-focus-press-dirty-frontier-results.md](reports/2026-06-16-focus-press-dirty-frontier-results.md) -
   outcome for the focus/press dirty-frontier tranche: finite focus/press
   retained-reuse safety now enters graph-local dirty work, animation safety stays
