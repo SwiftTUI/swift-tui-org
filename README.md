@@ -1,8 +1,9 @@
 # SwiftTUI Organization Workspace
 
-This repository is the orchestration root for the SwiftTUI GitHub organization.
-It is intentionally not the public framework package. Users still consume
-SwiftTUI through the native package managers owned by the child repositories.
+This repository is the public orchestration root for the SwiftTUI GitHub
+organization. It is intentionally not the framework package, and although the
+repository is public it is not the project's front door — users consume SwiftTUI
+through the native package managers owned by the child repositories.
 
 The root repo provides three things:
 
@@ -34,7 +35,7 @@ source of truth for their native package-manager manifests and release tags.
 
 The child repositories are the public products. By default, a fresh clone of a
 child repository must build with its native tools and must not require this
-coordination repository, Bazel, submodules, or any private checkout layout.
+coordination repository, Bazel, submodules, or any coordination-only checkout layout.
 
 Cross-repository dependencies in public child repositories must point at public,
 tagged artifacts:
