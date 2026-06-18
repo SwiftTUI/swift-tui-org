@@ -17,6 +17,7 @@ cd "$repo_root"
 
 expected_repos=(
   "swift-tui"
+  "swift-tui-swiftui"
   "swift-tui-web"
   "swift-tui-examples"
   "swift-tui-site"

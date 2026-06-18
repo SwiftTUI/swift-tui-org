@@ -49,6 +49,7 @@ cd "$repo_root"
 child_repos=(
   "swift-tui-web"
   "swift-tui"
+  "swift-tui-swiftui"
   "swift-tui-android"
   "swift-tui-examples"
   "swift-tui-site"

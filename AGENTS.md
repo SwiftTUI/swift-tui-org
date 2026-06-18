@@ -19,6 +19,7 @@ repos' native package managers (SwiftPM, Bun/npm, Astro/DocC). The root provides
 | Submodule | GitHub repo | Native contract | Bazel module |
 | --- | --- | --- | --- |
 | `swift-tui/` | `SwiftTUI/swift-tui` | SwiftPM package | `swift_tui` |
+| `swift-tui-swiftui/` | `SwiftTUI/swift-tui-swiftui` | SwiftPM package (SwiftUI host) | `swift_tui_swiftui` |
 | `swift-tui-web/` | `SwiftTUI/swift-tui-web` | Bun/npm workspace | `swift_tui_web` |
 | `swift-tui-examples/` | `SwiftTUI/swift-tui-examples` | Runnable Swift examples | `swift_tui_examples` |
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site + DocC | `swift_tui_site` |

@@ -139,6 +139,7 @@ relative_path() {
 rewrite_examples_overlay() {
   examples_dir="$output/swift-tui-examples"
   swift_tui_dir="$output/swift-tui"
+  swiftui_dir="$output/swift-tui-swiftui"
   web_dir="$output/swift-tui-web"
 
   [[ -d "$examples_dir" ]] || return 0
@@ -146,6 +147,13 @@ rewrite_examples_overlay() {
   while IFS= read -r -d '' manifest; do
     manifest_dir="$(cd "$(dirname "$manifest")" && pwd)"
     swift_tui_rel="$(relative_path "$swift_tui_dir" "$manifest_dir")"
+    swiftui_rel="$(relative_path "$swiftui_dir" "$manifest_dir")"
+    # Rewrite the swift-tui-swiftui pin first. Its URL ends in
+    # `swift-tui-swiftui`; the `swift-tui` patterns below are anchored on
+    # `swift-tui(.git)?"` and therefore never match it.
+    perl -0pi -e \
+      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui-swiftui(?:\.git)?",\s*exact:\s*"[^"]+"\s*\)#.package(name: "swift-tui-swiftui", path: "'"$swiftui_rel"'")#sg' \
+      "$manifest"
     perl -0pi -e \
       's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui(?:\.git)?",\s*exact:\s*"[^"]+"\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#sg;
        s#\.package\(name:\s*"swift-tui",\s*path:\s*"[^"]*swift-tui"\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#g' \
@@ -193,23 +201,44 @@ rewrite_site_overlay() {
   fi
 }
 
+# swift-tui-swiftui (the native SwiftUI host) consumes swift-tui through a tagged
+# HTTPS dependency. Rewrite it to the overlay's local swift-tui so the host —
+# and the examples that depend on it — build against pinned sibling sources
+# before release tags exist.
+rewrite_swiftui_overlay() {
+  swiftui_dir="$output/swift-tui-swiftui"
+  swift_tui_dir="$output/swift-tui"
+  [[ -d "$swiftui_dir" ]] || return 0
+
+  manifest="$swiftui_dir/Package.swift"
+  if [[ -f "$manifest" ]]; then
+    swift_tui_rel="$(relative_path "$swift_tui_dir" "$swiftui_dir")"
+    perl -0pi -e \
+      's#\.package\(\s*url:\s*"https://github\.com/SwiftTUI/swift-tui(?:\.git)?",\s*exact:\s*"[^"]+"\s*\)#.package(name: "swift-tui", path: "'"$swift_tui_rel"'")#sg' \
+      "$manifest"
+  fi
+}
+
 rm -rf "$output"
 mkdir -p "$output"
 
 case "$scope" in
   examples)
     copy_repo swift-tui
+    copy_repo swift-tui-swiftui
     copy_repo swift-tui-web
     copy_repo swift-tui-examples
     ;;
   site|all)
     copy_repo swift-tui
+    copy_repo swift-tui-swiftui
     copy_repo swift-tui-web
     copy_repo swift-tui-examples
     copy_repo swift-tui-site
     ;;
 esac
 
+rewrite_swiftui_overlay
 rewrite_examples_overlay
 rewrite_site_overlay
 

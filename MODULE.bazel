@@ -4,15 +4,21 @@ module(
 )
 
 bazel_dep(name = "rules_shell", version = "0.6.1")
-bazel_dep(name = "swift_tui", version = "0.0.21")
+bazel_dep(name = "swift_tui", version = "0.0.22")
+bazel_dep(name = "swift_tui_swiftui", version = "0.0.22")
 bazel_dep(name = "swift_tui_web", version = "0.0.21")
-bazel_dep(name = "swift_tui_examples", version = "0.0.21")
+bazel_dep(name = "swift_tui_examples", version = "0.0.22")
 bazel_dep(name = "swift_tui_site", version = "0.0.21")
 bazel_dep(name = "swift_tui_android", version = "0.0.21")
 
 local_path_override(
     module_name = "swift_tui",
     path = "swift-tui",
+)
+
+local_path_override(
+    module_name = "swift_tui_swiftui",
+    path = "swift-tui-swiftui",
 )
 
 local_path_override(

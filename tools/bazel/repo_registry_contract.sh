@@ -43,6 +43,7 @@ require_regex() {
 
 repos=(
   "swift-tui"
+  "swift-tui-swiftui"
   "swift-tui-web"
   "swift-tui-examples"
   "swift-tui-site"
@@ -50,6 +51,7 @@ repos=(
 
 modules=(
   "swift_tui"
+  "swift_tui_swiftui"
   "swift_tui_web"
   "swift_tui_examples"
   "swift_tui_site"
@@ -57,6 +59,7 @@ modules=(
 
 urls=(
   "git@github.com:SwiftTUI/swift-tui.git"
+  "git@github.com:SwiftTUI/swift-tui-swiftui.git"
   "git@github.com:SwiftTUI/swift-tui-web.git"
   "git@github.com:SwiftTUI/swift-tui-examples.git"
   "git@github.com:SwiftTUI/swift-tui-site.git"

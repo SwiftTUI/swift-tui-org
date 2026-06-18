@@ -16,6 +16,7 @@ The root repo provides three things:
 | Path | GitHub repo | Native contract | Bazel module |
 | --- | --- | --- | --- |
 | `swift-tui/` | `SwiftTUI/swift-tui` | SwiftPM package for framework consumers | `swift_tui` |
+| `swift-tui-swiftui/` | `SwiftTUI/swift-tui-swiftui` | SwiftPM package: native SwiftUI host (macOS/iOS) | `swift_tui_swiftui` |
 | `swift-tui-web/` | `SwiftTUI/swift-tui-web` | Bun/npm package workspace | `swift_tui_web` |
 | `swift-tui-examples/` | `SwiftTUI/swift-tui-examples` | Runnable Swift examples and demo gates | `swift_tui_examples` |
 | `swift-tui-site/` | `SwiftTUI/swift-tui-site` | Astro site and DocC composition | `swift_tui_site` |
