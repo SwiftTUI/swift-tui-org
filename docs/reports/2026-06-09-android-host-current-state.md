@@ -153,9 +153,48 @@ returned `Status: ok`, the app process stayed alive as pid `3430`, and the
 screenshot at `/tmp/swifttui-androidgallery-api35-medium.png` shows the hosted
 SwiftTUI gallery with the tab bar and SwiftTUI logo content.
 
+The 2026-06-18 follow-up used the coordination dev overlay for the pre-release
+Android experience:
+
+```bash
+bazel run //:open_overlay -- --print-env examples
+cd .build/coordination/dev-overlay/swift-tui-examples/AndroidGallery
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle" \
+SWIFT_ANDROID_ROOT="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android" \
+swiftly run swift package clean --package-path SwiftPackage
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d" \
+SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle" \
+SWIFT_ANDROID_ROOT="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android" \
+./gradlew --no-daemon --console=plain :app:assembleDebug
+```
+
+That overlay rewrites `AndroidGallery/SwiftPackage/Package.swift` to consume the
+local `swift-tui` checkout as a path dependency while the public child manifest
+stays pinned to `0.0.21`. The non-overlay public build still resolves that
+released SwiftTUI tag, so pre-release input verification needs the dev overlay
+until the next coordinated release bump.
+
+On the `SwiftTUI_AndroidGallery_arm64` AVD, the overlay APK installed and
+launched successfully. Physical `adb shell input tap` events switched `Logo` ->
+`Counter` -> `Life`, and a tap on Counter's `+` button incremented the displayed
+count from `0` to `1`. Screenshots were captured at
+`/tmp/swifttui-overlay-00-initial.png`,
+`/tmp/swifttui-overlay-01-counter.png`,
+`/tmp/swifttui-overlay-02-life.png`, and
+`/tmp/swifttui-overlay-04-counter-after-plus.png`.
+
 ## Current Blockers
 
-- Runtime verification beyond first paint has not run tab-by-tab yet.
+- Broader interaction verification has not run tab-by-tab yet; the current
+  device proof covers first paint, tab taps to Counter and Life, and one Counter
+  button tap.
 - Automated accessibility-tree verification is still shallow:
   `uiautomator dump` exposed the focused Compose host, not the per-node semantic
   labels from the transparent overlay.
@@ -170,19 +209,20 @@ complete platform parity:
   binary frame protocol.
 - The Compose renderer now paints styled cells and embedded images. It consumes
   damage metadata but does not yet maintain a retained bitmap damage cache.
-- Input bridging covers hardware keys/text and basic touch activation. IME
-  composition, clipboard, link opening, precise drag/scroll gestures,
-  accessibility focus feedback, and Android content URI import remain follow-up
-  work.
+- Input bridging covers hardware keys/text and basic touch activation, and the
+  dev-overlay APK now has emulator proof for physical tab/button taps. IME
+  composition, device-level clipboard verification, link opening, broader
+  drag/scroll gesture sweeps, accessibility focus feedback, and Android content
+  URI import remain follow-up work.
 - Device/emulator behavior is still partial but current. The app opens, stays
-  alive, and paints the first SwiftTUI gallery frame on the API 35
-  `SwiftTUI_AndroidGallery_api35_medium_arm64` AVD. It has not yet survived
-  tab-by-tab or broader interaction sweeps.
+  alive, paints the first SwiftTUI gallery frame, and responds to basic taps on
+  the API 36.1 `SwiftTUI_AndroidGallery_arm64` AVD. It has not yet survived a
+  full tab-by-tab or broader interaction sweep.
 
 ## Next Work
 
-1. Run tab-by-tab device/emulator smoke for the new styled-cell/image/semantics
-   renderer and record interaction results.
+1. Run a full tab-by-tab device/emulator smoke for the styled-cell/image/
+   semantics renderer and record interaction results.
 2. Extend Android input from basic activation to IME composition, drag/scroll,
    clipboard, links, and accessibility focus feedback.
 3. Decide whether JSON remains acceptable or whether the Android host needs a
