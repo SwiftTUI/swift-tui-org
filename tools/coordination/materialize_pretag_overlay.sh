@@ -171,24 +171,38 @@ rewrite_examples_overlay() {
     perl -0pi -e 's#relativePath = [^;]*swift-tui;#relativePath = ../../swift-tui;#g' "$pbxproj"
   fi
 
-  webexample_package="$examples_dir/WebExample/package.json"
-  if [[ -f "$webexample_package" && -d "$web_dir" ]]; then
-    perl -0pi -e \
-      's#("\@swifttui/build":\s*")[^"]+(")#$1file:../../swift-tui-web/packages/build$2#;
-       s#("\@swifttui/web":\s*")[^"]+(")#$1file:../../swift-tui-web/packages/web$2#' \
-      "$webexample_package"
-  fi
-
+  # Localize the released @swifttui web packages to the overlay's local web build
+  # by editing only the examples ROOT package.json: add the two local web packages
+  # as Bun workspace members and redirect @swifttui/{web,build} to them via an
+  # `overrides: workspace:*` block. Unlike a Swift Package.swift (code, only
+  # editable by regex), package.json is data, so this is applied with a real JSON
+  # parser -- a manifest reflow or a changed dependency form cannot silently no-op
+  # it. Workspace members are symlinked (not file:-copied), which avoids a link
+  # collision when @swifttui/build itself depends on @swifttui/web. This leaves
+  # WebExample/package.json untouched (the root override reaches the workspace), so
+  # we no longer rewrite a child file the root does not own.
   examples_package="$examples_dir/package.json"
   if [[ -f "$examples_package" && -d "$web_dir" ]]; then
-    perl -0pi -e \
-      's#"workspaces"\s*:\s*\[[^\]]*\]#"workspaces": [
-    "WebExample",
-    "../swift-tui-web/packages/web",
-    "../swift-tui-web/packages/build"
-  ]#s;
-       s#("\@swifttui/web":\s*")[^"]+(")#$1workspace:*$2#g' \
-      "$examples_package"
+    python3 - "$examples_package" <<'PY'
+import collections, json, sys
+
+path = sys.argv[1]
+with open(path) as handle:
+    data = json.load(handle, object_pairs_hook=collections.OrderedDict)
+
+workspaces = data.setdefault("workspaces", [])
+for member in ("../swift-tui-web/packages/web", "../swift-tui-web/packages/build"):
+    if member not in workspaces:
+        workspaces.append(member)
+
+overrides = data.setdefault("overrides", collections.OrderedDict())
+overrides["@swifttui/web"] = "workspace:*"
+overrides["@swifttui/build"] = "workspace:*"
+
+with open(path, "w") as handle:
+    json.dump(data, handle, indent=2)
+    handle.write("\n")
+PY
   fi
 
   examples_script="$examples_dir/Scripts/check_examples.sh"
@@ -242,11 +256,24 @@ verify_overlay_rewrites() {
     fi
   done < <(find "$output" -name Package.swift -print0 2>/dev/null)
 
-  # WebExample must consume the local web packages, not the released tarball URLs.
-  webexample_package="$output/swift-tui-examples/WebExample/package.json"
-  if [[ -f "$webexample_package" ]] && \
-     grep -Eq '"@swifttui/(web|build)":[[:space:]]*"https?://' "$webexample_package"; then
-    problems+=("un-localized @swifttui web tarball dep in swift-tui-examples/WebExample/package.json")
+  # The examples root package.json must localize the web packages: @swifttui/web
+  # and @swifttui/build redirected to workspace:* AND the two local web packages
+  # present as workspace members. The WebExample workspace keeps its released
+  # tarball deps verbatim; the root override is what localizes them, so we assert on
+  # the override + workspace membership, not on WebExample's untouched deps.
+  examples_package="$output/swift-tui-examples/package.json"
+  if [[ -f "$examples_package" ]] && [[ -d "$output/swift-tui-web" ]] && \
+     ! python3 - "$examples_package" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+overrides = data.get("overrides", {})
+workspaces = data.get("workspaces", [])
+redirected = all(overrides.get(k) == "workspace:*" for k in ("@swifttui/web", "@swifttui/build"))
+members = all(m in workspaces for m in ("../swift-tui-web/packages/web", "../swift-tui-web/packages/build"))
+sys.exit(0 if redirected and members else 1)
+PY
+  then
+    problems+=("examples package.json did not localize @swifttui/{web,build} to local workspace members")
   fi
 
   if [[ "${#problems[@]}" -gt 0 ]]; then

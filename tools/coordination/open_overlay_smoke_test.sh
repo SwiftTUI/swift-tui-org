@@ -91,18 +91,23 @@ else
   err "un-localized SwiftTUI sibling pins remain: ${unlocalized[*]}"
 fi
 
-webexample_package="$worktree_overlay/swift-tui-examples/WebExample/package.json"
-if grep -q '"@swifttui/web": "file:../../swift-tui-web/packages/web"' "$webexample_package"; then
-  ok "WebExample package rewrites @swifttui/web to the local overlay package"
+# Web localization is now a structured edit to the examples ROOT package.json (not
+# per-file regex rewrites): the two local web packages are added as workspace
+# members and @swifttui/{web,build} are redirected to them via overrides:workspace:*.
+examples_package="$worktree_overlay/swift-tui-examples/package.json"
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); ov=d.get('overrides',{}); ws=d.get('workspaces',[]); sys.exit(0 if ov.get('@swifttui/web')=='workspace:*' and ov.get('@swifttui/build')=='workspace:*' and '../swift-tui-web/packages/web' in ws else 1)" "$examples_package"; then
+  ok "examples package.json localizes @swifttui/{web,build} to local workspace members"
 else
-  err "WebExample package did not rewrite @swifttui/web to the local overlay package"
+  err "examples package.json did not localize @swifttui web packages to workspace members"
 fi
 
-examples_package="$worktree_overlay/swift-tui-examples/package.json"
-if grep -q '"@swifttui/web": "workspace:\*"' "$examples_package"; then
-  ok "examples workspace override no longer forces released @swifttui/web"
+# ...and that WebExample/package.json is left UNTOUCHED (the root override reaches
+# it; we no longer rewrite a child file the root does not own).
+webexample_package="$worktree_overlay/swift-tui-examples/WebExample/package.json"
+if grep -q 'releases/download/.*swifttui-web' "$webexample_package"; then
+  ok "WebExample package.json left untouched (root override localizes it, no per-file rewrite)"
 else
-  err "examples workspace override still forces released @swifttui/web"
+  err "WebExample package.json was unexpectedly modified (should keep its released tarball deps)"
 fi
 
 # ─── open_overlay --print-env examples: emits exports, head mode skips marker ─
