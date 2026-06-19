@@ -8,6 +8,14 @@ The WebExample marketing embed uses `wheelMode: "chain"`. Verified: the
 WebExample's Animations/Images tabs use `ScrollView` (chaining is observable
 there); the Game-of-life hero has none, so it stays fully passive (no scroll
 trap). Unit tests on both sides green.
+
+> **Update (2026-06-19):** `"chain"` is now the **library default** wheel mode
+> (was `"capture"`), so any embed lets the page scroll past non-scrollable
+> content without opting in; the standalone full-screen WebExample opts back into
+> `"capture"`. The per-region scroll-extent metadata is now forwarded to **all**
+> hosts (Android JNI + native SwiftUI), not just web, and the core `ScrollView`
+> gained touch/pointer **drag-to-pan** for iOS/Android. See
+> [`docs/plans/2026-06-19-001-cross-host-scrolling-plan.md`](../plans/2026-06-19-001-cross-host-scrolling-plan.md).
 Scope (spans repos — hence this lives in the coordination root):
 - `swift-tui` — `SwiftTUICore` semantics + `Platforms/WASI` surface encoder
 - `swift-tui-web` — `@swifttui/web` host runtime + surface transport
