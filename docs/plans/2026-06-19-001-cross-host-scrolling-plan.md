@@ -137,7 +137,14 @@ already forwards `touchesBegan/Moved/Ended` as `.down/.dragged/.up`).
 
 ### 5.2 Deferred (with rationale)
 
-- **Momentum / fling — blocked, needs infrastructure.** Three compounding
+- **Momentum / fling — RESOLVED (2026-06-20).** Picked up and solved at the root;
+  the synthetic-`.scrolled` path below was the corner, not the fix. See
+  [`docs/proposals/2026-06-20-001-scroll-momentum-fling-architecture.md`](../proposals/2026-06-20-001-scroll-momentum-fling-architecture.md):
+  a run-loop-owned `ScrollMomentumController` (physics integrator) ticked by the
+  existing 33 ms animation deadline cadence pushes sub-cell-accumulated integer
+  deltas through `LocalScrollPositionRegistry.scrollBy` — no synthetic events, no
+  animation-system change, no `ScrollView` `body`. The original rationale is kept
+  below for the record. Three compounding
   reasons it is not a clean drop-in: (1) the animation controller interpolates
   *render-time* animatable slots (opacity, `.offset`/`.position` layout, shape
   styles) by diffing placed trees — it does **not** re-run layout with
