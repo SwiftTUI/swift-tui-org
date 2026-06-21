@@ -56,21 +56,21 @@ repos.
 
 ## Current Public Pre-Release State
 
-All child repositories are public and tagged at `0.0.25`. Public child defaults
+All child repositories are public and tagged at `0.0.26`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.25` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.0.26` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.25` release.
+  the GitHub `0.0.26` release.
 - `swift-tui-android` publishes the `sh.swifttui:android-host` AAR and
-  `sh.swifttui.android` Gradle plugin at `0.0.25`.
-- `swift-tui-examples` uses the `swift-tui` `0.0.25` tag and the web `0.0.25`
-  release tarballs by default; AndroidGallery also uses the Android `0.0.25`
+  `sh.swifttui.android` Gradle plugin at `0.0.26`.
+- `swift-tui-examples` uses the `swift-tui` `0.0.26` tag and the web `0.0.26`
+  release tarballs by default; AndroidGallery also uses the Android `0.0.26`
   artifacts.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.25` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.26` tag.
 
-As of `0.0.25`, `@swifttui/web` and `@swifttui/build` are published to npm and
+As of `0.0.26`, `@swifttui/web` and `@swifttui/build` are published to npm and
 also attached to the GitHub release as tarballs. In-org consumers
 (`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
 release tarball URLs; external consumers can install the npm package names
@@ -369,7 +369,7 @@ bazel test //:org_full
 
 ## Bumping the Org Version
 
-The release version (currently `0.0.25`) is denormalized across every child:
+The release version (currently `0.0.26`) is denormalized across every child:
 `package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
 `exactVersion`, Android Gradle plugin/AAR coordinates, GitHub release tarball
 URLs, `tree`/`blob`/`tag` links, site display strings, and the canonical
