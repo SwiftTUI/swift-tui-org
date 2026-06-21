@@ -19,17 +19,20 @@ For each of the 56 mirrored catalog entries (paired by stable `id`):
    computes the content-extent **IoU** + componentwise delta, classifies
    PASS/WARN/REVIEW/MISSING, and writes a ranked Markdown report with the SwiftUI
    PNG + SwiftTUI ASCII grid as paired evidence.
+4. **SwiftTUI pixel exporter** (`swifttui-raster/`, a coordination-only SwiftPM
+   tool): renders each entry to a true PNG via the swift-tui-swiftui
+   `@_spi(Raster)` offscreen seam (`SwiftUIHostAppState.renderSelectedSceneToCGImage`)
+   → `/tmp/layout-probe/swifttui-png/<id>.swifttui.png`.
+5. **Pixel visual tier** (`pixel_compare.py`): assembles a **SwiftUI | SwiftTUI**
+   side-by-side contact sheet ranked by the geometry IoU.
 
 Canvas: 60×30 cells at 10 pt/cell (`LayoutScale.cell`).
 
 ## Run
 
-```bash
-tools/layout-diff/run.sh
+```sh
+tools/layout-diff/run.sh   # all five steps; needs swiftly + macOS/AppKit + ImageMagick
 ```
-
-(Needs `swiftly` + the pinned Swift 6.3.x toolchain and macOS/AppKit. The
-exporters are env-gated, so they are no-ops in the normal example gates.)
 
 ## Signal & honest limits
 
@@ -44,13 +47,25 @@ exporters are env-gated, so they are no-ops in the normal example gates.)
   accessibility spike: SwiftUI's a11y subtree does not materialize in an
   offscreen test process), so this compares content extent, not per-element rects.
 
-## Deferred (next tier — needs a cross-repo change)
+## True-pixel tier (implemented)
 
-True SwiftTUI **pixel** renders for DSSIM/AE heatmap contact sheets need a small
-`@_spi(Raster)` `renderLatestSurfaceToCGImage` seam on `SwiftUIHostSceneHost` in
-the public `swift-tui-swiftui` repo (decision D2), consumed pre-tag via the
-coordination overlay. ImageMagick (`/opt/homebrew/bin/{compare,magick}`) is
-already present for that tier.
+The SwiftTUI pixel renders come from the `@_spi(Raster)` seam in
+`swift-tui-swiftui` (`SwiftUIHostRasterCapture` + `SwiftUIHostAppState`
+.renderSelectedSceneToCGImage / .resizeSelectedScene / .selectedSceneFrameSequence),
+which reuses the on-screen `NativeRasterSurfaceRenderer` into an offscreen flipped
+`CGContext`. The `swifttui-raster/` tool path-deps the LOCAL swift-tui-swiftui
+(seam) + LOCAL `layouts` catalog while taking swift-tui from the same tagged
+release both already pin — so there is **no dependency-override conflict and the
+public child repos are untouched**.
+
+**DSSIM/AE pixel diff was tried and dropped:** the two engines render text
+differently (SwiftUI proportional ink at square cells vs SwiftTUI monospace
+glyphs at tall cells), so a force-resized pair is ~maximally different for every
+entry and the metric saturates (heatmap ~all-red). The side-by-side visual +
+the geometry IoU are the real signals. Note also that the SwiftTUI content-bbox
+(`diff.py`) measures non-space *glyphs*, so it undercounts background-color fills
+(rectangles drawn as colored spaces) — the pixel pair compensates; upgrading the
+bbox to count styled cells via `rasterSurface.cells` is a worthwhile follow-up.
 
 ## Placement / hygiene
 

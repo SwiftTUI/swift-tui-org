@@ -1,9 +1,11 @@
 # Plan — SwiftUI vs SwiftTUI Layout-Comparison Screenshot + Discrepancy Analysis
 
 - **Date:** 2026-06-21
-- **Status:** Phase 0/1 BUILT & RUN (headless content-extent tier complete);
-  geometry-primary GATE FAILED (see §8); raster-pixel tier deferred (needs the
-  D2 cross-repo seam). Decisions D1/D2 locked; D3–D7 open.
+- **Status:** Phases 0–3 BUILT & RUN. Headless content-extent tier + true-pixel
+  tier both complete; the D2 `@_spi(Raster)` seam is IMPLEMENTED, tested, and
+  consumed by a coordination-only exporter (see §8). Geometry-primary per-element
+  gate FAILED (a11y); pivoted to content-extent IoU + pixel side-by-side.
+  Decisions D1/D2 locked; D3–D7 open.
 - **Owner repo:** `swift-tui-org` (coordination root) — tooling, goldens, and reports
   live here; native-only exporter targets land in the public
   `swift-tui-examples` child.
@@ -305,11 +307,34 @@ small width/height deltas are noise; and the black-background pixel bbox can rea
 dark-on-dark SwiftUI content as MISSING. Both are resolved by the deferred
 true-pixel tier.
 
-**Deferred (the wise-stop boundary — cross-repo):** the D2 `@_spi(Raster)`
-`renderLatestSurfaceToCGImage` seam in `swift-tui-swiftui` → true SwiftTUI pixel
-PNGs → ImageMagick DSSIM/AE heatmap contact sheets, consumed pre-tag via the
-coordination overlay. Plus the optional Tier-3 window-screenshot sweep (drives
-the GUI app; needs Screen Recording perms).
+**True-pixel tier (IMPLEMENTED, D2):**
+- `@_spi(Raster)` seam in `swift-tui-swiftui`: `SwiftUIHostRasterCapture.image(of:style:scale:)`
+  reuses the on-screen `NativeRasterSurfaceRenderer` into an offscreen flipped
+  `CGContext`; exposed on the host (`renderLatestSurfaceToCGImage`,
+  `latestFrameSequence`) and on `SwiftUIHostAppState`
+  (`renderSelectedSceneToCGImage`, `resizeSelectedScene`,
+  `selectedSceneFrameSequence`). Unit-tested (`SwiftUIHostRasterCaptureTests`);
+  full host suite green. Fixes needed: `public import CoreGraphics`
+  (InternalImportsByDefault) + `unsafe` on the raw-pointer `CGContext`
+  (StrictMemorySafety).
+- `tools/layout-diff/swifttui-raster/`: a coordination-only SwiftPM tool that
+  path-deps the LOCAL swift-tui-swiftui (seam) + LOCAL `layouts`, taking
+  swift-tui from the same 0.0.27 tag both already pin (no override conflict, the
+  public child untouched). Drives a headless `SwiftUIHostAppState` per entry,
+  settles on a stable frame, and captures via the seam → 56/56 PNGs.
+- `tools/layout-diff/pixel_compare.py`: SwiftUI|SwiftTUI side-by-side contact
+  sheet ranked by the geometry IoU. **DSSIM/AE dropped** — the two render models
+  (proportional ink vs monospace cells) make any force-resized pixel diff
+  saturate; the side-by-side visual + geometry IoU are the real signals.
+
+**Found:** the SwiftTUI content-bbox measures non-space *glyphs*, so it
+undercounts background-color fills (rectangles drawn as colored spaces) — e.g.
+`zstack.sized-by-largest` reads as IoU 0.07 but the pixels show near-parity. The
+pixel pair compensates; upgrading the bbox to count styled cells (`rasterSurface.cells`)
+is a worthwhile follow-up.
+
+**Still deferred:** the optional Tier-3 window-screenshot sweep (drives the GUI
+app; needs Screen Recording perms) and the styled-cell bbox upgrade.
 
 **Repo state:** `swift-tui-examples` submodule is dirty (new native-only test
 targets + a `Package.swift` test-target addition) — uncommitted, so `org_fast`'s

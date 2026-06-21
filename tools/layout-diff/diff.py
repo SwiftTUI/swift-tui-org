@@ -211,10 +211,10 @@ def write_csv(rows: list[Row], path: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["id", "category", "tier", "max_abs_delta",
+        w.writerow(["id", "category", "tier", "iou", "max_abs_delta",
                     "ui_bbox", "tui_bbox_clipped", "tui_bbox_raw", "overflow", "deltas"])
         for r in rows:
-            w.writerow([r.id, r.category, r.tier, r.max_abs,
+            w.writerow([r.id, r.category, r.tier, f"{r.iou:.4f}", r.max_abs,
                         fmt_bbox(r.ui), fmt_bbox(r.tui), fmt_bbox(r.tui_raw),
                         r.overflow, fmt_delta(r.deltas)])
 
