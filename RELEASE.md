@@ -82,7 +82,13 @@ swift-tui-web  →  swift-tui  →  swift-tui-swiftui  →  swift-tui-android  �
   tag-move cascade (swift-tui → examples lock re-pins → root pins), and
   moved tags additionally trip SwiftPM's fingerprint tamper check
   (`~/.swiftpm/security/fingerprints`) on any machine that resolved the old
-  tag. Check first; it was learned the hard way cutting `0.0.19`.
+  tag. Check first — the wasm cross-build is the **only** safeguard, because the
+  Linux Repo Gate does not compile wasm32-wasi. Learned the hard way cutting
+  `0.0.19`, then **re-hit at `0.0.26`**: `EnvFrameTraceSink`, a new
+  `SwiftTUIRuntime` diagnostic file with `Darwin`/`Glibc`-only imports and
+  unguarded C stdio, shipped green through every gate and broke the
+  `swift-tui-examples` *and* `swift-tui-site` gates against the `0.0.26` tag
+  (`0.0.27` is the fix). Until the Repo Gate compiles WASI, never skip this.
 
 ## 0. Bump the authored version strings
 
