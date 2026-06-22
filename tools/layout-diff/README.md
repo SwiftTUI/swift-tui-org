@@ -31,7 +31,10 @@ Canvas: 60×30 cells at 10 pt/cell (`LayoutScale.cell`).
 ## Run
 
 ```sh
-tools/layout-diff/run.sh   # all five steps; needs swiftly + macOS/AppKit + ImageMagick
+mise run layout-diff       # all five steps (preferred)
+tools/layout-diff/run.sh   # same thing, without mise
+
+# needs swiftly + the pinned Swift 6.3.x toolchain, macOS/AppKit, and ImageMagick
 ```
 
 ## Signal & honest limits

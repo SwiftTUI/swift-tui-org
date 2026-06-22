@@ -54,3 +54,7 @@ run = "bazel test //:worktree_gates"
 [tasks.overlay-smoke]
 description = "Cheap script-level regression check for the overlay tooling"
 run = "bazel test //:open_overlay_smoke"
+
+[tasks.layout-diff]
+description = "SwiftUI-vs-SwiftTUI layout-comparison sweep: render every gallery comparison in both engines headless, then emit the geometry/IoU report + the side-by-side pixel contact sheet. Needs swiftly + macOS/AppKit + ImageMagick. See tools/layout-diff/README.md."
+run = "tools/layout-diff/run.sh"
