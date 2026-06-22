@@ -33,6 +33,18 @@ enum Export {
   static let scale: CGFloat = 2
   static let outDir = "/tmp/layout-probe/swifttui-png"
 
+  /// Normalize chrome to black-on-white so default text/background color
+  /// differences don't read as layout discrepancies. The host synthesizes a
+  /// matching (light) theme from this palette, so default text resolves to
+  /// black; intrinsic per-view colors (blue/red/gray fills) are preserved.
+  static let blackOnWhite = SwiftUIHostTerminalPalette(
+    foreground: try! .hex("#000000"),
+    background: try! .hex("#FFFFFF"),
+    cursor: try! .hex("#000000"),
+    selectionBackground: try! .hex("#D0D0D0"),
+    selectionForeground: try! .hex("#000000")
+  )
+
   static func main() async {
     await run()
   }
@@ -40,7 +52,7 @@ enum Export {
   @MainActor
   static func run() async {
     try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
-    let style = SwiftUIHostTerminalStyle(fontSize: 12, cursorBlink: false)
+    let style = SwiftUIHostTerminalStyle(fontSize: 12, cursorBlink: false, palette: blackOnWhite)
 
     var ok = 0
     var failures: [String] = []
