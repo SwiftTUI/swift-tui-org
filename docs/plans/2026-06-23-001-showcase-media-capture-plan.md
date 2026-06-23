@@ -104,9 +104,23 @@ All Swift example commands use `swiftly run swift …` (pinned 6.3.x). Run from
 
 ### 4.1 Terminal — `gallery` (and the four example cards)
 
-Tooling already exists: **`swift-tui-examples/Scripts/screenshot_gallery.sh`**
-(kitty + macOS `screencapture`, supports `--tab`). Prereqs: Homebrew `kitty`,
-Screen-Recording + Accessibility permissions for the driving terminal.
+Tooling: **`swift-tui-examples/Scripts/screenshot_gallery.sh`** (gallery, with
+`--tab`) and the generalized **`Scripts/screenshot_app.sh <out> <binary>
+[args…]`** (any terminal app; `HOLD=1` keeps the window open for non-interactive
+apps like `gitviz`). Both use kitty + macOS `screencapture`.
+
+> ⚠️ **BLOCKED on macOS Screen Recording permission (2026-06-23).** These were
+> attempted but could not complete in this automated session: `screencapture`
+> returns **all-black frames** unless the *driving app* (the terminal / Claude
+> Code host) holds a **Screen Recording** grant in System Settings → Privacy &
+> Security, and that grant cannot be made from the CLI. (`simctl`/`adb` capture
+> from the sim/emulator buffer and are unaffected — which is why iOS/Android
+> succeeded.) Two independent issues surfaced: System Events window enumeration
+> was flaky (returned 0 windows), and `screencapture -R/-l` produced black even
+> once the window bounds were found reliably via Quartz `CGWindowList`. **To
+> finish:** grant Screen Recording to the terminal, then run the commands below
+> interactively. For headless reliability, locate the kitty window via Quartz
+> (`pyobjc-framework-Quartz`, `CGWindowList`) rather than System Events.
 
 ```bash
 # build once
@@ -323,11 +337,14 @@ Video: Playwright `recordVideo` (webm) or a screen recording of the live demo.
 
 ## 7. Task checklist
 
-**Phase A — terminal + web (fully scriptable on this Mac, no extra hardware)**
-- [ ] Generalize `screenshot_gallery.sh`; capture `host-terminal.png` + the 4
-      example-card stills (`gifeditor/terminal-workspace/layouts-swiftui/gitviz`).
-- [ ] Playwright poster for `host-web.png` from the live demo; refresh OG still.
-- [ ] Optimize + promote into `public/showcase/`; flip example cards `.svg`→`.png`.
+**Phase A — terminal + web**
+- [x] Generalize `screenshot_gallery.sh` → `Scripts/screenshot_app.sh` (done).
+- [ ] **BLOCKED (perm):** capture the 4 example-card stills
+      (`gifeditor/terminal-workspace/gitviz` via kitty; `layouts-swiftui` is a
+      native macOS window). Needs a Screen Recording grant (see §4.1); run
+      interactively, then optimize + promote + flip example cards `.svg`→`.png`.
+- [ ] Playwright poster for `host-web.png` from the live demo; refresh OG still
+      (web is a live iframe, so this is optional polish).
 
 **Phase B — Apple hosts (needs Xcode 26 / macOS 15+)**
 - [x] `SwiftUIExample` iOS Simulator screenshot → composite `host-ios.png`
