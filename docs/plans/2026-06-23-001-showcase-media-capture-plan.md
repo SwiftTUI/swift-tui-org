@@ -1,11 +1,15 @@
 # Plan — Showcase Media Capture (screenshots + video) for every host
 
 - **Date:** 2026-06-23
-- **Status:** PAGE EXTENDED (the showcase now renders the cross-host band +
-  live web pane — see §2). Media capture NOT yet run. iOS / macOS / web /
-  terminal ship **real** imagery today (reused marketing PNGs); **Android** ships
-  a labelled `preview` placeholder pending a real device capture. This plan
-  defines how to capture/refresh every visual.
+- **Status:** PAGE EXTENDED + **iOS / Android CAPTURED** (2026-06-23). The
+  showcase renders the cross-host band + live web pane (§2). iOS and Android are
+  now **real, fresh, reproducible captures** taken from the local iOS Simulator
+  and Android emulator (§4.3, §4.4) and composited into the band via
+  `swift-tui-examples/Scripts/showcase-frame.sh`. macOS / terminal / web keep
+  their reused marketing composites (re-capture is optional polish). Getting the
+  iOS build to compile required a real **dependency-hygiene fix — a host target
+  must not depend on the `SwiftTUI` umbrella product** (it pulls the web host);
+  see §4.3.0. Remaining: the four `/02` example-app cards still use placeholders.
 - **Owner repo:** `swift-tui-org` (coordination root). The forward-looking plan
   lives here per the org contract; the capture *scripts* and *outputs* land in
   the public children (`swift-tui-examples/Scripts`, `swift-tui-site/Website/public`).
@@ -25,10 +29,10 @@ The showcase page was, until now, four hand-authored SVG placeholders annotated
 *"replace with PNG capture."* The page has been extended (this session) to also
 tell the framework's strongest story — **one component gallery, rendered by
 every host** — using device-framed captures. That extension surfaced a concrete
-media gap: we need a repeatable way to capture each host's render, because
-(a) Android has no still yet, (b) the reused stills should eventually be
-re-captured to one standard, and (c) the four example-app cards still use
-placeholders.
+media gap and we have now closed most of it: iOS and Android are captured fresh
+from the local simulators (§4.3–§4.4), proving a repeatable per-host pipeline.
+What remains is (a) optionally re-capturing the reused macOS/terminal/web stills
+to one standard, and (b) the four `/02` example-app cards, still on placeholders.
 
 This plan is the capture playbook + asset standard + task list to close that gap.
 
@@ -41,10 +45,10 @@ host, plus the live web pane:
 
 | Slot | Host product | Source app | Visual today | Target |
 | --- | --- | --- | --- | --- |
-| `host-macos.png` | `SwiftUIHost` | `swift-tui-examples/SwiftUIExample` (macOS) | **real** (reused) | re-capture to standard |
-| `host-ios.png` | `SwiftUIHost` | `swift-tui-examples/SwiftUIExample` (iOS) | **real** (reused) | re-capture to standard |
-| `host-android.svg` | `SwiftTUIAndroidHost` | `swift-tui-examples/AndroidGallery` | **placeholder** (`preview` ribbon) | capture `host-android.png` |
-| `host-terminal.png` | `SwiftTUICLI` | `swift-tui-examples/gallery` | **real** (reused) | re-capture to standard |
+| `host-macos.png` | `SwiftUIHost` | `swift-tui-examples/SwiftUIExample` (macOS) | **real** (reused composite) | re-capture to standard (optional) |
+| `host-ios.png` | `SwiftUIHost` | `swift-tui-examples/SwiftUIExample` (iOS) | **real** (fresh Simulator capture, 2026-06-23) | ✅ done |
+| `host-android.png` | `SwiftTUIAndroidHost` | `swift-tui-examples/AndroidGallery` | **real** (fresh emulator capture, 2026-06-23) | ✅ done |
+| `host-terminal.png` | `SwiftTUICLI` | `swift-tui-examples/gallery` | **real** (reused composite) | re-capture to standard (optional) |
 | web pane (live `<iframe>`) | `SwiftTUIWASI` | `swift-tui-examples/WebExample` → `swifttui.sh/webexample/` | **live**; `host-web.png` is the load poster | refresh poster; optional OG/social still |
 
 **`/02` Example apps** — the four maintained terminal apps, still on placeholders:
@@ -139,42 +143,123 @@ screencapture -iW /tmp/shots/macos-raw.png
 Then composite into the square device frame. Choose a tab distinct from iOS
 (reused macOS still = Counter).
 
-### 4.3 iOS — `SwiftUIExample` in the Simulator (SwiftUIHost)
+### 4.3 iOS — `SwiftUIExample` in the Simulator (SwiftUIHost) — **verified 2026-06-23**
+
+Verified on this machine: Xcode 26.5, iPhone 17 Pro simulator (iOS 26.5), Swift
+6.3.1 via swiftly.
+
+#### 4.3.0 Prerequisite (REQUIRED): a host must not depend on the `SwiftTUI` umbrella
+
+The iOS build **fails to link** until this is fixed. `SwiftUIExample` embeds
+scenes from `ExampleScenes` (`SwiftUIExample/TerminalApp`), which did
+`import SwiftTUI` — the **umbrella** product. The umbrella bundles
+`SwiftTUIWebHostCLI → SwiftTUIWebHost`, whose `launchBrowserCommand` calls
+`Foundation.Process`, which **does not exist on iOS** → `error: cannot find
+'Process' in scope` while compiling `SwiftTUIWebHost`.
+
+A SwiftUI-hosted app embeds a `SwiftTUIRuntime` app and must never pull the web
+host. Fix (applied in `swift-tui-examples`, two lines):
+
+- `SwiftUIExample/TerminalApp/Package.swift` — `ExampleScenes` dep
+  `.product(name: "SwiftTUI", …)` → `.product(name: "SwiftTUIRuntime", …)`.
+- `…/Sources/ExampleScenes/ExampleApp.swift` — `import SwiftTUI` → `import SwiftTUIRuntime`.
+
+`App` / `Scene` / `WindowGroup` / `WindowIdentifier` all live in
+`SwiftTUIRuntime`; the umbrella's `App` only *refines* it with `SwiftTUICommand`
+(the CLI launch path), which an embedded host does not use, and `SwiftUIHostAppState`
+expects a `SwiftTUIRuntime.App` anyway. The Android host (`gallery-android-host`)
+and the `SwiftUIHost` library already depend only on `SwiftTUIRuntime` — they are
+clean (verified). **Deeper framework follow-up:** guard WebHost's `Process` use
+behind `#if !os(iOS) && !os(watchOS) && !os(tvOS)` so `SwiftTUIWebHost` at least
+compiles as a no-op on iOS/Android — then `import SwiftTUI` (umbrella) is
+import-safe everywhere, not just on desktop.
+
+#### 4.3.1 A buildable scheme
+
+The project ships **no shared scheme** for the `SwiftUIExample` *app* target (the
+schemes `xcodebuild -list` reports are SwiftPM package products), so
+`xcodebuild -scheme SwiftUIExample` fails until one exists. Either open the
+project in Xcode once (auto-creates a per-user scheme) or add a shared scheme
+under `…/xcshareddata/xcschemes/`. The scheme's `BlueprintIdentifier` is the
+`SwiftUIExample` `PBXNativeTarget` (`F7FC7A792F7B19A400737CB1`), `BuildableName`
+`SwiftUIExample.app`; build with implicit deps so WebHost is not built. (For this
+capture a gitignored `xcuserdata` scheme was used; CI should add a *shared* one.)
+
+#### 4.3.2 Build, install, capture (exact commands used)
 
 ```bash
-xcrun simctl boot "iPhone 16 Pro"
-# build+run the iOS scheme from Xcode, or `xcrun simctl launch` the installed app
-xcrun simctl io booted screenshot /tmp/shots/ios-raw.png
+cd swift-tui-examples/SwiftUIExample
+DD=/tmp/ios-dd
+xcodebuild -project SwiftUIExample.xcodeproj -scheme SwiftUIExample \
+  -sdk iphonesimulator -configuration Debug -arch arm64 \
+  -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO build
+
+xcrun simctl boot "iPhone 17 Pro" 2>/dev/null || true   # or reuse an already-booted sim
+APP="$DD/Build/Products/Debug-iphonesimulator/SwiftUIExample.app"
+xcrun simctl install booted "$APP"
+xcrun simctl launch booted llc.goodhats.SwiftUIExample
+# let the scene paint (~3s), then:
+xcrun simctl io booted screenshot /tmp/shots/host-ios-raw.png
 xcrun simctl io booted recordVideo --codec h264 /tmp/shots/ios.mp4   # ^C to stop
+
+# composite into the band tile (warm-magenta gradient):
+Scripts/showcase-frame.sh /tmp/shots/host-ios-raw.png \
+  ../swift-tui-site/Website/public/showcase/host-ios.png 880 44 '#6a2f5a' '#c2542f'
 ```
 
-The Simulator already renders the device bezel/status bar, so the raw screenshot
-is close to the composite tier; a light gradient backdrop matches the band.
-Pick a photogenic tab (reused iOS still = Calculator).
+The simctl screenshot is the bare screen (status bar + app, square corners);
+`showcase-frame.sh` adds the bezel + gradient. **Tab selection:** the Simulator
+has no CLI tap, so the embedded gallery lands on its default tab (Logo Breaker).
+To choose a tab, tap it in the Simulator UI before capturing, or add an
+initial-tab launch hook to the example. (Android *can* script taps — §4.4.)
 
-### 4.4 Android — `AndroidGallery` (SwiftTUIAndroidHost) — **the open gap**
+### 4.4 Android — `AndroidGallery` (SwiftTUIAndroidHost) — **verified 2026-06-23**
 
-Heaviest prerequisites (full Swift-Android toolchain): Android SDK 36.1, NDK
-r27d+, `swiftly` 6.3.x, the `swift-6.3.2-RELEASE_android` SDK bundle. See
-`AndroidGallery/README.md` for the one-time `setup-android-sdk.sh` step and the
-exact env block.
+Verified on this machine: AVD `SwiftTUI_AndroidGallery_arm64` (android-36.1,
+`abi.type=arm64-v8a`, google_apis), NDK r27d (`27.3.13750724`), Swift Android SDK
+`swift-6.3.2-RELEASE_android` (`ndk-sysroot` already materialized), Swift 6.3.1
+host via swiftly. **The arm64-v8a AVD is load-bearing:** the APK is arm64-v8a
+only, and an Apple-Silicon emulator runs arm64 images natively — an x86_64
+emulator could not install it. The Android host package (`gallery-android-host`)
+already depends only on `SwiftTUIRuntime` + `SwiftTUIAndroidHost` +
+`GalleryDemoViews` — it does **not** pull the umbrella/web host, so no dependency
+fix was needed there (the user's "neither should android" is already satisfied).
 
 ```bash
-# build + install (env per AndroidGallery/README.md)
-./gradlew :app:assembleDebug :app:installDebug
+# 0. env (verified; see AndroidGallery/README.md for first-time ndk-sysroot setup)
+export ANDROID_HOME="$HOME/Library/Android/sdk" ANDROID_SDK_ROOT="$ANDROID_HOME"
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_NDK_HOME="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3-RELEASE_android.artifactbundle/swift-android/android-ndk-r27d"
+export SWIFT_ANDROID_SDK_BUNDLE="$HOME/Library/org.swift.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle"
+export SWIFT_ANDROID_ROOT="$SWIFT_ANDROID_SDK_BUNDLE/swift-android"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$HOME/.swiftly/bin:$PATH"
 
-# still (emulator or device)
-adb shell screencap -p /sdcard/host-android.png && adb pull /sdcard/host-android.png /tmp/shots/
+# 1. boot the emulator, wait for boot_completed
+emulator @SwiftTUI_AndroidGallery_arm64 -no-snapshot -no-boot-anim -gpu auto &
+adb wait-for-device
+until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 1; done
 
-# video
-adb shell screenrecord --size 1080x2400 --bit-rate 8m /sdcard/android.mp4   # ^C to stop
-adb pull /sdcard/android.mp4 /tmp/shots/
+# 2. cross-compile Swift→aarch64-linux-android, build + install the debug APK
+cd swift-tui-examples/AndroidGallery
+./gradlew :app:assembleDebug :app:installDebug --console=plain   # first build ~minutes
+
+# 3. launch, optionally switch tab (adb CAN tap), capture
+adb shell am start -n org.swifttui.gallery.android/.MainActivity
+# adb shell input tap 732 205        # e.g. the 'Life' tab (coords from a prior screencap)
+adb exec-out screencap -p > /tmp/shots/host-android-raw.png
+adb shell screenrecord --size 1080x2400 --bit-rate 8m /sdcard/a.mp4   # ^C to stop
+adb pull /sdcard/a.mp4 /tmp/shots/
+
+# 4. composite into the band tile, then shut the emulator down
+cd ..    # swift-tui-examples
+Scripts/showcase-frame.sh /tmp/shots/host-android-raw.png \
+  ../swift-tui-site/Website/public/showcase/host-android.png 860 46 '#5a2f63' '#c2562f'
+adb emu kill
 ```
 
-Composite into the square frame (the placeholder `host-android.svg` defines the
-target composition — green Android accent, gallery on a phone). **This is the
-one capture that needs hardware/emulator + the Android toolchain**, which is why
-it ships as a `preview` placeholder until run.
+The raw screenshot is 1080×2400 (no device chrome); `showcase-frame.sh` produces
+the square framed tile. The first gradle build cross-compiles Swift and takes a
+few minutes; subsequent builds are incremental.
 
 ### 4.5 Web — `WebExample` (SwiftTUIWASI)
 
@@ -221,13 +306,17 @@ Video: Playwright `recordVideo` (webm) or a screen recording of the live demo.
    the macOS-runnable captures (terminal + web via Playwright; macOS/iOS via
    `simctl`) into `/tmp/shots`, then an `optimize` step (`pngquant`/`oxipng`) to
    meet the size budget. Android stays a documented manual step (toolchain/hw).
-3. **Composite step:** a small tool (script + the corner-crop frame templates in
-   `art/frames/`) that wraps a raw crop into the square device composite, so the
-   band stays visually uniform regardless of who captured it.
+3. **Composite step (built):** `swift-tui-examples/Scripts/showcase-frame.sh`
+   wraps a raw screenshot into the square 1000×1000 device composite (rounded +
+   bezel + drop shadow on a warm gradient, bleeding off the bottom) so the band
+   stays uniform regardless of who captured it. Used for the iOS + Android tiles;
+   needs ImageMagick 7 (`magick`).
 4. **Promotion:** copy the optimized `host-*.png` / `<slug>.png` into
-   `swift-tui-site/Website/public/showcase/`, flip the example-card `<img>`
-   extensions from `.svg`→`.png`, and (for Android) swap `host-android.svg`→
-   `host-android.png` + drop the `preview: true` flag in `showcase.astro`.
+   `swift-tui-site/Website/public/showcase/`. For the example cards (still
+   pending) flip the `<img>` extension `.svg`→`.png`. The Android swap is done:
+   `host-android.svg` was removed and `showcase.astro` points at
+   `host-android.png` (the `preview` ribbon affordance stays in the markup,
+   unused, for any future placeholder host).
 5. **Optional CI:** the terminal/web captures are scriptable on a macOS runner;
    wire a manual (`workflow_dispatch`) job that regenerates stills on demand.
    Android and the device composites stay manual for now.
@@ -241,14 +330,16 @@ Video: Playwright `recordVideo` (webm) or a screen recording of the live demo.
 - [ ] Optimize + promote into `public/showcase/`; flip example cards `.svg`→`.png`.
 
 **Phase B — Apple hosts (needs Xcode 26 / macOS 15+)**
-- [ ] `SwiftUIExample` macOS window capture → `host-macos.png` (distinct tab).
-- [ ] `SwiftUIExample` iOS Simulator screenshot/video → `host-ios.png`.
-- [ ] Composite both into the square frame; promote.
+- [x] `SwiftUIExample` iOS Simulator screenshot → composite `host-ios.png`
+      (done 2026-06-23; required the §4.3.0 umbrella→runtime fix + a buildable
+      scheme). iOS video (`recordVideo`) still optional.
+- [ ] `SwiftUIExample` macOS window capture → `host-macos.png` (optional refresh;
+      the reused composite is live and good).
 
 **Phase C — Android (needs emulator/device + Swift-Android toolchain)**
-- [ ] Build + install `AndroidGallery`; `adb screencap`/`screenrecord`.
-- [ ] Composite → `host-android.png`; swap out the SVG placeholder and remove
-      the `preview` ribbon in `showcase.astro`.
+- [x] Build + install `AndroidGallery` on `SwiftTUI_AndroidGallery_arm64`;
+      `adb screencap` → composite `host-android.png`; SVG placeholder removed and
+      `showcase.astro` updated (done 2026-06-23). Android video optional.
 
 **Phase D — motion (optional polish)**
 - [ ] Capture `gifeditor` + gallery `logo`/`animations` clips (MP4 + poster).
