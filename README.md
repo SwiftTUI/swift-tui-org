@@ -12,6 +12,28 @@ The root repo provides three things:
 3. One place to run organization-level validation without replacing SwiftPM,
    Bun, npm, Astro, or DocC as the native tools of record.
 
+> **New here?** Three commands get you to a green gate:
+>
+> ```sh
+> git clone --recurse-submodules git@github.com:SwiftTUI/swift-tui-org.git
+> cd swift-tui-org && mise trust && mise install
+> bazel test //:org_fast
+> ```
+
+## Common tasks
+
+| I want to… | Go to |
+| --- | --- |
+| Understand the repo layout | [Repository Model](#repository-model) |
+| Know what's public vs coordination-only | [Public Repository Contract](#public-repository-contract) · [Hard Invariants](#hard-invariants) |
+| Run the org gates locally | [Bazel Commands](#bazel-commands) |
+| Iterate across repos before a tag | [Current Public Pre-Release State](#current-public-pre-release-state) |
+| Move a submodule pin | [Updating Submodule Pins](#updating-submodule-pins) |
+| Bump the org version | [Bumping the Org Version](#bumping-the-org-version) |
+| Cut a release | [Release Workflow](#release-workflow) |
+| Add a new repo | [Adding A Repository](#adding-a-repository) |
+| Fix a broken gate or fetch | [Troubleshooting](#troubleshooting) |
+
 ## Repository Model
 
 <!-- >>> GENERATED:repos-table — edit tools/registry/repos.json, then `python3 tools/registry/generate.py --write` -->
@@ -70,12 +92,10 @@ now resolve through public release artifacts:
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
   `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.27` tag.
 
-As of `0.0.27`, `@swifttui/web` and `@swifttui/build` are published to npm and
-also attached to the GitHub release as tarballs. In-org consumers
-(`swift-tui-examples`, `swift-tui-site`) resolve the web packages through the
-release tarball URLs; external consumers can install the npm package names
-directly. Android consumers resolve the host AAR and Gradle plugin from the
-SwiftTUI GitHub Pages Maven repository.
+The web packages are also on npm: external consumers `npm install @swifttui/web
+@swifttui/build`, while in-org consumers resolve the release tarball URLs.
+Android consumers resolve the host AAR and Gradle plugin from the SwiftTUI
+GitHub Pages Maven repository.
 
 For cross-repo development before the next tag, the org root materializes a
 **coordination overlay** under `.build/coordination/`. The overlay is a
@@ -355,7 +375,7 @@ To update all submodules to their tracked remote branches:
 ```sh
 git submodule update --remote --merge
 git status
-git add swift-tui swift-tui-web swift-tui-android swift-tui-examples swift-tui-site
+git add swift-tui swift-tui-swiftui swift-tui-web swift-tui-android swift-tui-examples swift-tui-site
 git commit -m "chore: update SwiftTUI org pins"
 ```
 
@@ -381,9 +401,9 @@ It is **dry-run by default** — it prints a unified diff and a release runbook 
 changes nothing until you pass `--write`:
 
 ```sh
-mise run bump -- 0.0.13            # preview the full diff (dry run)
-mise run bump -- 0.0.13 --write    # apply, then review `git -C <submodule> diff`
-bazel run //:bump_version -- 0.0.13 # same, via Bazel
+mise run bump -- <next-version>            # preview the full diff (dry run)
+mise run bump -- <next-version> --write    # apply, then review `git -C <submodule> diff`
+bazel run //:bump_version -- <next-version> # same, via Bazel
 ```
 
 What it deliberately does **not** do — these stay maintainer-owned:
@@ -397,9 +417,9 @@ What it deliberately does **not** do — these stay maintainer-owned:
 - It leaves dated history (`docs/plans`, `docs/reports`, `PUBLIC-REPO-READINESS.md`,
   `VISION*.md`) as a record, reporting them as skipped.
 
-Run order is web → swift-tui → android → examples → site → record pins here,
-because examples consume the web, framework, and Android artifacts, and the site
-then consumes examples. The tool prints this runbook; finish with
+Run order is web → swift-tui → swift-tui-swiftui → android → examples → site →
+record pins here, because examples consume the web, framework, SwiftUI-host, and
+Android artifacts, and the site then consumes examples. The tool prints this runbook; finish with
 `bazel test //:release_candidate`.
 
 ## Editing Child Repositories
