@@ -27,7 +27,7 @@ The root repo provides three things:
 | Understand the repo layout | [Repository Model](#repository-model) |
 | Know what's public vs coordination-only | [Public Repository Contract](#public-repository-contract) · [Hard Invariants](#hard-invariants) |
 | Run the org gates locally | [Bazel Commands](#bazel-commands) |
-| Iterate across repos before a tag | [Current Public Pre-Release State](#current-public-pre-release-state) |
+| Iterate across repos before a tag | [Current Public Beta State](#current-public-beta-state) |
 | Move a submodule pin | [Updating Submodule Pins](#updating-submodule-pins) |
 | Bump the org version | [Bumping the Org Version](#bumping-the-org-version) |
 | Cut a release | [Release Workflow](#release-workflow) |
@@ -76,21 +76,21 @@ coordination-repo concerns only. Do not commit SHA pin files, generated
 pre-release dependency blocks, or sibling-checkout assumptions into public child
 repos.
 
-## Current Public Pre-Release State
+## Current Public Beta State
 
-All child repositories are public and tagged at `0.0.27`. Public child defaults
+All child repositories are public and tagged at `0.1.0`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.0.27` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.1.0` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.0.27` release.
+  the GitHub `0.1.0` release.
 - `swift-tui-android` publishes the `sh.swifttui:android-host` AAR and
-  `sh.swifttui.android` Gradle plugin at `0.0.27`.
-- `swift-tui-examples` uses the `swift-tui` `0.0.27` tag and the web `0.0.27`
-  release tarballs by default; AndroidGallery also uses the Android `0.0.27`
+  `sh.swifttui.android` Gradle plugin at `0.1.0`.
+- `swift-tui-examples` uses the `swift-tui` `0.1.0` tag and the web `0.1.0`
+  release tarballs by default; AndroidGallery also uses the Android `0.1.0`
   artifacts.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.0.27` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.1.0` tag.
 
 The web packages are also on npm: external consumers `npm install @swifttui/web
 @swifttui/build`, while in-org consumers resolve the release tarball URLs.
@@ -389,7 +389,7 @@ bazel test //:org_full
 
 ## Bumping the Org Version
 
-The release version (currently `0.0.27`) is denormalized across every child:
+The release version (currently `0.1.0`) is denormalized across every child:
 `package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
 `exactVersion`, Android Gradle plugin/AAR coordinates, GitHub release tarball
 URLs, `tree`/`blob`/`tag` links, site display strings, and the canonical
