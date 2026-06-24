@@ -4,3 +4,5 @@ bazel-*
 mise.local.toml
 .mise.local.toml
 .vscode
+__pycache__/
+*.pyc

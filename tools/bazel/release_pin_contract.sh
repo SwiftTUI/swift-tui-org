@@ -37,27 +37,26 @@ for repo in "${repos[@]}"; do
     continue
   fi
 
-  while IFS= read -r remote_ref; do
-    if [[ -z "$remote_ref" ]]; then
+  # Reachability is restricted to published release lines: origin/main only.
+  # A pin reachable solely from some unrelated remote branch (a draft/feature
+  # ref) is NOT a released commit and must not pass.
+  for release_ref in "origin/main"; do
+    if ! git -C "$repo" rev-parse --verify --quiet "$release_ref^{commit}" >/dev/null; then
       continue
     fi
 
-    if [[ "$remote_ref" == "origin" || "$remote_ref" == "origin/HEAD" ]]; then
-      continue
-    fi
-
-    if git -C "$repo" merge-base --is-ancestor "$head_commit" "$remote_ref"; then
-      reachable_ref="$remote_ref"
+    if git -C "$repo" merge-base --is-ancestor "$head_commit" "$release_ref"; then
+      reachable_ref="$release_ref"
       break
     fi
-  done < <(git -C "$repo" for-each-ref --format='%(refname:short)' refs/remotes/origin)
+  done
 
   if [[ -n "$reachable_ref" ]]; then
     printf '[release_pin_contract] %s reachable from %s\n' "$repo" "$reachable_ref"
     continue
   fi
 
-  fail "$repo pin $head_commit is not reachable from a local origin/* ref or exact tag; fetch the child repo or pin a published commit"
+  fail "$repo pin $head_commit is not reachable from origin/main or an exact tag; fetch the child repo or pin a published commit"
 done
 
 printf '[release_pin_contract] ok\n'

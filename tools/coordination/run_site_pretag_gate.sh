@@ -35,7 +35,7 @@ cd "$web_dir"
 bun install
 bun run build:packages
 
-SWIFTTUI_CHECKOUT="$repo_root/swift-tui" \
+SWIFTTUI_CHECKOUT="$overlay_dir/swift-tui" \
 SWIFTTUI_EXAMPLES_CHECKOUT="$overlay_dir/swift-tui-examples" \
 SWIFTTUI_WEB_CHECKOUT="$overlay_dir/swift-tui-web" \
 WEBEXAMPLE_DIR="$overlay_dir/swift-tui-examples/WebExample" \

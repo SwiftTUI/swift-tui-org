@@ -26,14 +26,35 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import shutil
 import subprocess
 
 MAGICK = "/opt/homebrew/bin/magick"
 FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"
 
 
+def _resolve_magick() -> str:
+    """Locate an ImageMagick binary, preferring the pinned path then PATH."""
+    if os.path.exists(MAGICK):
+        return MAGICK
+    for candidate in ("magick", "convert"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    raise RuntimeError(
+        "ImageMagick not found: neither %s nor 'magick'/'convert' on PATH" % MAGICK
+    )
+
+
 def magick(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run([MAGICK, *args], capture_output=True, text=True)
+    binary = _resolve_magick()
+    proc = subprocess.run([binary, *args], capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "ImageMagick failed (exit %d): %s\nstderr: %s"
+            % (proc.returncode, " ".join([binary, *args]), proc.stderr.strip())
+        )
+    return proc
 
 
 def load_iou(results_csv: str) -> dict[str, float]:

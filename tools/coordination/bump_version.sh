@@ -174,6 +174,9 @@ is_history() {
     RELEASE.md) return 0 ;;
     docs/plans/*|docs/reports/*|docs/proposals/*) return 0 ;;
     docs/PUBLIC-REPO-READINESS.md) return 0 ;;
+    */docs/README.md) return 0 ;;
+    */RELEASE.md) return 0 ;;
+    */docs/PUBLIC-REPO-READINESS.md) return 0 ;;
     */docs/plans/*|*/docs/reports/*|*/docs/proposals/*) return 0 ;;
     */docs/VISION*.md|*/CHANGELOG.md|CHANGELOG.md) return 0 ;;
     *) return 1 ;;
