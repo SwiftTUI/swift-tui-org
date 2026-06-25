@@ -1,8 +1,11 @@
 # Plan — Granular (key-path) Observable Support
 
 - **Date:** 2026-06-25
-- **Status:** **Lever A + Lever C SHIPPED** to `swift-tui` main (flag-gated,
-  default OFF) on 2026-06-25; **Lever B is a measured null-result** (no code).
+- **Status:** **Lever A + Lever C SHIPPED** to `swift-tui` main and **enabled by
+  default** (`7521ed02`, `=0` opts out) on 2026-06-25; **Lever B is a measured
+  null-result** (no code). Note: the §6 phasing recommended default-OFF pending a
+  soak — the default-on flip was taken directly at the owner's request, ahead of
+  that soak.
   See results: [`docs/reports/2026-06-25-002-granular-observable-levers-results.md`](../reports/2026-06-25-002-granular-observable-levers-results.md).
   Measurement reframed Lever B: the clean cold/rare siblings are already reused,
   so the "structural sibling re-resolution" premise (§3, §7) is disproven — the

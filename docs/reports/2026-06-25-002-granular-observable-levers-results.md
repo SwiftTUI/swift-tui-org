@@ -1,22 +1,24 @@
 # Granular Observable Support — Implementation Results (Levers A/B/C)
 
 - **Date:** 2026-06-25
-- **Status:** Lever A + Lever C **SHIPPED** to `swift-tui` main (flag-gated,
-  default OFF). Lever B **measured null-result** (no code change).
+- **Status:** Lever A + Lever C **SHIPPED** to `swift-tui` main and **enabled by
+  default** (`=0` opts out). Lever B **measured null-result** (no code change).
 - **Plan:** [`docs/plans/2026-06-25-001-granular-observable-support-plan.md`](../plans/2026-06-25-001-granular-observable-support-plan.md)
-- **Code:** `swift-tui` commits `c12bd928` (Lever A), `9ec7ff06` (Lever C), on
-  base `2126c6f4`.
+- **Code:** `swift-tui` commits `c12bd928` (Lever A), `9ec7ff06` (Lever C),
+  `7521ed02` (default-on flip), on base `2126c6f4`.
 
 ## What shipped
 
-| Lever | Flag (default OFF) | Change |
+| Lever | Flag (default ON) | Change |
 | --- | --- | --- |
 | **A** | `SWIFTTUI_PRECISE_OBSERVATION_FIRING` | `observationChangeDirtyNodeIDs` returns only the precise firing node — drops the object-token co-reader union. |
 | **C** | `SWIFTTUI_OBSERVABLE_KEYPATH_INVALIDATION` | Additive `(object, keyPath)` dependency index; narrows the union to same-key-path co-readers (keeps a non-firing `\.hot` peer, spares `\.cold`/`\.rare`). Falls back to the object union unless every co-reader is key-path-attributed. |
 
-Both default OFF and are byte-identical to the legacy union when off (verified:
-the full gate's flag-off suites pass unchanged). Lever A takes precedence over
-Lever C when both are enabled.
+Both are now **on by default** (`=0` opts out). Lever A takes precedence in
+`observationChangeDirtyNodeIDs`, so it is the effective behavior; Lever C is the
+graceful fallback (disabling precise firing drops to key-path narrowing, not the
+full legacy union). Setting both to `0` restores the byte-identical legacy union.
+The full gate passes with the new defaults (every test suite green).
 
 ## Measurement (release, `synthetic-observable-fanout`, rows 12×4)
 
@@ -79,6 +81,8 @@ here.
 
 ## Status of the flags
 
-Both flags are **OFF by default**, pending a soak (gallery + gif-editor across
-the five hosts) for the deferred/conditional-read residual the plan documents.
-The flip-to-default-on criteria and rollout mirror `ReaderAttributionConfiguration`.
+Both flags are **ON by default** as of `7521ed02`, with `=0` as the documented
+opt-out (mirroring `ReaderAttributionConfiguration`). The deferred/conditional-read
+residual the plan documents is the known risk to watch in the gallery + gif-editor
+examples; `SWIFTTUI_PRECISE_OBSERVATION_FIRING=0` (key-path fallback) or both `=0`
+(legacy union) are the escape hatches if a regression surfaces.
