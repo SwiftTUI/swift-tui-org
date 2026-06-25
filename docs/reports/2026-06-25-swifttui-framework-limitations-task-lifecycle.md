@@ -78,9 +78,22 @@ async-render/observation path, independent of how the work is scheduled.
   (rather than an input event) reliably reach a *parked* `iterator.next()` and
   produce a `present()` the awaiting predicate sees? Reproduce with a minimal core
   test: a view with a single `.task` that, after a sleep, mutates `@State`, and an
-  `awaitCondition` on the mutated render. (No such test exists today — the passing
-  `.task`/animation tests all satisfy their conditions via *synchronous* keypress
-  effects, so async-render observability is currently unproven in the harness.)
+  `awaitCondition` on the mutated render. **Correction (2026-06-25, re-verified against
+  HEAD):** the earlier "no such test exists" framing was an overstatement. A core test
+  *does* mutate `@State` from inside an async `.task`
+  (`AsyncFrameTailRenderingTests.swift:104`,
+  `internalStateMutationDuringSuspendedAsyncTailSurvivesCommit`) and asserts the mutated
+  render — but it **pre-drives** that frame with an explicit
+  `scheduler.requestInvalidation(of: [rootIdentity])` plus a manual
+  `renderPendingFramesAsync`, so it does *not* exercise the autonomous-wake path. The real
+  gap is narrower: no core test surfaces a frame *purely* from an autonomous `.task`
+  `@State` write whose own `requestInvalidation` reaches the wake handler
+  (`continuation.yield()`) and is observed via `awaitCondition`, with **no** external
+  `requestInvalidation` and **no** manual render. That is the exact test to add — it would
+  either reproduce the hang in core (runtime bug) or pass (harness-only gap). Note also:
+  only `requestInvalidation` and `requestExternalWake` fire the wake handler;
+  `requestSignal`/`requestInput`/`requestDeadline` do **not** (`Scheduler.swift:137-175`),
+  so a fix that leans on those to surface an async render would silently never wake.
 - Decide whether this is a harness gap (then provide a supported way to await an
   async-driven frame in tests) or a runtime gap (then fix the wake/observe race).
 
@@ -158,9 +171,23 @@ modifier).
 
 ### Where the work is preserved
 
-`swift-tui` `git stash@{0}` on `integration/code-quality-refactors`:
-`"framework: multiple .task per view node (deferred — animation-lifecycle hang, see report)"`
-(includes the new `Tests/SwiftTUITests/MultipleTaskModifiersTests.swift`).
+**Durable (2026-06-25):** recovered from the GC-eligible stash into a clean, self-contained
+commit on the local `swift-tui` branch **`stash-recovery-multi-task-modifiers`** (`1163d13e`,
+24 files, +355/-143), *including* the previously-untracked
+`Tests/SwiftTUITests/MultipleTaskModifiersTests.swift` (the stash stored it only in its `-u`
+untracked parent, so a naive branch-at-stash would not have materialized it on checkout). The
+branch is based on `63f490a1` — i.e. `main` *minus* the shipped Fix 5 (`2126c6f4`, "skip redundant
+per-keystroke root invalidation"). A complete forward patch is committed alongside this report at
+[`2026-06-25-multi-task-per-node.patch`](2026-06-25-multi-task-per-node.patch); it applies cleanly
+onto `63f490a1` but **conflicts on `main`** at `RunLoop+EventDispatch.swift` (the deferred work and
+Fix 5 both edit that file), so a resumer must rebase the branch onto `main` and reconcile that one
+file.
+
+The original `swift-tui` `git stash@{0}` (base `63f490a1`; its branch `integration/code-quality-refactors`
+has since been deleted) is **retained as a secondary backup**. Two loose `multi-task.patch` files left in
+the working trees are **unreliable** and should not be used: the `swift-tui/` one is reverse-oriented
+(fails a forward `git apply`, only applies with `-R`), and the org-root one is a mislabeled 3730-line org
+diff (mostly already-committed docs + submodule pins), not this work.
 
 ### What a fix would need
 
@@ -182,7 +209,7 @@ modifier).
 | Limitation | Blocks | Status | Recoverable from |
 |---|---|---|---|
 | Async-driven `refresh()` not observed by the scripted-input test RunLoop | RC-B (off-main-actor work reflected in a later frame) | open | n/a (revert to synchronous) |
-| One-task-per-node baked through ~8 lifecycle layers; multi-task impl hangs a `PhaseAnimator` | multiple `.task` per node | open | `swift-tui` `git stash@{0}` |
+| One-task-per-node baked through ~8 lifecycle layers; multi-task impl hangs a `PhaseAnimator` | multiple `.task` per node | open | branch `stash-recovery-multi-task-modifiers` (`1163d13e`) + [`2026-06-25-multi-task-per-node.patch`](2026-06-25-multi-task-per-node.patch); stash@{0} retained |
 
 Both are framework-level and worth a focused investigation with the traces above
 before another attempt. Neither blocks the shipped GIF-editor perf fixes.

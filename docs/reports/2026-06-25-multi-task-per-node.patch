@@ -1,0 +1,1052 @@
+diff --git a/Sources/SwiftTUICore/Place/PlacedNode.swift b/Sources/SwiftTUICore/Place/PlacedNode.swift
+index 07152499..47c9e390 100644
+--- a/Sources/SwiftTUICore/Place/PlacedNode.swift
++++ b/Sources/SwiftTUICore/Place/PlacedNode.swift
+@@ -325,7 +325,7 @@ public struct PlacedNode: Equatable, Sendable {
+             identity: node.identity,
+             appearHandlerIDs: node.lifecycleMetadata.appearHandlerIDs,
+             disappearHandlerIDs: node.lifecycleMetadata.disappearHandlerIDs,
+-            task: node.lifecycleMetadata.task
++            tasks: node.lifecycleMetadata.tasks
+           )
+         )
+       }
+diff --git a/Sources/SwiftTUICore/Resolve/NodeHandlers.swift b/Sources/SwiftTUICore/Resolve/NodeHandlers.swift
+index 463d0b9a..4a0ec410 100644
+--- a/Sources/SwiftTUICore/Resolve/NodeHandlers.swift
++++ b/Sources/SwiftTUICore/Resolve/NodeHandlers.swift
+@@ -23,7 +23,7 @@ package struct NodeHandlers {
+   package var focusedValuesRegistrations: [FocusedValuesRegistrationSnapshot]
+   package var scrollPositionRegistrations: [ScrollPositionRegistrationSnapshot]
+   package var lifecycleRegistrations: LifecycleHandlerSnapshot
+-  package var taskRegistrations: [Identity: TaskRegistration]
++  package var taskRegistrations: [Identity: [TaskRegistration]]
+   package var taskRegistrationOwners: [Identity: RuntimeRegistrationOwnerKey]
+   package var preferenceObservationRegistrations: [PreferenceObservationRegistrationSnapshot]
+   package var commandRegistrations: CommandRegistrySnapshot
+@@ -53,7 +53,7 @@ package struct NodeHandlers {
+     focusedValuesRegistrations: [FocusedValuesRegistrationSnapshot] = [],
+     scrollPositionRegistrations: [ScrollPositionRegistrationSnapshot] = [],
+     lifecycleRegistrations: LifecycleHandlerSnapshot = .init(),
+-    taskRegistrations: [Identity: TaskRegistration] = [:],
++    taskRegistrations: [Identity: [TaskRegistration]] = [:],
+     taskRegistrationOwners: [Identity: RuntimeRegistrationOwnerKey] = [:],
+     preferenceObservationRegistrations: [PreferenceObservationRegistrationSnapshot] = [],
+     commandRegistrations: CommandRegistrySnapshot = .init(),
+@@ -280,7 +280,15 @@ package struct NodeHandlers {
+     registration: TaskRegistration
+   ) {
+     taskRegistrationOwners[identity] = .current(identity: identity)
+-    taskRegistrations[identity] = registration
++    var list = taskRegistrations[identity] ?? []
++    if let index = list.firstIndex(where: {
++      $0.descriptor.id == registration.descriptor.id
++    }) {
++      list[index] = registration
++    } else {
++      list.append(registration)
++    }
++    taskRegistrations[identity] = list
+   }
+ 
+   package mutating func recordPreferenceObservation(
+diff --git a/Sources/SwiftTUICore/Resolve/ResolvedLifecycleMetadata.swift b/Sources/SwiftTUICore/Resolve/ResolvedLifecycleMetadata.swift
+index eff70b26..2176fac7 100644
+--- a/Sources/SwiftTUICore/Resolve/ResolvedLifecycleMetadata.swift
++++ b/Sources/SwiftTUICore/Resolve/ResolvedLifecycleMetadata.swift
+@@ -1,30 +1,35 @@
+ /// Lifecycle handlers and task metadata attached to a node.
++///
++/// `tasks` is an array (not a single optional) so a view node can carry more
++/// than one `.task`/`.task(id:)` modifier — they accumulate in chain order,
++/// like the appear/disappear handler IDs, instead of the later one replacing
++/// the earlier.
+ public struct LifecycleMetadata: Equatable, Sendable {
+   public var appearHandlerIDs: [String]
+   public var disappearHandlerIDs: [String]
+-  public var task: TaskDescriptor?
++  public var tasks: [TaskDescriptor]
+ 
+   public init(
+     appearHandlerIDs: [String] = [],
+     disappearHandlerIDs: [String] = [],
+-    task: TaskDescriptor? = nil
++    tasks: [TaskDescriptor] = []
+   ) {
+     self.appearHandlerIDs = appearHandlerIDs
+     self.disappearHandlerIDs = disappearHandlerIDs
+-    self.task = task
++    self.tasks = tasks
+   }
+ 
+   public var isEmpty: Bool {
+     appearHandlerIDs.isEmpty
+       && disappearHandlerIDs.isEmpty
+-      && task == nil
++      && tasks.isEmpty
+   }
+ 
+   public func merging(_ other: Self) -> Self {
+     Self(
+       appearHandlerIDs: appearHandlerIDs + other.appearHandlerIDs,
+       disappearHandlerIDs: disappearHandlerIDs + other.disappearHandlerIDs,
+-      task: other.task ?? task
++      tasks: tasks + other.tasks
+     )
+   }
+ }
+diff --git a/Sources/SwiftTUICore/Resolve/ResolvedNodeTraversal.swift b/Sources/SwiftTUICore/Resolve/ResolvedNodeTraversal.swift
+index 7b156a47..24674c31 100644
+--- a/Sources/SwiftTUICore/Resolve/ResolvedNodeTraversal.swift
++++ b/Sources/SwiftTUICore/Resolve/ResolvedNodeTraversal.swift
+@@ -67,7 +67,7 @@ extension ResolvedNode {
+             identity: node.identity,
+             appearHandlerIDs: node.lifecycleMetadata.appearHandlerIDs,
+             disappearHandlerIDs: node.lifecycleMetadata.disappearHandlerIDs,
+-            task: node.lifecycleMetadata.task
++            tasks: node.lifecycleMetadata.tasks
+           )
+         )
+       }
+diff --git a/Sources/SwiftTUICore/Resolve/ViewGraph.swift b/Sources/SwiftTUICore/Resolve/ViewGraph.swift
+index acffac60..3fbb9ecd 100644
+--- a/Sources/SwiftTUICore/Resolve/ViewGraph.swift
++++ b/Sources/SwiftTUICore/Resolve/ViewGraph.swift
+@@ -211,7 +211,7 @@ package final class ViewGraph {
+     get { lifecycleEvaluation.lifecycleEvaluationTargetsRecordedByOwner }
+     set { lifecycleEvaluation.lifecycleEvaluationTargetsRecordedByOwner = newValue }
+   }
+-  private var taskDescriptorNodeSlots: [ViewNodeID: TaskDescriptorIdentitySlot] {
++  private var taskDescriptorNodeSlots: [TaskDescriptorSlotKey: TaskDescriptorIdentitySlot] {
+     get { taskDescriptors.taskDescriptorNodeSlots }
+     set { taskDescriptors.taskDescriptorNodeSlots = newValue }
+   }
+@@ -429,7 +429,11 @@ package final class ViewGraph {
+       lifecycleEvaluationOwnersByNodeID: lifecycleEvaluationOwnersByNodeID,
+       lifecycleEvaluationTargetsByOwner: lifecycleEvaluationTargetsByOwner,
+       lifecycleEvaluationTargetsRecordedByOwner: lifecycleEvaluationTargetsRecordedByOwner,
+-      taskDescriptorNodeSlots: taskDescriptorNodeSlots.mapValues(\.label),
++      taskDescriptorNodeSlots: Dictionary(
++        uniqueKeysWithValues: taskDescriptorNodeSlots.map { key, slot in
++          ("\(key.node.rawValue)#\(key.ordinal)", slot.label)
++        }
++      ),
+       nextTaskDescriptorIdentityToken: nextTaskDescriptorIdentityToken,
+       stateSlotDependents: stateSlotDependents,
+       environmentDependents: debugObjectDependencySnapshot(environmentDependents),
+@@ -911,20 +915,24 @@ package final class ViewGraph {
+ 
+   package func taskDescriptorIdentityLabel<ID: Equatable>(
+     for identity: Identity,
++    ordinal: Int,
+     value: ID
+   ) -> String {
+     let viewNodeID = nodeForIdentity(for: identity).viewNodeID
+     return taskDescriptorIdentityLabel(
+       for: viewNodeID,
++      ordinal: ordinal,
+       value: value
+     )
+   }
+ 
+   package func taskDescriptorIdentityLabel<ID: Equatable>(
+     for viewNodeID: ViewNodeID,
++    ordinal: Int,
+     value: ID
+   ) -> String {
+-    if let slot = taskDescriptorNodeSlots[viewNodeID],
++    let key = TaskDescriptorSlotKey(node: viewNodeID, ordinal: ordinal)
++    if let slot = taskDescriptorNodeSlots[key],
+       slot.matches(value)
+     {
+       return slot.label
+@@ -933,7 +941,7 @@ package final class ViewGraph {
+     recordCheckpointGraphMutation()
+     nextTaskDescriptorIdentityToken &+= 1
+     let label = "id:\(nextTaskDescriptorIdentityToken)"
+-    taskDescriptorNodeSlots[viewNodeID] = TaskDescriptorIdentitySlot(
++    taskDescriptorNodeSlots[key] = TaskDescriptorIdentitySlot(
+       label: label,
+       value: value
+     )
+@@ -1180,30 +1188,33 @@ package final class ViewGraph {
+     let didChangeResolvedIdentity = previousResolvedIdentity != node.resolvedIdentity
+ 
+     if node.wasPresentAtFrameStart {
+-      if let previousTask = node.previousLifecycleMetadata.task,
+-        previousTask != node.lifecycleMetadata.task,
+-        emitsOwnLifecycleEvents
+-      {
+-        let removedTaskAcrossResolvedIdentityChange =
+-          didChangeResolvedIdentity && node.lifecycleMetadata.task == nil
+-        if !didChangeResolvedIdentity || removedTaskAcrossResolvedIdentityChange {
+-          appendTaskCancelEvent(
+-            identity: removedTaskAcrossResolvedIdentityChange
+-              ? node.resolvedIdentity : previousResolvedIdentity,
+-            task: previousTask,
+-            isStructural: false
+-          )
++      if emitsOwnLifecycleEvents {
++        // Diff the node's task set: cancel tasks present before but not now,
++        // start tasks present now but not before. For a single `.task` this is
++        // identical to the prior `previousTask != currentTask` compare; a node
++        // can now carry more than one task modifier.
++        let previousTasks = node.previousLifecycleMetadata.tasks
++        let currentTasks = node.lifecycleMetadata.tasks
++        let removedAllTasksAcrossResolvedIdentityChange =
++          didChangeResolvedIdentity && currentTasks.isEmpty
++        for previousTask in previousTasks where !currentTasks.contains(previousTask) {
++          if !didChangeResolvedIdentity || removedAllTasksAcrossResolvedIdentityChange {
++            appendTaskCancelEvent(
++              identity: removedAllTasksAcrossResolvedIdentityChange
++                ? node.resolvedIdentity : previousResolvedIdentity,
++              task: previousTask,
++              isStructural: false
++            )
++          }
++        }
++        if !didChangeResolvedIdentity {
++          for currentTask in currentTasks where !previousTasks.contains(currentTask) {
++            appendTaskStartEvent(
++              identity: node.resolvedIdentity,
++              task: currentTask
++            )
++          }
+         }
+-      }
+-      if let currentTask = node.lifecycleMetadata.task,
+-        currentTask != node.previousLifecycleMetadata.task,
+-        emitsOwnLifecycleEvents,
+-        !didChangeResolvedIdentity
+-      {
+-        appendTaskStartEvent(
+-          identity: node.resolvedIdentity,
+-          task: currentTask
+-        )
+       }
+       node.setLifecycleState(.alive)
+     } else {
+@@ -1217,13 +1228,13 @@ package final class ViewGraph {
+           )
+         )
+       }
+-      if emitsOwnLifecycleEvents,
+-        let task = node.lifecycleMetadata.task
+-      {
+-        appendTaskStartEvent(
+-          identity: node.resolvedIdentity,
+-          task: task
+-        )
++      if emitsOwnLifecycleEvents {
++        for task in node.lifecycleMetadata.tasks {
++          appendTaskStartEvent(
++            identity: node.resolvedIdentity,
++            task: task
++          )
++        }
+       }
+       node.setLifecycleState(.appearing)
+     }
+@@ -1420,40 +1431,41 @@ package final class ViewGraph {
+           )
+         )
+       }
+-      if emitsOwnLifecycleEvents,
+-        let task = node.lifecycleMetadata.task
+-      {
+-        appendTaskStartEvent(
+-          identity: node.resolvedIdentity,
+-          task: task
+-        )
++      if emitsOwnLifecycleEvents {
++        for task in node.lifecycleMetadata.tasks {
++          appendTaskStartEvent(
++            identity: node.resolvedIdentity,
++            task: task
++          )
++        }
+       }
+       node.setLifecycleState(.appearing)
+     } else {
+-      if let previousTask = node.previousLifecycleMetadata.task,
+-        previousTask != node.lifecycleMetadata.task,
+-        emitsOwnLifecycleEvents
+-      {
+-        let removedTaskAcrossResolvedIdentityChange =
+-          didChangeResolvedIdentity && node.lifecycleMetadata.task == nil
+-        if !didChangeResolvedIdentity || removedTaskAcrossResolvedIdentityChange {
+-          appendTaskCancelEvent(
+-            identity: removedTaskAcrossResolvedIdentityChange
+-              ? node.resolvedIdentity : previousResolvedIdentity,
+-            task: previousTask,
+-            isStructural: false
+-          )
++      if emitsOwnLifecycleEvents {
++        // Per-task diff: cancel removed tasks, start added tasks. Identical to
++        // the prior single-task compare when the node carries one `.task`.
++        let previousTasks = node.previousLifecycleMetadata.tasks
++        let currentTasks = node.lifecycleMetadata.tasks
++        let removedAllTasksAcrossResolvedIdentityChange =
++          didChangeResolvedIdentity && currentTasks.isEmpty
++        for previousTask in previousTasks where !currentTasks.contains(previousTask) {
++          if !didChangeResolvedIdentity || removedAllTasksAcrossResolvedIdentityChange {
++            appendTaskCancelEvent(
++              identity: removedAllTasksAcrossResolvedIdentityChange
++                ? node.resolvedIdentity : previousResolvedIdentity,
++              task: previousTask,
++              isStructural: false
++            )
++          }
++        }
++        if !didChangeResolvedIdentity {
++          for currentTask in currentTasks where !previousTasks.contains(currentTask) {
++            appendTaskStartEvent(
++              identity: node.resolvedIdentity,
++              task: currentTask
++            )
++          }
+         }
+-      }
+-      if let currentTask = node.lifecycleMetadata.task,
+-        currentTask != node.previousLifecycleMetadata.task,
+-        emitsOwnLifecycleEvents,
+-        !didChangeResolvedIdentity
+-      {
+-        appendTaskStartEvent(
+-          identity: node.resolvedIdentity,
+-          task: currentTask
+-        )
+       }
+       node.setLifecycleState(.alive)
+     }
+@@ -2331,14 +2343,14 @@ package final class ViewGraph {
+ 
+     let emitsOwnLifecycleEvents = node.participatesInStructuralLifecycle
+ 
+-    if emitsOwnLifecycleEvents,
+-      let task = lifecycleMetadata.task
+-    {
+-      appendTaskCancelEvent(
+-        identity: snapshot.identity,
+-        task: task,
+-        isStructural: true
+-      )
++    if emitsOwnLifecycleEvents {
++      for task in lifecycleMetadata.tasks {
++        appendTaskCancelEvent(
++          identity: snapshot.identity,
++          task: task,
++          isStructural: true
++        )
++      }
+     }
+     if emitsOwnLifecycleEvents,
+       !lifecycleMetadata.disappearHandlerIDs.isEmpty
+@@ -2379,7 +2391,7 @@ package final class ViewGraph {
+     if nodeIDsByStructuralPath[node.committed.structuralPath]?.isEmpty == true {
+       nodeIDsByStructuralPath.removeValue(forKey: node.committed.structuralPath)
+     }
+-    taskDescriptorNodeSlots.removeValue(forKey: node.viewNodeID)
++    taskDescriptorNodeSlots = taskDescriptorNodeSlots.filter { $0.key.node != node.viewNodeID }
+     if nodeIDByIdentity[node.identity] == node.viewNodeID {
+       nodeIDByIdentity.removeValue(forKey: node.identity)
+     }
+diff --git a/Sources/SwiftTUICore/Resolve/ViewGraphDebugSnapshots.swift b/Sources/SwiftTUICore/Resolve/ViewGraphDebugSnapshots.swift
+index cc62146d..69963d01 100644
+--- a/Sources/SwiftTUICore/Resolve/ViewGraphDebugSnapshots.swift
++++ b/Sources/SwiftTUICore/Resolve/ViewGraphDebugSnapshots.swift
+@@ -32,7 +32,7 @@ extension ViewGraph {
+     package var lifecycleEvaluationOwnersByNodeID: [ViewNodeID: ViewNodeID]
+     package var lifecycleEvaluationTargetsByOwner: [ViewNodeID: Set<ViewNodeID>]
+     package var lifecycleEvaluationTargetsRecordedByOwner: [ViewNodeID: Set<ViewNodeID>]
+-    package var taskDescriptorNodeSlots: [ViewNodeID: String]
++    package var taskDescriptorNodeSlots: [String: String]
+     package var nextTaskDescriptorIdentityToken: UInt64
+     package var stateSlotDependents: [StateSlotKey: Set<ViewNodeID>]
+     package var environmentDependents: [ObjectDependencySnapshot]
+diff --git a/Sources/SwiftTUICore/Resolve/ViewGraphFieldGroups.swift b/Sources/SwiftTUICore/Resolve/ViewGraphFieldGroups.swift
+index 07a8379c..27432a54 100644
+--- a/Sources/SwiftTUICore/Resolve/ViewGraphFieldGroups.swift
++++ b/Sources/SwiftTUICore/Resolve/ViewGraphFieldGroups.swift
+@@ -69,7 +69,7 @@ extension ViewGraph {
+   /// Stable `.task(id:)` identity slots and the monotonically increasing token
+   /// that mints fresh labels.
+   package struct TaskDescriptorState {
+-    package var taskDescriptorNodeSlots: [ViewNodeID: TaskDescriptorIdentitySlot] = [:]
++    package var taskDescriptorNodeSlots: [TaskDescriptorSlotKey: TaskDescriptorIdentitySlot] = [:]
+     package var nextTaskDescriptorIdentityToken: UInt64 = 0
+   }
+ 
+diff --git a/Sources/SwiftTUICore/Resolve/ViewGraphLifecyclePlanning.swift b/Sources/SwiftTUICore/Resolve/ViewGraphLifecyclePlanning.swift
+index e0ef6044..08c22be2 100644
+--- a/Sources/SwiftTUICore/Resolve/ViewGraphLifecyclePlanning.swift
++++ b/Sources/SwiftTUICore/Resolve/ViewGraphLifecyclePlanning.swift
+@@ -128,7 +128,7 @@ enum ViewGraphLifecyclePlanner {
+       guard let previousNode = nodesByKey.removeValue(forKey: key) else {
+         continue
+       }
+-      if let task = previousNode.task {
++      for task in previousNode.tasks {
+         taskCancels.append(
+           .init(
+             viewNodeID: previousNode.viewNodeID,
+@@ -216,7 +216,7 @@ enum ViewGraphLifecyclePlanner {
+         identity: node.identity,
+         appearHandlerIDs: node.lifecycleMetadata.appearHandlerIDs,
+         disappearHandlerIDs: node.lifecycleMetadata.disappearHandlerIDs,
+-        task: node.lifecycleMetadata.task
++        tasks: node.lifecycleMetadata.tasks
+       )
+       let previousNode = viewportLifecycleNodesByKey[key]
+       seenKeys.insert(key)
+@@ -231,7 +231,11 @@ enum ViewGraphLifecyclePlanner {
+           )
+         )
+       }
+-      if previousNode?.task != currentNode.task, let task = previousNode?.task {
++      // Per-task viewport diff: cancel tasks gone since last frame, start newly
++      // present ones. One `.task` reduces to the prior single-task compare.
++      let previousTasks = previousNode?.tasks ?? []
++      let currentTasks = currentNode.tasks
++      for task in previousTasks where !currentTasks.contains(task) {
+         taskCancels.append(
+           .init(
+             viewNodeID: currentNode.viewNodeID,
+@@ -240,7 +244,7 @@ enum ViewGraphLifecyclePlanner {
+           )
+         )
+       }
+-      if previousNode?.task != currentNode.task, let task = currentNode.task {
++      for task in currentTasks where !previousTasks.contains(task) {
+         taskStarts.append(
+           .init(
+             viewNodeID: currentNode.viewNodeID,
+diff --git a/Sources/SwiftTUICore/Resolve/ViewGraphState.swift b/Sources/SwiftTUICore/Resolve/ViewGraphState.swift
+index 964fa9bf..4cad1f21 100644
+--- a/Sources/SwiftTUICore/Resolve/ViewGraphState.swift
++++ b/Sources/SwiftTUICore/Resolve/ViewGraphState.swift
+@@ -3,7 +3,7 @@ package struct LifecycleStateNode: Equatable, Sendable {
+   var identity: Identity
+   var appearHandlerIDs: [String]
+   var disappearHandlerIDs: [String]
+-  var task: TaskDescriptor?
++  var tasks: [TaskDescriptor]
+ }
+ 
+ package enum ViewportLifecycleKey: Hashable, Sendable {
+@@ -145,7 +145,22 @@ package struct DirtyEvaluationPlanDiagnostics: Equatable, Sendable {
+   }
+ }
+ 
+-/// Retained `.task(id:)` comparison state for one lifecycle identity.
++/// Identifies one `.task`/`.task(id:)` modifier's comparison slot. A view node
++/// can carry several task modifiers, so the slot is keyed by the node plus the
++/// modifier's per-node ordinal (claimed in chain order) rather than the node
++/// alone — otherwise stacked task modifiers would share (and thrash) a single
++/// slot.
++package struct TaskDescriptorSlotKey: Hashable {
++  package let node: ViewNodeID
++  package let ordinal: Int
++
++  package init(node: ViewNodeID, ordinal: Int) {
++    self.node = node
++    self.ordinal = ordinal
++  }
++}
++
++/// Retained `.task(id:)` comparison state for one task-modifier slot.
+ ///
+ /// The slot lives on the main-actor view graph, so it can compare the authored
+ /// `ID: Equatable` value without requiring `ID: Sendable` or deriving identity
+diff --git a/Sources/SwiftTUICore/Resolve/ViewNode.swift b/Sources/SwiftTUICore/Resolve/ViewNode.swift
+index 2f84e931..f302026f 100644
+--- a/Sources/SwiftTUICore/Resolve/ViewNode.swift
++++ b/Sources/SwiftTUICore/Resolve/ViewNode.swift
+@@ -88,6 +88,7 @@ package final class ViewNode {
+   private var suppressesStructuralLifecycle: Bool
+   private var nextChangeModifierOrdinal: Int
+   private var nextNavigationDestinationModifierOrdinal: Int
++  private var nextTaskModifierOrdinal: Int
+   private var preparedFrameID: UInt64
+   private var visitedFrameID: UInt64
+   private var evaluator: (@MainActor () -> Void)?
+@@ -126,6 +127,7 @@ package final class ViewNode {
+     suppressesStructuralLifecycle = false
+     nextChangeModifierOrdinal = 0
+     nextNavigationDestinationModifierOrdinal = 0
++    nextTaskModifierOrdinal = 0
+     preparedFrameID = 0
+     visitedFrameID = 0
+     evaluator = nil
+@@ -164,6 +166,7 @@ package final class ViewNode {
+     pendingChangeHandlerIDs.removeAll(keepingCapacity: true)
+     nextChangeModifierOrdinal = 0
+     nextNavigationDestinationModifierOrdinal = 0
++    nextTaskModifierOrdinal = 0
+     preparedFrameID = frameID
+   }
+ 
+@@ -430,6 +433,19 @@ package final class ViewNode {
+     return nextNavigationDestinationModifierOrdinal
+   }
+ 
++  /// Per-node, per-resolve-pass ordinal for `.task`/`.task(id:)` modifiers, so
++  /// multiple task modifiers stacked on one view node each get a stable,
++  /// distinct identity instead of sharing a single per-node descriptor slot.
++  /// Reset in `prepareForFrame` and claimed in chain order, mirroring
++  /// `claimChangeModifierOrdinal`.
++  package func claimTaskModifierOrdinal() -> Int {
++    recordCheckpointMutation()
++    defer {
++      nextTaskModifierOrdinal += 1
++    }
++    return nextTaskModifierOrdinal
++  }
++
+   package func queueChangeHandler(
+     _ handlerID: String
+   ) {
+@@ -1248,6 +1264,7 @@ extension ViewNode {
+     package var suppressesStructuralLifecycle: Bool
+     package var nextChangeModifierOrdinal: Int
+     package var nextNavigationDestinationModifierOrdinal: Int
++    package var nextTaskModifierOrdinal: Int
+     package var preparedFrameID: UInt64
+     package var visitedFrameID: UInt64
+     package var evaluator: (@MainActor () -> Void)?
+@@ -1286,6 +1303,7 @@ extension ViewNode {
+       suppressesStructuralLifecycle: suppressesStructuralLifecycle,
+       nextChangeModifierOrdinal: nextChangeModifierOrdinal,
+       nextNavigationDestinationModifierOrdinal: nextNavigationDestinationModifierOrdinal,
++      nextTaskModifierOrdinal: nextTaskModifierOrdinal,
+       preparedFrameID: preparedFrameID,
+       visitedFrameID: visitedFrameID,
+       evaluator: evaluator,
+@@ -1328,6 +1346,7 @@ extension ViewNode {
+     nextChangeModifierOrdinal = checkpoint.nextChangeModifierOrdinal
+     nextNavigationDestinationModifierOrdinal =
+       checkpoint.nextNavigationDestinationModifierOrdinal
++    nextTaskModifierOrdinal = checkpoint.nextTaskModifierOrdinal
+     preparedFrameID = checkpoint.preparedFrameID
+     visitedFrameID = checkpoint.visitedFrameID
+     evaluator = checkpoint.evaluator
+diff --git a/Sources/SwiftTUICore/Runtime/LocalTaskRegistry.swift b/Sources/SwiftTUICore/Runtime/LocalTaskRegistry.swift
+index effb5ff3..2f1288bf 100644
+--- a/Sources/SwiftTUICore/Runtime/LocalTaskRegistry.swift
++++ b/Sources/SwiftTUICore/Runtime/LocalTaskRegistry.swift
+@@ -18,7 +18,10 @@ package final class TaskRegistration: Sendable {
+ 
+ @MainActor
+ package final class LocalTaskRegistry: Equatable {
+-  private var registrations: [Identity: TaskRegistration] = [:]
++  // One identity (view node) can carry several `.task`/`.task(id:)` modifiers,
++  // so registrations are a list per identity rather than a single value. The
++  // owner/subtree bookkeeping stays identity-keyed.
++  private var registrations: [Identity: [TaskRegistration]] = [:]
+   private var ownersByIdentity: [Identity: RuntimeRegistrationOwnerKey] = [:]
+ 
+   package init() {}
+@@ -34,7 +37,17 @@ package final class LocalTaskRegistry: Equatable {
+     identity: Identity,
+     registration: TaskRegistration
+   ) {
+-    registrations[identity] = registration
++    var list = registrations[identity] ?? []
++    // Re-registering the same descriptor (re-resolve of the same `.task`)
++    // replaces its operation; a distinct descriptor is appended as a sibling.
++    if let index = list.firstIndex(where: {
++      $0.descriptor.id == registration.descriptor.id
++    }) {
++      list[index] = registration
++    } else {
++      list.append(registration)
++    }
++    registrations[identity] = list
+     ownersByIdentity[identity] = .current(identity: identity)
+     ViewNodeContext.current?.recordTaskRegistration(
+       identity: identity,
+@@ -42,10 +55,20 @@ package final class LocalTaskRegistry: Equatable {
+     )
+   }
+ 
++  package func registration(
++    for identity: Identity,
++    descriptor: TaskDescriptor
++  ) -> TaskRegistration? {
++    registrations[identity]?.first { $0.descriptor == descriptor }
++  }
++
++  /// The first registration recorded for `identity`. Convenience for the common
++  /// single-`.task` node; callers that must disambiguate between several task
++  /// modifiers on one node use ``registration(for:descriptor:)``.
+   package func registration(
+     for identity: Identity
+   ) -> TaskRegistration? {
+-    registrations[identity]
++    registrations[identity]?.first
+   }
+ 
+   package func reset() {
+@@ -68,20 +91,20 @@ package final class LocalTaskRegistry: Equatable {
+     }
+   }
+ 
+-  package func snapshot() -> [Identity: TaskRegistration] {
++  package func snapshot() -> [Identity: [TaskRegistration]] {
+     registrations
+   }
+ 
+   package func restore(
+-    _ snapshot: [Identity: TaskRegistration],
++    _ snapshot: [Identity: [TaskRegistration]],
+     ownersByIdentity: [Identity: RuntimeRegistrationOwnerKey] = [:]
+   ) {
+     guard !snapshot.isEmpty else {
+       return
+     }
+ 
+-    for (identity, registration) in snapshot {
+-      registrations[identity] = registration
++    for (identity, registrationList) in snapshot {
++      registrations[identity] = registrationList
+       self.ownersByIdentity[identity] = ownersByIdentity[identity] ?? .init(identity: identity)
+     }
+   }
+diff --git a/Sources/SwiftTUIRuntime/Lifecycle/LifecycleCoordinator.swift b/Sources/SwiftTUIRuntime/Lifecycle/LifecycleCoordinator.swift
+index e7f14c05..c6a92d05 100644
+--- a/Sources/SwiftTUIRuntime/Lifecycle/LifecycleCoordinator.swift
++++ b/Sources/SwiftTUIRuntime/Lifecycle/LifecycleCoordinator.swift
+@@ -57,8 +57,11 @@ package final class LifecycleCoordinator {
+         currentLifecycleRegistry.changeHandler(for: handlerID)?()
+       }
+     case .taskStart(let descriptor):
+-      guard let registration = currentTaskRegistry.registration(for: entry.identity),
+-        registration.descriptor == descriptor,
++      guard
++        let registration = currentTaskRegistry.registration(
++          for: entry.identity,
++          descriptor: descriptor
++        ),
+         let viewNodeID = entry.viewNodeID
+       else {
+         return
+diff --git a/Sources/SwiftTUIRuntime/Lifecycle/TaskRunner.swift b/Sources/SwiftTUIRuntime/Lifecycle/TaskRunner.swift
+index 79812fc7..05fddfc9 100644
+--- a/Sources/SwiftTUIRuntime/Lifecycle/TaskRunner.swift
++++ b/Sources/SwiftTUIRuntime/Lifecycle/TaskRunner.swift
+@@ -19,15 +19,6 @@ final class TaskRunner {
+   ) {
+     cancel(viewNodeID: viewNodeID)
+ 
+-    // A node's viewNodeID can churn — a fresh id for the *same* identity on
+-    // re-evaluation (e.g. a `TimelineView` re-attaching its `.task` each tick).
+-    // Since active tasks are keyed by viewNodeID, the old id's task is left
+-    // running, and the lifecycle diff can miss the transient disappearance — so
+-    // it orphans: re-rendering forever and surviving the view's removal (the
+-    // persistent slowdown after leaving an animated tab). Cancel any active
+-    // task for this identity on a now-stale viewNodeID. There is one task per
+-    // viewNodeID, so a same-identity entry under a different id is always a
+-    // stale duplicate of this logical `.task`.
+     let staleViewNodeIDs = activeTasks.compactMap { entry in
+       entry.key != viewNodeID && entry.value.identity == identity ? entry.key : nil
+     }
+@@ -81,9 +72,6 @@ final class TaskRunner {
+     )
+   }
+ 
+-  /// Raw count of live task handles (keyed by `viewNodeID`). Used by tests to
+-  /// detect tasks that should have been cancelled — e.g. a tab's `.task`s that
+-  /// must stop when the tab is dismissed behind a capture-host seam.
+   package var activeTaskCount: Int {
+     activeTasks.count
+   }
+diff --git a/Sources/SwiftTUIRuntime/RunLoop/RunLoop+EventDispatch.swift b/Sources/SwiftTUIRuntime/RunLoop/RunLoop+EventDispatch.swift
+index 5063676c..8b91cc42 100644
+--- a/Sources/SwiftTUIRuntime/RunLoop/RunLoop+EventDispatch.swift
++++ b/Sources/SwiftTUIRuntime/RunLoop/RunLoop+EventDispatch.swift
+@@ -75,11 +75,26 @@ extension RunLoop {
+     if let focusedIdentity,
+       localKeyHandlerRegistry.hasHandler(identity: focusedIdentity)
+     {
++      let invalidationsBeforeDispatch = schedulerPendingInvalidations()
+       let handled = localKeyHandlerRegistry.dispatch(
+         identity: focusedIdentity,
+         keyPress: keyPress
+       )
+-      scheduler.requestInvalidation(of: [rootIdentity])
++      // The handler's own `@State` writes already invalidate the precise
++      // readers under reader attribution, so the coarse root sweep is redundant
++      // whenever the dispatch invalidated anything — and a full-tree re-resolve
++      // on every key is expensive (e.g. re-running a presenting view's whole
++      // body for each character typed into a focused TextField). Mirror the
++      // control-action path (`recordFollowUpInvalidation`): keep the root sweep
++      // only as the backstop for handlers with untracked side effects, which
++      // schedule nothing. Reader-attribution-off stays byte-identical (the
++      // sweep is always issued).
++      let handlerRequestedInvalidation =
++        ReaderAttributionConfiguration.isEnabled
++        && schedulerPendingInvalidations() != invalidationsBeforeDispatch
++      if !handlerRequestedInvalidation {
++        scheduler.requestInvalidation(of: [rootIdentity])
++      }
+       if handled {
+         return nil
+       }
+diff --git a/Sources/SwiftTUIViews/Modifiers/ViewLifecycleModifiers.swift b/Sources/SwiftTUIViews/Modifiers/ViewLifecycleModifiers.swift
+index 5d51b997..663f9495 100644
+--- a/Sources/SwiftTUIViews/Modifiers/ViewLifecycleModifiers.swift
++++ b/Sources/SwiftTUIViews/Modifiers/ViewLifecycleModifiers.swift
+@@ -199,20 +199,22 @@ public struct ChangeLifecycleModifier<Value: Equatable>: PrimitiveViewModifier {
+ }
+ 
+ private struct TaskLifecycleDescriptorIdentity {
+-  private let label: @MainActor (ResolveContext, Identity) -> String
++  private let label: @MainActor (ResolveContext, Identity, Int) -> String
+ 
+   @MainActor
+   init<ID: Equatable>(_ value: ID) {
+-    label = { context, identity in
++    label = { context, identity, ordinal in
+       if let viewGraph = context.viewGraph {
+         if let viewNodeID = ViewNodeContext.current?.viewNodeID {
+           return viewGraph.taskDescriptorIdentityLabel(
+             for: viewNodeID,
++            ordinal: ordinal,
+             value: value
+           )
+         }
+         return viewGraph.taskDescriptorIdentityLabel(
+           for: identity,
++          ordinal: ordinal,
+           value: value
+         )
+       }
+@@ -223,9 +225,10 @@ private struct TaskLifecycleDescriptorIdentity {
+   @MainActor
+   func descriptorLabel(
+     in context: ResolveContext,
+-    identity: Identity
++    identity: Identity,
++    ordinal: Int
+   ) -> String {
+-    label(context, identity)
++    label(context, identity, ordinal)
+   }
+ }
+ 
+@@ -256,16 +259,33 @@ public struct TaskLifecycleModifier: PrimitiveViewModifier {
+       for: lifecycleIdentity,
+       in: context
+     )
++    // Claim a per-node ordinal so multiple `.task`/`.task(id:)` modifiers on the
++    // same view node each get a distinct, stable descriptor identity instead of
++    // colliding over a single per-node slot. Mirrors the `.onChange` ordinal.
++    let ownerNode = context.viewGraph?.nodeForIdentity(lifecycleIdentity)
++    let taskOrdinal = ownerNode?.claimTaskModifierOrdinal() ?? 0
+     let descriptorIdentityLabel = descriptorIdentity?.descriptorLabel(
+       in: context,
+-      identity: lifecycleIdentity
+-    )
+-    let descriptor = TaskDescriptor(
+-      id: descriptorIdentityLabel.map {
+-        "\(lifecycleIdentity)#task[\($0)]"
+-      } ?? "\(lifecycleIdentity)#task",
+-      priority: priority
++      identity: lifecycleIdentity,
++      ordinal: taskOrdinal
+     )
++    // The first task modifier on a node keeps the historical id format (no
++    // ordinal suffix); only the 2nd+ task on the same node carries its ordinal,
++    // so a single `.task`/`.task(id:)` (the overwhelmingly common case) is
++    // byte-identical and stacked task modifiers stay distinct.
++    let descriptorID: String
++    if let label = descriptorIdentityLabel {
++      descriptorID =
++        taskOrdinal == 0
++        ? "\(lifecycleIdentity)#task[\(label)]"
++        : "\(lifecycleIdentity)#task[\(taskOrdinal):\(label)]"
++    } else {
++      descriptorID =
++        taskOrdinal == 0
++        ? "\(lifecycleIdentity)#task"
++        : "\(lifecycleIdentity)#task[\(taskOrdinal)]"
++    }
++    let descriptor = TaskDescriptor(id: descriptorID, priority: priority)
+     if let taskRegistry = context.localTaskRegistry {
+       taskRegistry.register(
+         identity: lifecycleIdentity,
+@@ -280,7 +300,7 @@ public struct TaskLifecycleModifier: PrimitiveViewModifier {
+       )
+     }
+     node.lifecycleMetadata = node.lifecycleMetadata.merging(
+-      .init(task: descriptor)
++      .init(tasks: [descriptor])
+     )
+     return [node]
+   }
+diff --git a/Tests/SwiftTUICoreTests/Graph/RuntimeRegistrationRestoreScopingTests.swift b/Tests/SwiftTUICoreTests/Graph/RuntimeRegistrationRestoreScopingTests.swift
+index 92142fa4..e1c7ce5f 100644
+--- a/Tests/SwiftTUICoreTests/Graph/RuntimeRegistrationRestoreScopingTests.swift
++++ b/Tests/SwiftTUICoreTests/Graph/RuntimeRegistrationRestoreScopingTests.swift
+@@ -989,9 +989,9 @@ struct RuntimeRegistrationRestoreScopingTests {
+   }
+ 
+   private func taskDescriptors(
+-    _ registrations: [Identity: TaskRegistration]
+-  ) -> [Identity: TaskDescriptor] {
+-    registrations.mapValues(\.descriptor)
++    _ registrations: [Identity: [TaskRegistration]]
++  ) -> [Identity: [TaskDescriptor]] {
++    registrations.mapValues { $0.map(\.descriptor) }
+   }
+ 
+   private func preferenceHandlerIDs(
+diff --git a/Tests/SwiftTUICoreTests/Graph/ViewGraphCheckpointTotalityTests.swift b/Tests/SwiftTUICoreTests/Graph/ViewGraphCheckpointTotalityTests.swift
+index 27bb04e3..cea49fff 100644
+--- a/Tests/SwiftTUICoreTests/Graph/ViewGraphCheckpointTotalityTests.swift
++++ b/Tests/SwiftTUICoreTests/Graph/ViewGraphCheckpointTotalityTests.swift
+@@ -170,7 +170,7 @@ struct ViewGraphCheckpointTotalityTests {
+             kind: .view("Inserted"),
+             lifecycleMetadata: .init(
+               appearHandlerIDs: ["inserted-appear"],
+-              task: .init(id: "inserted-task", priority: .medium)
++              tasks: [.init(id: "inserted-task", priority: .medium)]
+             )
+           ),
+         ]
+diff --git a/Tests/SwiftTUICoreTests/Graph/ViewGraphTests.swift b/Tests/SwiftTUICoreTests/Graph/ViewGraphTests.swift
+index ce8a8fbc..64707167 100644
+--- a/Tests/SwiftTUICoreTests/Graph/ViewGraphTests.swift
++++ b/Tests/SwiftTUICoreTests/Graph/ViewGraphTests.swift
+@@ -19,7 +19,7 @@ struct ViewGraphTests {
+           lifecycleMetadata: .init(
+             appearHandlerIDs: ["appear-leaf"],
+             disappearHandlerIDs: ["disappear-leaf"],
+-            task: task
++            tasks: [task]
+           )
+         )
+       ]
+@@ -58,7 +58,7 @@ struct ViewGraphTests {
+             lifecycleMetadata: .init(
+               appearHandlerIDs: ["appear-leaf"],
+               disappearHandlerIDs: ["disappear-leaf"],
+-              task: task
++              tasks: [task]
+             )
+           )
+         ]
+diff --git a/Tests/SwiftTUITests/InteractiveRuntimeTests.swift b/Tests/SwiftTUITests/InteractiveRuntimeTests.swift
+index 37b5173b..44b17219 100644
+--- a/Tests/SwiftTUITests/InteractiveRuntimeTests.swift
++++ b/Tests/SwiftTUITests/InteractiveRuntimeTests.swift
+@@ -5140,7 +5140,7 @@ private struct LifecycleRuntimeProbe: PrimitiveView, ResolvableView {
+     node.lifecycleMetadata = .init(
+       appearHandlerIDs: [appearHandlerID],
+       disappearHandlerIDs: [disappearHandlerID],
+-      task: descriptor
++      tasks: [descriptor]
+     )
+     if focusable {
+       node.semanticMetadata = node.semanticMetadata.merging(
+@@ -5184,7 +5184,7 @@ private struct ScrollLifecycleRuntimeProbe: PrimitiveView, ResolvableView {
+     node.lifecycleMetadata = .init(
+       appearHandlerIDs: [appearHandlerID],
+       disappearHandlerIDs: [disappearHandlerID],
+-      task: descriptor
++      tasks: [descriptor]
+     )
+     return [node]
+   }
+diff --git a/Tests/SwiftTUITests/LifecycleSelectiveEvaluationTests.swift b/Tests/SwiftTUITests/LifecycleSelectiveEvaluationTests.swift
+index 50e8c85d..9c5ebde3 100644
+--- a/Tests/SwiftTUITests/LifecycleSelectiveEvaluationTests.swift
++++ b/Tests/SwiftTUITests/LifecycleSelectiveEvaluationTests.swift
+@@ -36,7 +36,7 @@ struct LifecycleSelectiveEvaluationTests {
+       id: "\(initialNode.identity)#task[id:1]",
+       priority: .userInitiated
+     )
+-    #expect(initialNode.lifecycleMetadata.task == expectedTask)
++    #expect(initialNode.lifecycleMetadata.tasks == [expectedTask])
+     #expect(taskRegistry.registration(for: initialNode.identity)?.descriptor == expectedTask)
+ 
+     invalidator.clear()
+@@ -62,7 +62,7 @@ struct LifecycleSelectiveEvaluationTests {
+     )
+ 
+     #expect(updatedNode.identity == initialNode.identity)
+-    #expect(updatedNode.lifecycleMetadata.task == expectedTask)
++    #expect(updatedNode.lifecycleMetadata.tasks == [expectedTask])
+     #expect(taskRegistry.registration(for: updatedNode.identity)?.descriptor == expectedTask)
+     #expect(updatedArtifacts.commitPlan.lifecycle.isEmpty)
+   }
+diff --git a/Tests/SwiftTUITests/MultipleTaskModifiersTests.swift b/Tests/SwiftTUITests/MultipleTaskModifiersTests.swift
+new file mode 100644
+index 00000000..aec2f72b
+--- /dev/null
++++ b/Tests/SwiftTUITests/MultipleTaskModifiersTests.swift
+@@ -0,0 +1,100 @@
++import Testing
++
++@testable import SwiftTUICore
++@testable import SwiftTUIRuntime
++@testable import SwiftTUIViews
++
++/// Regression coverage for stacking more than one `.task`/`.task(id:)` modifier
++/// on a single view node. Before the per-node task-modifier ordinal landed, all
++/// task modifiers on a node shared one descriptor slot / one registry entry /
++/// one runner slot, so the second silently replaced the first.
++@MainActor
++@Suite("Multiple task modifiers per view node")
++struct MultipleTaskModifiersTests {
++  private func render(_ view: some View) -> (
++    artifacts: FrameArtifacts,
++    lifecycleRegistry: LocalLifecycleRegistry,
++    taskRegistry: LocalTaskRegistry
++  ) {
++    let lifecycleRegistry = LocalLifecycleRegistry()
++    let taskRegistry = LocalTaskRegistry()
++    let artifacts = DefaultRenderer().render(
++      view,
++      context: .init(
++        identity: testIdentity("Root"),
++        localLifecycleRegistry: lifecycleRegistry,
++        localTaskRegistry: taskRegistry,
++        applyEnvironmentValues: true
++      )
++    )
++    return (artifacts, lifecycleRegistry, taskRegistry)
++  }
++
++  private func startedDescriptors(_ artifacts: FrameArtifacts) -> [TaskDescriptor] {
++    artifacts.commitPlan.lifecycle.compactMap { entry in
++      if case .taskStart(let descriptor) = entry.operation {
++        return descriptor
++      }
++      return nil
++    }
++  }
++
++  @Test("two .task(id:) modifiers on one node each register with a distinct descriptor")
++  func twoTasksOnOneNodeRegisterDistinctly() throws {
++    let (artifacts, _, taskRegistry) = render(
++      Text("Two tasks")
++        .task(id: 1) {}
++        .task(id: "a") {}
++    )
++
++    let started = startedDescriptors(artifacts)
++    #expect(started.count == 2)
++    // Distinct descriptor ids — the collision would have produced one (or two
++    // identical) descriptors.
++    #expect(Set(started.map(\.id)).count == 2)
++    // Both are independently resolvable in the registry for the same identity.
++    for descriptor in started {
++      #expect(
++        taskRegistry.registration(for: testIdentity("Root"), descriptor: descriptor) != nil)
++    }
++  }
++
++  @Test("both tasks on one node start in the runner, not just the plan")
++  func bothTasksStartInRunner() {
++    let (artifacts, lifecycleRegistry, taskRegistry) = render(
++      Text("Two tasks")
++        .task(id: 1) {}
++        .task(id: "a") {}
++    )
++
++    let coordinator = LifecycleCoordinator()
++    coordinator.applyCommittedFrame(
++      plan: artifacts.commitPlan,
++      currentLifecycleRegistry: lifecycleRegistry,
++      currentTaskRegistry: taskRegistry
++    )
++    // The runner is keyed by (viewNodeID, descriptor), so both tasks are live
++    // (the empty operations have not yet run/finished in this synchronous step).
++    #expect(coordinator.activeTaskCount == 2)
++  }
++
++  @Test("a non-id .task and a .task(id:) coexist on one node")
++  func nonIDAndIDTaskCoexist() {
++    let (artifacts, _, _) = render(
++      Text("Mixed tasks")
++        .task {}
++        .task(id: 7) {}
++    )
++    #expect(startedDescriptors(artifacts).count == 2)
++  }
++
++  @Test("a single .task keeps its historical descriptor id (no ordinal suffix)")
++  func singleTaskKeepsHistoricalDescriptorID() {
++    let (artifacts, _, _) = render(
++      Text("One task").task(priority: .userInitiated) {}
++    )
++    #expect(
++      startedDescriptors(artifacts)
++        == [TaskDescriptor(id: "Root#task", priority: .userInitiated)])
++  }
++}
+diff --git a/Tests/SwiftTUITests/Phase2CommitPlannerTests.swift b/Tests/SwiftTUITests/Phase2CommitPlannerTests.swift
+index 3f090995..9eafcfcc 100644
+--- a/Tests/SwiftTUITests/Phase2CommitPlannerTests.swift
++++ b/Tests/SwiftTUITests/Phase2CommitPlannerTests.swift
+@@ -273,7 +273,7 @@ struct Phase2CommitPlannerTests {
+               lifecycleMetadata: .init(
+                 appearHandlerIDs: ["appear"],
+                 disappearHandlerIDs: ["disappear"],
+-                task: task
++                tasks: [task]
+               )
+             )
+           ],
+@@ -364,7 +364,7 @@ private func lifecycleNode(
+     lifecycleMetadata: .init(
+       appearHandlerIDs: appear,
+       disappearHandlerIDs: disappear,
+-      task: task
++      tasks: task.map { [$0] } ?? []
+     )
+   )
+ }
+diff --git a/Tests/SwiftTUITests/Support/LifecycleFixtures.swift b/Tests/SwiftTUITests/Support/LifecycleFixtures.swift
+index afed7263..090cb3a1 100644
+--- a/Tests/SwiftTUITests/Support/LifecycleFixtures.swift
++++ b/Tests/SwiftTUITests/Support/LifecycleFixtures.swift
+@@ -63,7 +63,7 @@ func lifecycleNode(
+     lifecycleMetadata: .init(
+       appearHandlerIDs: appearHandlerIDs,
+       disappearHandlerIDs: disappearHandlerIDs,
+-      task: task
++      tasks: task.map { [$0] } ?? []
+     )
+   )
+ }
+diff --git a/Tests/SwiftTUITests/SwiftUISurfaceTests.swift b/Tests/SwiftTUITests/SwiftUISurfaceTests.swift
+index f33066ee..9a244555 100644
+--- a/Tests/SwiftTUITests/SwiftUISurfaceTests.swift
++++ b/Tests/SwiftTUITests/SwiftUISurfaceTests.swift
+@@ -459,7 +459,7 @@ struct SwiftUISurfaceTests {
+     #expect(counters.taskCount == 0)
+     #expect(resolved.lifecycleMetadata.appearHandlerIDs == ["Root#appear[0]"])
+     #expect(resolved.lifecycleMetadata.disappearHandlerIDs == ["Root#disappear[0]"])
+-    #expect(resolved.lifecycleMetadata.task == .init(id: "Root#task", priority: .high))
++    #expect(resolved.lifecycleMetadata.tasks == [.init(id: "Root#task", priority: .high)])
+     #expect(lifecycleRegistry.appearHandler(for: "Root#appear[0]") != nil)
+     #expect(lifecycleRegistry.disappearHandler(for: "Root#disappear[0]") != nil)
+ 
+@@ -662,11 +662,11 @@ struct SwiftUISurfaceTests {
+     #expect(shown.lifecycleMetadata.appearHandlerIDs == ["Root/true/Group[0]#appear[0]"])
+     #expect(hidden.lifecycleMetadata.appearHandlerIDs == ["Root/false/Group[0]#appear[0]"])
+     #expect(
+-      shown.lifecycleMetadata.task
+-        == .init(id: "Root/true/Group[0]#task[id:Swift.String]", priority: .userInitiated))
++      shown.lifecycleMetadata.tasks
++        == [.init(id: "Root/true/Group[0]#task[id:Swift.String]", priority: .userInitiated)])
+     #expect(
+-      hidden.lifecycleMetadata.task
+-        == .init(id: "Root/false/Group[0]#task[id:Swift.String]", priority: .userInitiated))
++      hidden.lifecycleMetadata.tasks
++        == [.init(id: "Root/false/Group[0]#task[id:Swift.String]", priority: .userInitiated)])
+   }
+ 
+   @Test(
