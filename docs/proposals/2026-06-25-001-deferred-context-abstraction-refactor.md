@@ -3,6 +3,12 @@
 **Date:** 2026-06-25 - **Status:** Proposed - **Scope:** `swift-tui`
 runtime and `SwiftTUIViews` lowering architecture.
 
+**Verified against:** `swift-tui` HEAD `3cdb891c` (2026-06-25). The concrete type,
+file, and behavior claims below were checked against that revision; the proposed
+contract names (`CapturedSubviewScope`, `CapturedSubviewPayload`,
+`LazySubviewPayload`, `PortalAttachmentPayload`, `LayoutRealizedContentBoundary`)
+are coined here and do not yet exist in the tree.
+
 ## TL;DR
 
 SwiftTUI currently uses the "deferred context" family for several different
@@ -25,10 +31,25 @@ Proposed contracts:
 
 | Contract | Use when | Replaces / narrows |
 | --- | --- | --- |
-| `CapturedSubviewScope` | Stored in-tree children need the caller's authored owner | generic `makeDeferredAuthoringContext()` at inline child sites |
-| `LazySubviewPayload` | A container chooses which authored child is active | `DeferredViewPayload` for `TabView` and navigation-like surfaces |
+| `CapturedSubviewScope` | A stored, eagerly-built in-tree child only needs the caller's authored owner | the `AuthoringContext?` token captured by `makeDeferredAuthoringContext()` at inline child sites (`ScrollView`, `.overlay`/`.background`, `.safeAreaInset`) |
+| `CapturedSubviewPayload` | A style/decoration owns placement of a caller-authored child | style-label use of `DeferredViewPayload` |
+| `LazySubviewPayload` | A container chooses which authored child is active | `DeferredViewPayload` for `TabView`; `PortalContentPayload` for navigation destinations |
 | `PortalAttachmentPayload` | Content is declared at one source but placed in a detached overlay portal | presentation-specific use of `PortalContentPayload` |
-| `LayoutRealizedContent` | Content needs final layout geometry before it can be authored | `LayoutDependentContentBoundary`, retained for true geometry readers |
+| `LayoutRealizedContentBoundary` | Content needs final layout geometry before it can be authored | `LayoutDependentContentBoundary`, retained for true geometry readers |
+
+> **These five contracts carve up two existing types, not five.** Today only two
+> payload structs exist — `DeferredViewPayload`
+> (`Foundation/ViewCompositionHelpers.swift`) and `PortalContentPayload`
+> (`Presentation/Portal.swift`) — plus the bare `AuthoringContext?` token returned
+> by `makeDeferredAuthoringContext()`. `DeferredViewPayload` alone backs style
+> labels (→ `CapturedSubviewPayload`), `TabView` active bodies (→
+> `LazySubviewPayload`), **and** ViewBuilder structural-children enumeration
+> (`TupleView`/`VariadicView`/`Group`/`ForEach`/`ConditionalContentView`).
+> `PortalContentPayload` backs both detached presentations (→
+> `PortalAttachmentPayload`) and in-stack navigation destinations (→
+> `LazySubviewPayload`). So the split peels several contracts out of each shared
+> type rather than renaming one type per contract — see "Shared-type hazard"
+> under the conversion plan.
 
 ## Problem
 
@@ -71,19 +92,51 @@ the runtime.
 That snapshot intentionally does not retain the live `ViewNode`. It is a
 captured identity/scope token, not a rendered-tree node.
 
+Two further facts matter for any rename. First, the snapshot drops *two* fields
+from the full `AuthoringContext`, not one: besides the live `ViewNode`, the
+round-trip resets `ordinalTracker` to a fresh, **frozen** `AuthoringOrdinalTracker`.
+That frozen tracker is load-bearing for slot stability across delayed lowering, so
+a narrowed contract must preserve it — the relationship is a lossy projection
+pair, not a wrapper. Second, a parallel and even narrower Sendable snapshot
+already exists: `ImperativeAuthoringContextSnapshot` (four fields — `viewIdentity`,
+`focusedValues`, `ownerNodeID`, `stateGraphScope`), used for imperative callbacks.
+It is the closest existing analog to "a value that cannot accidentally carry a
+live `ViewNode`" (Open question 1). The rename should reconcile these two snapshot
+types rather than introduce a third.
+
 ### Generic authored payloads
 
 `swift-tui/Sources/SwiftTUIViews/Foundation/ViewCompositionHelpers.swift`
-defines `DeferredViewPayload`, which resolves a captured closure later under the
-saved authoring context.
+defines `DeferredViewPayload`. It eagerly builds the authored view *value* at init
+time and defers only its *resolution* into `ResolvedNode`s, running that
+resolution under a saved authoring-context **snapshot**
+(`DeferredAuthoringContextSnapshot`: no live `ViewNode`, frozen ordinal tracker).
 
 `swift-tui/Sources/SwiftTUIViews/Presentation/Portal.swift` defines
-`PortalContentPayload`, which builds the view at the declaration site and
-resolves it later at the portal destination.
+`PortalContentPayload`. It likewise builds the view eagerly at the declaration
+site and defers only resolution at the portal destination, but it carries the
+passed `AuthoringContext` through **verbatim** (via `withAuthoringContext`),
+without snapshotting.
 
-These payloads are mechanically similar, but they represent different runtime
-relationships. `DeferredViewPayload` is mostly an authored child transport.
-`PortalContentPayload` is a declaration-to-placement transport.
+These payloads are mechanically similar — both are `@MainActor Sendable` structs
+storing a single deferred resolve closure, both default to
+`currentAuthoringContext()`, and both even share the ViewBuilder
+structural-children plumbing (`DeclaredChildrenView` exposes parallel
+`appendDeferredDeclaredChildren` and `appendPortalDeclaredChildren` paths that the
+same five structural views implement). So the cleavage is **not** "authored child
+vs declaration-to-placement" — both are deferred-resolution transports. The axis
+that actually differs, and that any rename must preserve, is
+**authoring-context treatment**: `DeferredViewPayload` snapshots and isolates the
+context (drops the live node, freezes the ordinal tracker), while
+`PortalContentPayload` preserves the caller's live context unchanged.
+
+Both types are themselves overloaded buckets. `DeferredViewPayload` serves three
+distinct jobs — style-config labels, `TabView` active bodies, and ViewBuilder
+structural-children enumeration. `PortalContentPayload` serves two — detached
+presentations (sheets/alerts/dialogs/popovers/menus/toasts) **and** in-stack
+navigation destinations, which are not detached overlays at all. The narrower
+contracts proposed below are a response to that overload; the "two clean buckets"
+intuition is the thing being corrected, not a premise to build on.
 
 ### Layout-dependent content
 
@@ -95,10 +148,14 @@ metrics, pointer capabilities, and placed-frame data are known.
 
 ### Portal overlays
 
-`PresentationPortalRoot` and `OverlayStack` already implement a user-space
-overlay tree. The portal system composes a base node plus detached entries,
-sets focus-scope and modal interaction semantics, and uses a full-surface
-composition boundary for overlay damage.
+`PresentationPortalRoot` (a real type) plus the free function
+`composeOverlayStackTree(baseNode:entries:)` over `[OverlayStackEntry]` already
+implement a **framework-owned** overlay tree. (There is no type named
+`OverlayStack`; it is only a `ResolvedNode` kind label and a file name. This
+proposal uses "OverlayStack" as shorthand for that function-plus-entry family.)
+The portal system composes a base node plus detached entries, sets focus-scope
+and modal interaction semantics, and uses a full-surface composition boundary
+(`invalidationScope: .fullSurfaceDiff`) for overlay damage.
 
 This means the presentation question is not "portal versus ZStack" in the
 abstract. The portal is already a framework-owned overlay stack. The question is
@@ -114,13 +171,13 @@ do.
 
 It cannot author correct content until layout has:
 
-- final bounds;
+- the layout proposal and final bounds;
 - safe area insets;
 - cell pixel metrics;
 - pointer capabilities;
-- named coordinate-space and anchor frame data.
+- the placed-frame table (named coordinate spaces and per-identity anchor frames).
 
-Keep this as `LayoutRealizedContent`. Do not replace it with a conditional
+Keep this as `LayoutRealizedContentBoundary`. Do not replace it with a conditional
 overlay or generic lazy payload.
 
 ### `ScrollView`, `.overlay`, `.background`, `.safeAreaInset`: keep captured in-tree children
@@ -146,9 +203,12 @@ special need is preserving the caller's authoring owner.
 `PickerStyleConfiguration.Label` are correct in shape. A style receives a
 caller-authored label and decides where to place it.
 
-The current payload mechanism is useful, but the name should communicate that
-the style owns placement while the caller owns state. This fits
-`CapturedSubviewScope` or a style-specific wrapper over it.
+The current mechanism is `DeferredViewPayload` (the same type `TabView` bodies
+use), and it is useful — but the name should communicate that the style owns
+placement while the caller owns state. This fits `CapturedSubviewPayload` or a
+style-specific wrapper over it. Note the shared-type hazard: peeling style labels
+onto `CapturedSubviewPayload` touches the same `DeferredViewPayload` that the
+`TabView` step retypes to `LazySubviewPayload`.
 
 ### `TabView`: split metadata peeking from active body realization
 
@@ -186,6 +246,14 @@ local conditional `ZStack` does not provide consistently:
 - full-surface damage and composition boundaries;
 - declaration at one source with placement under a portal host.
 
+Caveat: **toasts are not modal.** `ToastPresentationCoordinator` is `.nonModal`,
+sets `allowsHitTesting(false)`, and exposes no Escape dismiss action through the
+overlay dismiss stack, so the "base interaction disabling" and "escape
+dismissal" bullets apply to sheets/alerts/dialogs/palette sheets but **not**
+toasts. Toasts still have coordinator/programmatic dismissal; they share the
+portal payload, presentation ordering, and full-surface composition path, not the
+modal-surface semantics.
+
 Keep the portal overlay architecture. Replace generic payload naming with a
 `PortalAttachmentPayload` or presentation-specific wrapper that explicitly
 records:
@@ -198,8 +266,26 @@ records:
 - registration restore scope;
 - invalidation translation rules.
 
+Much of this already exists and need not be invented. `PortalEntryID` and
+`DeclarationOwnerEdge` (`SwiftTUICore/Runtime/PortalTypes.swift`) record source
+identity, source structural path, source entity identity, placement root, and
+token, and the edge is already stamped onto `ResolvedNode.declarationOwnerEdge`
+for portal entries. The presentation layer then adds role-specific metadata:
+`PopoverPresentationItem` carries `sourceIdentity`, `attachmentAnchor`,
+`arrowEdge`, and `modalPolicy`; `PromptPresentationDescriptor` carries
+`createsFocusScope`; coordinators and overlay entries carry modal policy and
+dismiss-stack behavior. So `PortalAttachmentPayload` is largely a
+*surfacing/renaming* of existing portal-side edge data. The genuinely new fields
+are the lifecycle-active-while-hidden flag and an equivalent declarative edge on
+the *deferred* side (tab bodies and style labels carry only the authoring
+snapshot today).
+
 The trigger-leaf optimization should stay separate. It is about reader
 attribution for activation state, not about how presented content is captured.
+(`PresentationTriggerLeaf` is real and is wired by `resolvePresentationModifier`
+for sheet/alert/confirmationDialog/palette-sheet; toasts merge their declaration
+directly and do not use it. The element shared across *all* presentations is
+`PortalContentPayload` plus the coordinator registry, not the trigger leaf.)
 
 ### Popovers: keep portal plus geometry placement
 
@@ -210,6 +296,15 @@ inside the hosted popover to read the source frame from the placed-frame table.
 
 Keep this as portal-hosted content with a placement/layout pass. The payload
 should be typed as a popover attachment rather than generic portal content.
+
+Note this is largely already done. Popovers have a dedicated modifier
+(`BuiltinItemPopoverPresentationModifier`, recently broken out), a typed item
+(`PopoverPresentationItem`, carrying `sourceIdentity`/`attachmentAnchor`/
+`arrowEdge`/`modalPolicy`), a dedicated `registry.popover` coordinator, and full
+source-anchoring + viewport-clamping placement (`HostedPopoverPresentation` +
+`PopoverPlacementLayout`). The only still-generic layer is the inner
+`contentPayloads: [PortalContentPayload]`, so scope the "type the payload" work to
+that layer, not the whole attachment.
 
 ### `Menu`: move away from sheet-shaped implementation
 
@@ -225,6 +320,17 @@ Move `Menu` to a menu-specific portal/popover attachment payload. This can reuse
 the presentation portal and chrome primitives, but it should not be built as a
 sheet specialization long term.
 
+Precisely: the only sheet specialization is that `Menu` reuses
+`BuiltinSheetPresentationModifier` as its modifier *shell* (`Menu.swift` passes
+the menu content as `sheetContent:`). It does **not** route through
+`SheetPresentationCoordinator` or the sheet token — a dedicated
+`MenuPresentationCoordinator`, a `registry.menu` slot, and a
+`menuPromptPresentationSpec` (own `"menu"` token, `.menu` chrome) already exist.
+The residual work is therefore narrow: give `Menu` its own modifier that anchors
+at the source frame (as popover already does) instead of reusing the sheet
+modifier, whose own comment notes it currently anchors at the host top-leading
+"until source frames are plumbed through the presentation system."
+
 ### Navigation destinations: use lazy replacement payloads, not portal payloads
 
 `NavigationStack.navigationDestination` is not detached overlay content. It is
@@ -234,11 +340,41 @@ The lazy lowering is correct, especially for item and Boolean activation. The
 payload should be a `NavigationDestinationPayload` or generalized
 `LazySubviewPayload`, not `PortalContentPayload`.
 
-### `AnyView` and modifier content: preserve scoped storage, avoid broad "deferred" language
+This is the proposal's best-supported conversion: navigation destinations
+genuinely store `PortalContentPayload` today
+(`NavigationStack.swift`; `NavigationDestinationInstance.payload`) yet are placed
+as an in-tree `.replacingIdentity` replacement child, never through
+`composeOverlayStackTree`. The mismatch is naming/typing, not a placement bug, so
+this is a clarity refactor with no behavioral change. Two cautions:
+`PortalContentPayload` and `DeferredViewPayload` are distinct structs with their
+own resolve plumbing (not a one-line `typealias` swap), and navigation already
+carries its own declaration/activation state model (source/declaration identity,
+activation ordinals, dismiss closures with authoring-context restoration) that a
+shared `LazySubviewPayload` must not drop — its needs differ from `TabView`'s
+despite the shared "lazy" label. Pick one target name (`LazySubviewPayload`,
+optionally aliased `NavigationDestinationPayload`) and use it consistently in the
+conversion order below.
 
-`AnyView` and `ModifiedContent` also store authored content with a preserved
-scope. They are not necessarily active-only or detached. Treat them as scoped
-storage/type-erasure boundaries, not deferred presentation machinery.
+### `AnyView` and modifier content: preserve scoped storage, but they are asymmetric
+
+`AnyView` and `ModifiedContent` both store authored content with a preserved scope
+and resolve it inline as ordinary in-tree children — neither is active-only or
+detached, and neither uses `DeferredViewPayload` or `PortalContentPayload`. But
+they are **not** equivalent with respect to the deferred-context family:
+
+- `AnyView` is genuinely a type-erasure boundary. It preserves scope only when
+  built via `scopedAnyView(...)`/`AnyView(scoped:)`, and even then carries the
+  **live** `AuthoringContext` (no snapshot). The plain `AnyView(_:)` init stores a
+  `nil` scope. It can be treated as outside the deferred family.
+- `ModifiedContent` is the opposite: its init **unconditionally** calls
+  `makeDeferredAuthoringContext()`, so it is in fact one of the most pervasive
+  consumers of the deferred-snapshot machinery this proposal is splitting. It
+  cannot be excluded from the family without addressing that call site.
+
+So "treat them as scoped storage, not deferred machinery" is correct for `AnyView`
+but wrong for `ModifiedContent`. An implementer who leaves `ModifiedContent`'s
+`makeDeferredAuthoringContext()` call untouched has not removed the deferred
+dependency from "modifier content."
 
 ## Proposed design
 
@@ -246,15 +382,28 @@ storage/type-erasure boundaries, not deferred presentation machinery.
 
 Introduce type aliases or wrapper types first, with no behavior change:
 
-- `CapturedSubviewScope` wrapping the current deferred authoring snapshot;
-- `CapturedSubviewPayload` for style labels and inline stored children;
-- `LazySubviewPayload` for active-only children;
+- `CapturedSubviewScope` — the authoring-owner token (today `AuthoringContext?`
+  from `makeDeferredAuthoringContext()`) stored by inline child sites
+  (`ScrollView`, `.overlay`/`.background`, `.safeAreaInset`), which keep the child
+  *value* eagerly and only need the owner preserved;
+- `CapturedSubviewPayload` — the closure transport for style labels (today
+  `DeferredViewPayload`), where a style owns placement of a caller-authored child;
+- `LazySubviewPayload` for active-only children (`TabView` bodies, navigation
+  destinations);
 - `PortalAttachmentPayload` for detached portal content;
 - `LayoutRealizedContentBoundary` as a rename/narrowing of
   `LayoutDependentContentBoundary`.
 
-This gives future patches a vocabulary that matches behavior before moving
-runtime logic.
+This gives future patches a vocabulary that matches behavior before moving runtime
+logic. A pure alias step is genuinely behavior-preserving here: every rename
+target (`DeferredViewPayload`, `PortalContentPayload`,
+`LayoutDependentContentBoundary`, `DeferredAuthoringContextSnapshot`) is
+`package`-level and absent from `swift-tui/docs/.public-api-baseline.txt`, so the
+public-API gate is untouched and no compatibility alias is required (this
+resolves Open question 4). The new edge metadata (section 2) and the `Menu` move
+(step 5) are
+*not* part of the no-behavior-change boundary; keep them in their later steps and
+do not describe step 1 as if it includes them.
 
 ### 2. Add explicit edge metadata for lazy and portal payloads
 
@@ -269,8 +418,15 @@ placement owner. At minimum:
 - whether runtime registrations restore via live child traversal, identity
   prefix, or explicit declaration owner edge.
 
-The runtime already has compatibility code for island seams. This proposal
-makes those seams declarative.
+For portal payloads this is largely a *surfacing* job, not new invention:
+`DeclarationOwnerEdge` (`PortalTypes.swift`, stamped onto
+`ResolvedNode.declarationOwnerEdge`) already records declaration owner identity,
+declaration structural path, declaration entity identity, placement root, and
+token for portal entries. The new surface is (a) an equivalent declarative edge
+on the *deferred* side, where tab bodies and style labels carry only the
+authoring snapshot today, and (b) the lifecycle-active-while-hidden flag. The
+runtime already has compatibility code for island seams; this proposal makes the
+deferred-side seams as declarative as the portal-side edge already is.
 
 ### 3. Keep reader-attributed activation leaves
 
@@ -296,6 +452,17 @@ Recommended order:
 
 This order attacks capture-host island complexity before touching the
 geometry-dependent path that is already semantically correct.
+
+**Shared-type hazard.** Steps 2–4 do not map one type to one contract.
+`DeferredViewPayload` is co-used by style labels, `TabView` bodies, *and*
+ViewBuilder structural-children enumeration, so step 2 must carve the tab-body use
+out of a type that also carries style labels (`CapturedSubviewPayload`) and the
+tuple/conditional/`ForEach` plumbing — it cannot simply rename the type. Likewise
+`PortalContentPayload` is co-used by detached presentations (step 4) and
+navigation (step 3), and both `DeclaredChildrenView` append paths
+(`appendDeferredDeclaredChildren`/`appendPortalDeclaredChildren`) must move
+together. Plan each step as "introduce the narrow contract, migrate one use site,
+leave the shared type intact for the others," not "rename the type."
 
 ## Non-goals
 
@@ -335,7 +502,9 @@ restored after scoped publication. The test should exercise:
 
 Use existing focused scenarios before and after each conversion:
 
-- `sheet-open-latency`, default and rows=176;
+- `sheet-open-latency`, default and a tall-terminal override (e.g. `rows=176`;
+  the scenario default is `rows:60`, so 176 is a CLI size override, not a
+  separately registered variant);
 - `example-app-shell-workflow`;
 - `synthetic-narrow-invalidation`;
 - tab switch and overflow surface tests.
@@ -348,7 +517,11 @@ compatibility shims in later patches.
 ## Acceptance criteria
 
 - Every delayed-lowering site is classified as captured inline child, lazy
-  active-only child, portal attachment, or layout-realized content.
+  active-only child, portal attachment, or layout-realized content — recorded as a
+  checked-in inventory that names each call site (e.g. `ScrollView.swift`,
+  `TabView.swift`, `NavigationStack.swift`, `PresentationItems.swift`,
+  `LayoutDependentContent.swift`) and its assigned contract, so completeness is
+  verifiable rather than asserted.
 - `TabView` and navigation no longer use generic presentation/portal terminology
   for non-portal payloads.
 - Presentation payloads explicitly model declaration owner versus placement
@@ -359,11 +532,23 @@ compatibility shims in later patches.
 
 ## Open questions
 
-1. Should `CapturedSubviewScope` remain an `AuthoringContext?`, or should it be
-   a distinct value that cannot accidentally carry a live `ViewNode`?
+1. Should `CapturedSubviewScope` be the existing `AuthoringContext?` token, or a
+   distinct value that *structurally* cannot carry a live `ViewNode`? Today the
+   storage type is `AuthoringContext?`, but `makeDeferredAuthoringContext()`
+   already guarantees `viewNode == nil` — the guarantee is by convention (the
+   factory), not by type. `ImperativeAuthoringContextSnapshot` is an existing,
+   narrower Sendable template to reconcile with rather than inventing a third type.
 2. Should lazy payloads own lifecycle activation directly, or should they only
    expose edge metadata to the existing lifecycle publication pass?
-3. How much of the portal attachment edge metadata should live in
-   `ResolvedNode` versus presentation item models?
-4. Can `LayoutDependentContentBoundary` be renamed without touching public SPI
-   baselines, or does it need a compatibility alias first?
+3. How much of the portal-attachment edge metadata should live in `ResolvedNode`
+   versus presentation item models? (Partly settled today: source structural path
+   and source entity identity live in `PortalEntryID`/`DeclarationOwnerEdge`;
+   `sourceIdentity`/`modalPolicy`/`attachmentAnchor` live on popover item models;
+   `createsFocusScope` lives on prompt descriptors; and `DeclarationOwnerEdge`
+   lives on `ResolvedNode`; the open part is which precedent the *deferred* side
+   should follow.)
+4. **Resolved.** `LayoutDependentContentBoundary` (and its siblings
+   `LayoutRealizationContext`/`LayoutDependentContentRealizer`) are `package`-level
+   and absent from `swift-tui/docs/.public-api-baseline.txt`; there is no `@_spi`
+   baseline. The rename is purely internal (callers: `GeometryReader` plus a
+   handful of `SwiftTUICore` files) and needs no compatibility alias.
