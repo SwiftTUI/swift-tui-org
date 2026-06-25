@@ -90,10 +90,14 @@ async-render/observation path, independent of how the work is scheduled.
   `@State` write whose own `requestInvalidation` reaches the wake handler
   (`continuation.yield()`) and is observed via `awaitCondition`, with **no** external
   `requestInvalidation` and **no** manual render. That is the exact test to add — it would
-  either reproduce the hang in core (runtime bug) or pass (harness-only gap). Note also:
-  only `requestInvalidation` and `requestExternalWake` fire the wake handler;
-  `requestSignal`/`requestInput`/`requestDeadline` do **not** (`Scheduler.swift:137-175`),
-  so a fix that leans on those to surface an async render would silently never wake.
+  either reproduce the hang in core (runtime bug) or pass (harness-only gap). Note also
+  (re-verified at source 2026-06-25): **three** request methods fire the wake handler —
+  `requestInvalidation` (`Scheduler.swift:148`), `requestExternalWake` (`:163`), and
+  `requestDeadline` (`:174`); only `requestInput` (`:137`) and `requestSignal` (`:151`) do
+  **not**. A fix that leans on `requestInput`/`requestSignal` to surface an async render would
+  silently never wake — but `requestDeadline` *does* wake, so it is a viable surface path, not a
+  dead end. (An earlier draft of this report wrongly listed `requestDeadline` among the
+  non-waking methods; corrected here.)
 - Decide whether this is a harness gap (then provide a supported way to await an
   async-driven frame in tests) or a runtime gap (then fix the wake/observe race).
 
@@ -172,8 +176,8 @@ modifier).
 ### Where the work is preserved
 
 **Durable (2026-06-25):** recovered from the GC-eligible stash into a clean, self-contained
-commit on the local `swift-tui` branch **`stash-recovery-multi-task-modifiers`** (`1163d13e`,
-24 files, +355/-143), *including* the previously-untracked
+commit on the `swift-tui` branch **`stash-recovery-multi-task-modifiers`**, **pushed to origin**
+(`SwiftTUI/swift-tui` @ `1163d13e`; 24 files, +355/-143), *including* the previously-untracked
 `Tests/SwiftTUITests/MultipleTaskModifiersTests.swift` (the stash stored it only in its `-u`
 untracked parent, so a naive branch-at-stash would not have materialized it on checkout). The
 branch is based on `63f490a1` — i.e. `main` *minus* the shipped Fix 5 (`2126c6f4`, "skip redundant
@@ -183,11 +187,17 @@ onto `63f490a1` but **conflicts on `main`** at `RunLoop+EventDispatch.swift` (th
 Fix 5 both edit that file), so a resumer must rebase the branch onto `main` and reconcile that one
 file.
 
-The original `swift-tui` `git stash@{0}` (base `63f490a1`; its branch `integration/code-quality-refactors`
-has since been deleted) is **retained as a secondary backup**. Two loose `multi-task.patch` files left in
-the working trees are **unreliable** and should not be used: the `swift-tui/` one is reverse-oriented
-(fails a forward `git apply`, only applies with `-R`), and the org-root one is a mislabeled 3730-line org
-diff (mostly already-committed docs + submodule pins), not this work.
+**Backups (state as of 2026-06-25, re-verified against HEAD).** The original `swift-tui` `git stash@{0}`
+(base `63f490a1`) has since been **cleared** — it is *not* retained on the live checkout (`git stash list`
+is empty; `refs/stash` does not resolve). Before clearing, every stash across the three repos was archived
+as a patch to `swift-tui-org/.git/stash-archive-2026-06-25/` (durable, invisible to `git status`, safely
+deletable); this work is `swift-tui--stash-0.patch` there, byte-identical (44,639 bytes) to the committed
+forward patch above. The stash's base branch `integration/code-quality-refactors` was also deleted. Net:
+the deferred work survives in **two** durable places — the pushed branch (`1163d13e`) and the committed
+patch — plus the deletable archive copy, and no longer depends on any stash. The two loose
+`multi-task.patch` files that once sat in the working trees (a reverse-oriented `swift-tui/` one and a
+mislabeled ~3730-line org-root diff, neither usable) were **deleted in the same cleanup** — do not go
+looking for them.
 
 ### What a fix would need
 
@@ -209,7 +219,7 @@ diff (mostly already-committed docs + submodule pins), not this work.
 | Limitation | Blocks | Status | Recoverable from |
 |---|---|---|---|
 | Async-driven `refresh()` not observed by the scripted-input test RunLoop | RC-B (off-main-actor work reflected in a later frame) | open | n/a (revert to synchronous) |
-| One-task-per-node baked through ~8 lifecycle layers; multi-task impl hangs a `PhaseAnimator` | multiple `.task` per node | open | branch `stash-recovery-multi-task-modifiers` (`1163d13e`) + [`2026-06-25-multi-task-per-node.patch`](2026-06-25-multi-task-per-node.patch); stash@{0} retained |
+| One-task-per-node baked through ~8 lifecycle layers; multi-task impl hangs a `PhaseAnimator` | multiple `.task` per node | open | pushed branch `stash-recovery-multi-task-modifiers` (`1163d13e`) + [`2026-06-25-multi-task-per-node.patch`](2026-06-25-multi-task-per-node.patch); stash cleared, archived at `.git/stash-archive-2026-06-25/` |
 
 Both are framework-level and worth a focused investigation with the traces above
 before another attempt. Neither blocks the shipped GIF-editor perf fixes.
