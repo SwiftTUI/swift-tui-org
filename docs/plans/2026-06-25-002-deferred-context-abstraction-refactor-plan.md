@@ -9,15 +9,22 @@
 ## 1. Purpose
 
 This plan turns the deferred-context proposal into staged implementation work.
-The goal is to split one overloaded implementation family into four explicit
-runtime contracts:
+The goal is to split one overloaded implementation family into five explicit
+runtime contracts. These contracts are not one-to-one with today's types: they
+carve apart `DeferredViewPayload`, `PortalContentPayload`, and bare
+`AuthoringContext?` snapshot storage by use site.
 
 | Contract | Primary owner | First consumers |
 | --- | --- | --- |
-| `CapturedSubviewScope` / `CapturedSubviewPayload` | `SwiftTUIViews/Foundation` and `State` | style labels, stored modifier children, `ScrollView`, `AnyView`, `ModifiedContent` |
-| `LazySubviewPayload` | `SwiftTUIViews/Foundation` | `TabView`, `NavigationStack` |
+| `CapturedSubviewScope` | `SwiftTUIViews/State` | inline stored children: `ScrollView`, `.overlay`, `.background`, `.safeAreaInset`, `ModifiedContent` |
+| `CapturedSubviewPayload` | `SwiftTUIViews/Foundation` | style labels that transport caller-authored closure content |
+| `LazySubviewPayload` / `NavigationDestinationPayload` | `SwiftTUIViews/Foundation` and `NavigationViews` | `TabView`, `NavigationStack` |
 | `PortalAttachmentPayload` | `SwiftTUIViews/Presentation` | sheet, alert, confirmation dialog, palette sheet, popover, toast, menu |
 | `LayoutRealizedContentBoundary` | `SwiftTUICore/Resolve` | `GeometryReader` |
+
+`AnyView` is tracked in the inventory as scoped erased storage, but it should not
+be swept into the captured-subview migration unless a specific scoped initializer
+is being touched. Plain `AnyView` is not a deferred-snapshot payload.
 
 The first implementation passes should be behavior-preserving. Semantic changes,
 if any, must be deliberate follow-ups with separate tests and reports.
@@ -32,8 +39,9 @@ if any, must be deliberate follow-ups with separate tests and reports.
 - Do not change `GeometryReader` sizing or realization semantics.
 - Do not make example-app tests the only acceptance coverage. Package-owned
   `swift-tui` tests are required.
-- Keep old type names behind aliases or compatibility wrappers until all call
-  sites and public/SPI baselines are checked.
+- Keep old type names behind aliases or compatibility wrappers only where needed
+  for staged migration. Check `swift-tui/docs/.public-api-baseline.txt` before
+  treating a package-level rename as a release-compatibility problem.
 
 ## 3. Current code surfaces
 
@@ -44,10 +52,12 @@ if any, must be deliberate follow-ups with separate tests and reports.
   - `makeDeferredAuthoringContext(from:)`
   - `withAuthoringContext(_:_:)`
 - `swift-tui/Sources/SwiftTUIViews/Foundation/ViewModifier.swift`
-  - `ModifiedContent.authoringContext`
+  - `ModifiedContent.authoringContext`, an unconditional deferred-snapshot
+    consumer.
   - `ModifierContentInputs`
 - `swift-tui/Sources/SwiftTUIViews/Foundation/AnyView.swift`
-  - scoped erased storage.
+  - scoped erased storage; scoped initializers carry preserved authoring context,
+    while plain erased storage is outside the deferred-snapshot family.
 
 ### Generic payloads
 
@@ -109,17 +119,22 @@ that classifies every current use of:
 - `makeDeferredAuthoringContext`;
 - `DeferredViewPayload`;
 - `PortalContentPayload`;
-- `LayoutDependentContentBoundary`.
+- `LayoutDependentContentBoundary`;
+- `DeferredAuthoringContextSnapshot` and scoped erased-storage helpers, for
+  classification only.
 
-The report should use the four target buckets:
+The report should use the target buckets from the proposal:
 
-- captured inline child;
+- captured inline child scope;
+- captured subview payload;
 - lazy active-only child;
 - portal attachment;
-- layout-realized content.
+- layout-realized content;
+- scoped erased storage / outside this split, where applicable.
 
 Do not rely on prose memory. Generate the inventory from `rg` output and then
-classify it.
+classify it. The checked-in inventory must name each production call site and
+the assigned contract so completeness is verifiable.
 
 ### 0.2 Add state-owner regression coverage
 
@@ -200,19 +215,35 @@ Add a small compatibility layer, likely in
 `swift-tui/Sources/SwiftTUIViews/State/AuthoringContext.swift` or a sibling file:
 
 ```swift
-package typealias CapturedSubviewScope = DeferredAuthoringContextSnapshot
+package struct CapturedSubviewScope: Sendable {
+  private let snapshot: DeferredAuthoringContextSnapshot?
+
+  @MainActor
+  package init(
+    from context: AuthoringContext? = currentAuthoringContext()
+  ) {
+    snapshot = DeferredAuthoringContextSnapshot(context)
+  }
+
+  @MainActor
+  package var authoringContext: AuthoringContext? {
+    snapshot?.authoringContext
+  }
+}
 
 @MainActor
 package func makeCapturedSubviewScope(
   from context: AuthoringContext? = currentAuthoringContext()
-) -> AuthoringContext? {
-  makeDeferredAuthoringContext(from: context)
+) -> CapturedSubviewScope {
+  CapturedSubviewScope(from: context)
 }
 ```
 
-If a typealias makes call sites too ambiguous, use a wrapper struct with one
-`authoringContext` computed property. The first pass should not change the
-stored fields.
+Prefer the wrapper over a typealias so the storage type cannot accidentally carry
+a live `ViewNode`. The wrapper remains behavior-preserving because it round-trips
+through `DeferredAuthoringContextSnapshot.authoringContext`, including the frozen
+ordinal tracker. Reconcile the naming with `ImperativeAuthoringContextSnapshot`
+before adding any third snapshot shape.
 
 ### 1.2 Add captured-subview payload names
 
@@ -232,20 +263,37 @@ metadata fields that make the active-only contract explicit:
 ```swift
 package struct LazySubviewPayload: Sendable {
   package var debugName: String
+  package var origin: LazySubviewPayloadOrigin
   package var declarationIdentity: Identity?
   package var declarationStructuralPath: StructuralPath?
   package var lifecyclePolicy: LazySubviewLifecyclePolicy
-  private var payload: CapturedSubviewPayload
+  private var storage: LazySubviewPayloadStorage
 }
 ```
 
 Initial lifecycle policy can be descriptive only:
 
 ```swift
+package enum LazySubviewPayloadOrigin: Sendable, Equatable {
+  case tabBody
+  case navigationDestination
+}
+
+package enum LazySubviewPayloadStorage: Sendable {
+  case deferred(DeferredViewPayload)
+  case portal(PortalContentPayload)
+}
+
 package enum LazySubviewLifecyclePolicy: Sendable, Equatable {
   case activeOnly
 }
 ```
+
+Do not force navigation destinations through `CapturedSubviewPayload` just
+because `TabView` can adapt from `DeferredViewPayload`. Navigation currently uses
+`PortalContentPayload` and has separate declaration, activation, and dismiss
+state; a `NavigationDestinationPayload` alias or initializer is acceptable if it
+keeps that origin explicit.
 
 ### 1.4 Add portal attachment shell
 
@@ -258,14 +306,18 @@ declaration/placement edge explicit:
 ```swift
 package struct PortalAttachmentEdge: Sendable, Equatable {
   package var portalEntryID: PortalEntryID
-  package var sourceIdentity: Identity
-  package var sourceStructuralPath: StructuralPath
-  package var modalPolicy: PortalModalPolicy
+  package var modalPolicy: PortalModalPolicy?
+  package var lifecycleActiveWhileHidden: Bool
 }
 ```
 
-Add only fields that can be populated correctly in Stage 1. Do not invent
-metadata that would be stale or guessed.
+`PortalEntryID` already carries source identity, source structural path, source
+entity identity, and token; `DeclarationOwnerEdge` is derived later when a
+placement root exists. Do not duplicate role-specific fields from
+`PopoverPresentationItem`, `PromptPresentationDescriptor`, coordinators, or
+overlay entries unless the payload genuinely owns them. Add only fields that can
+be populated correctly in Stage 1. Do not invent metadata that would be stale or
+guessed.
 
 ### 1.5 Add layout-realized aliases
 
@@ -276,13 +328,16 @@ package typealias LayoutRealizedContentBoundary = LayoutDependentContentBoundary
 package typealias LayoutRealizationGeometry = LayoutRealizationContext
 ```
 
-Keep the existing names until all baseline checks pass and downstream package
-visibility is understood.
+Keep the existing names until the baseline check has run and any public/SPI
+exposure is understood. The relevant generated baseline path is
+`swift-tui/docs/.public-api-baseline.txt`.
 
-## 6. Stage 2 - convert captured inline children
+## 6. Stage 2 - convert captured scopes and style payloads
 
 Stage 2 changes names at call sites that are in-tree and always resolved as
-ordinary children.
+ordinary children, but it must keep the two captured contracts separate:
+style labels use `CapturedSubviewPayload`; inline stored children use
+`CapturedSubviewScope`.
 
 ### 2.1 Style labels
 
@@ -317,6 +372,7 @@ Convert:
 Target:
 
 - replace `makeDeferredAuthoringContext()` with `makeCapturedSubviewScope()`;
+- store scope, not `CapturedSubviewPayload`;
 - keep inline child topology unchanged;
 - keep `layoutBehavior: .decoration` and `.safeAreaInset` unchanged.
 
@@ -332,13 +388,19 @@ Focused tests:
 Convert:
 
 - `ScrollView.contentAuthoringScope`
+
+Inventory only, unless a scoped erased-storage call site must be touched for the
+scope wrapper:
+
 - `AnyView.scoped`
 - `scopedAnyView`
 
 Target:
 
 - preserve state owner and ordinal behavior;
-- do not change scroll layout or input registration.
+- do not change scroll layout or input registration;
+- do not change plain `AnyView` storage or force it through the deferred-snapshot
+  path.
 
 Focused tests:
 
@@ -349,6 +411,9 @@ Focused tests:
 ## 7. Stage 3 - convert active-only lazy children
 
 Stage 3 moves `TabView` and navigation off generic deferred/portal terminology.
+The common contract is "active-only child"; the storage is not common today.
+`TabView` adapts from `DeferredViewPayload`, while navigation adapts from
+`PortalContentPayload`.
 
 ### 3.1 Add lazy declared-child helpers
 
@@ -371,7 +436,10 @@ package func lazyDeclaredBuilderChildren<V: View>(
 
 Implementation can delegate to the existing declared-children traversal at
 first. Do not require every `DeclaredChildrenView` implementation to add a new
-method in the first patch unless that is simpler than adapter helpers.
+method in the first patch unless that is simpler than adapter helpers. These
+helpers are primarily for `TabView`; navigation may use a
+`NavigationDestinationPayload` initializer over existing portal-origin storage
+instead of the declared-child helper.
 
 ### 3.2 Convert `TabView`
 
@@ -415,9 +483,12 @@ Files:
 
 Changes:
 
-- `NavigationDestinationInstance.payload` becomes `LazySubviewPayload`;
+- `NavigationDestinationInstance.payload` becomes `LazySubviewPayload` or a
+  `NavigationDestinationPayload` alias/wrapper over it;
 - destination activation records explicit lazy payload metadata;
 - `NavigationDestinationSurface` resolves a lazy payload, not a portal payload.
+- the conversion preserves navigation's existing declaration identity,
+  activation ordinal, dismiss closure, and authoring-context restoration.
 
 Focused tests:
 
@@ -430,7 +501,8 @@ Focused tests:
 ## 8. Stage 4 - convert portal attachments
 
 Stage 4 makes detached presentation content use portal-specific names and edge
-metadata.
+metadata. This is a surfacing/renaming pass over existing portal data, not a new
+portal edge model.
 
 ### 4.1 Convert portal core
 
@@ -449,10 +521,16 @@ Changes:
   `[PortalAttachmentPayload]`;
 - keep compatibility aliases for tests and any internal callers not yet moved;
 - ensure each payload carries a real `PortalAttachmentEdge` when declared by a
-  source node.
+  source node;
+- leave navigation destinations out of this stage; they are lazy in-tree
+  replacements covered by Stage 3.
 
 Edge metadata should be derived from existing `presentationAttachment(for:token:)`
-and `PortalEntryID`. Do not derive source identity from string parsing.
+and `PortalEntryID`, which already carries source identity, source structural
+path, source entity identity, and token. `DeclarationOwnerEdge` is derived when
+the overlay entry has a placement root. Do not derive source identity from string
+parsing, and do not duplicate role-specific metadata that already lives on
+presentation items, descriptors, coordinators, or overlay entries.
 
 ### 4.2 Convert built-in prompt presentations
 
@@ -466,7 +544,11 @@ Files:
 Changes:
 
 - use portal attachment builder helpers;
-- keep trigger-leaf reader attribution unchanged;
+- keep trigger-leaf reader attribution unchanged for sheet, alert,
+  confirmation-dialog, palette-sheet, and popover paths that use trigger leaves;
+- preserve the toast caveat: toasts are non-modal, set
+  `allowsHitTesting(false)`, and do not expose an Escape dismiss entry through
+  the overlay dismiss stack;
 - keep `PromptPresentationItem` rendering behavior unchanged.
 
 Focused tests:
@@ -498,6 +580,9 @@ Focused tests:
 ## 9. Stage 5 - split menu from sheet-shaped presentation
 
 Stage 5 should happen after portal attachments are explicit.
+Menu already has `MenuPresentationCoordinator`, `registry.menu`, and
+`menuPromptPresentationSpec()`. The remaining sheet-shaped dependency is the
+modifier shell in `Controls/Menu.swift`.
 
 ### 5.1 Introduce a menu presentation modifier
 
@@ -515,14 +600,15 @@ reuse:
 - portal attachment payloads;
 - overlay stack entries.
 
-It should not instantiate `BuiltinSheetPresentationModifier`.
+It should not instantiate `BuiltinSheetPresentationModifier`, but it should keep
+using the existing menu coordinator, registry slot, and menu presentation spec.
 
 ### 5.2 Preserve first, improve anchoring second
 
 First patch:
 
 - preserve current visual placement and behavior;
-- only split menu from sheet terminology;
+- only split menu from the sheet modifier shell;
 - update tests to assert the sheet modifier path is not used, if practical via
   source-level test or render shape.
 
@@ -554,8 +640,9 @@ Files:
 Changes:
 
 - migrate production code to `LayoutRealizedContentBoundary` naming;
-- keep typealiases for old names through at least one release or until package
-  visibility checks confirm no public/SPI break;
+- keep typealiases for old names until `swift-tui/docs/.public-api-baseline.txt`
+  confirms there is no public/SPI break; do not carry a release compatibility
+  alias for package-only internals without evidence;
 - update comments to describe "layout-realized" rather than generic deferred
   content.
 
@@ -567,22 +654,22 @@ Focused tests:
 
 Baseline checks:
 
-- `Scripts/generate_public_api_inventory.sh --check`
-- if the baseline changes only because package-visible names changed, regenerate
-  the baseline in the same change with a note in the commit message.
+- `swift-tui/Scripts/generate_public_api_inventory.sh --check`
+- if the baseline changes, inspect whether a symbol is actually public/SPI before
+  adding a compatibility alias or regenerating the baseline.
 
 ## 11. Stage 7 - remove old generic names where possible
 
 Only after Stages 2-6 pass:
 
-- `rg "makeDeferredAuthoringContext|DeferredViewPayload|PortalContentPayload|LayoutDependentContentBoundary" swift-tui/Sources`
+- `rg "makeDeferredAuthoringContext|DeferredAuthoringContextSnapshot|DeferredViewPayload|PortalContentPayload|LayoutDependentContentBoundary" swift-tui/Sources`
 - classify remaining hits as compatibility aliases, tests, docs, or real
   missed production call sites;
 - remove or deprecate old helpers where no production call site needs them;
 - update DocC and internal comments.
 
-Do not remove old names if they appear in public/SPI inventory without an
-explicit compatibility decision.
+Do not remove old names if they appear in `swift-tui/docs/.public-api-baseline.txt`
+without an explicit compatibility decision.
 
 ## 12. Runtime follow-up after the split
 
@@ -603,6 +690,10 @@ For each mechanism, decide whether it is still required for:
 - lazy tab/navigation payloads;
 - portal attachments;
 - layout-realized content.
+
+Treat `AnyView` as scoped erased storage in this audit. Do not fold it into
+captured scope cleanup unless focused tests prove the scoped and plain erased
+paths retain their current owner and ordinal behavior.
 
 Do not remove a compatibility mechanism until a package-owned regression proves
 the relevant edge type no longer needs it.
@@ -641,6 +732,12 @@ swift run --package-path swift-tui/Tools/TermUIPerf termui-perf run \
   --modes async \
   --iterations 8
 
+TERMUI_PERF_SHEET_TREE_ROWS=176 \
+swift run --package-path swift-tui/Tools/TermUIPerf termui-perf run \
+  --scenario sheet-open-latency \
+  --modes async \
+  --iterations 8
+
 swift run --package-path swift-tui/Tools/TermUIPerf termui-perf run \
   --scenario example-app-shell-workflow \
   --modes async \
@@ -664,9 +761,12 @@ presentation, navigation, or public/SPI names.
 
 The refactor is complete when:
 
-- every delayed-lowering production call site is classified into one of the four
-  contracts;
+- a checked-in inventory names every delayed-lowering production call site and
+  classifies it into captured inline scope, captured subview payload, lazy
+  active-only child, portal attachment, layout-realized content, or scoped erased
+  storage / outside this split;
 - inline captured children use captured-subview names;
+- style labels use captured-subview payload names;
 - `TabView` and navigation use lazy-subview payloads;
 - presentations use portal-attachment payloads with explicit source edges;
 - `Menu` no longer routes through a sheet-specific modifier;
@@ -675,7 +775,8 @@ The refactor is complete when:
 - focused state-owner, lifecycle, registration, presentation, and geometry tests
   are green;
 - `mise exec -- bazel test //:org_fast` is green;
-- perf smoke shows no material regression in `sheet-open-latency` or
+- perf smoke shows no material regression in default `sheet-open-latency`,
+  `TERMUI_PERF_SHEET_TREE_ROWS=176` sheet-open stress, or
   `example-app-shell-workflow`.
 
 ## 15. Rollback strategy
@@ -689,7 +790,8 @@ Each stage should be revertible on its own.
   adapter until all presentations are moved.
 - Stage 5 has a parity-first substage so menu can fall back to the current sheet
   path if source anchoring work regresses.
-- Stage 6 keeps layout-dependent aliases until baseline checks are settled.
+- Stage 6 keeps layout-dependent aliases until
+  `swift-tui/docs/.public-api-baseline.txt` checks are settled.
 
 Do not combine Stage 3 or Stage 4 with broad runtime cleanup. The compatibility
 logic audit belongs after the new contracts are stable.
