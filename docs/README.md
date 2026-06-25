@@ -103,6 +103,13 @@ documentation in their own `docs/` trees.
   (forceRootEvaluation does not disable reuse; the "animation/elision gap" was a
   pre-existing flaky test).
 
+## Proposals
+
+- [proposals/2026-06-25-001-deferred-context-abstraction-refactor.md](proposals/2026-06-25-001-deferred-context-abstraction-refactor.md) -
+  proposal to split the overloaded deferred-context family into explicit
+  contracts for captured inline children, lazy active-only children, portal
+  attachments, and layout-realized content.
+
 ## Planning Documents
 
 - [plans/2026-06-16-001-focus-press-dirty-frontier-tranche-plan.md](plans/2026-06-16-001-focus-press-dirty-frontier-tranche-plan.md) -
