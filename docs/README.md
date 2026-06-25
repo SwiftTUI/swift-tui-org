@@ -112,6 +112,10 @@ documentation in their own `docs/` trees.
 
 ## Planning Documents
 
+- [plans/2026-06-25-002-deferred-context-abstraction-refactor-plan.md](plans/2026-06-25-002-deferred-context-abstraction-refactor-plan.md) -
+  technical implementation plan for the deferred-context proposal: staged
+  captured-subview, lazy-subview, portal-attachment, and layout-realized
+  migrations with focused tests, perf smoke, and rollback boundaries.
 - [plans/2026-06-16-001-focus-press-dirty-frontier-tranche-plan.md](plans/2026-06-16-001-focus-press-dirty-frontier-tranche-plan.md) -
   execution plan for the next performance tranche: keep hard root-evaluation
   blockers, but let finite focus/press reuse-safety scopes enter dirty-frontier
