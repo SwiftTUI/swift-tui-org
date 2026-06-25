@@ -241,7 +241,15 @@ lands. Not yet performed (no interactive run in this environment).
 
 ---
 
-## Implementation outcome (2026-06-25) — all changes UNCOMMITTED
+## Implementation outcome (2026-06-25) — shipped fixes committed & pinned; deferred items preserved
+
+> **Status update (2026-06-25, re-verified against HEAD):** when first written, this section read
+> "all changes UNCOMMITTED." That snapshot is superseded. The shipped fixes below are now committed
+> and recorded as org submodule pins (`swift-tui` `2126c6f4`, `swift-tui-examples` `8bfa8c3`), and
+> the deferred multi-`.task` work has been recovered out of the (since-cleared) stash into a durable
+> home. See
+> [2026-06-25-swifttui-framework-limitations-task-lifecycle.md](2026-06-25-swifttui-framework-limitations-task-lifecycle.md)
+> for the full preservation detail.
 
 **Shipped (implemented, tested green):**
 
@@ -272,7 +280,14 @@ fixed by Fix 1 + Fix 5.
   node → distinct descriptors, both run). **But it introduces a deterministic hang** in
   `animationFramesKeepTabHostedPaneSurfaceStable` (tab-hosted `PhaseAnimator`), not isolated after
   three bisect probes; reverting it restores the test. **It also would not unblock RC-B** (separate
-  issue above). Reverted and **preserved in `swift-tui` `git stash@{0}`** for a future, dedicated
-  effort with deeper lifecycle investigation.
+  issue above). Reverted; the full implementation is **preserved durably** — recovered from the
+  (since-cleared) stash into the pushed `swift-tui` branch `stash-recovery-multi-task-modifiers`
+  (`1163d13e`) plus a committed forward patch
+  ([2026-06-25-multi-task-per-node.patch](2026-06-25-multi-task-per-node.patch)) — for a future,
+  dedicated effort with deeper lifecycle investigation.
 
-All changes remain uncommitted on `integration/code-quality-refactors` in both repos.
+**Update (2026-06-25):** all shipped fixes are now committed and recorded as org pins (`swift-tui`
+`2126c6f4`, `swift-tui-examples` `8bfa8c3`); the working branch `integration/code-quality-refactors`
+has since been deleted. The deferred multi-`.task` work lives on the pushed `swift-tui` branch
+`stash-recovery-multi-task-modifiers` (`1163d13e`) plus the committed forward patch; RC-B has nothing
+to recover (reverted to the synchronous `SaveGIFPreview.make`).
