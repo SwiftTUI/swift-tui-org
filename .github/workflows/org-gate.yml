@@ -89,10 +89,18 @@ jobs:
         run: |
           set -euo pipefail
           . "$HOME/.local/share/swiftly/env.sh"
-          # Official swift.org Swift SDK for WebAssembly. download.swift.org is a
-          # trusted host, so `swift sdk install` accepts the bundle by URL.
+          case "$SWIFT_VERSION" in
+            6.3.1)
+              WASM_SDK_CHECKSUM="bd47baa20771f366d8beed7970afaa30742b2210097afd15f85427226d8f4cf2"
+              ;;
+            *)
+              echo "::error::No pinned wasm SDK checksum for Swift ${SWIFT_VERSION}"
+              exit 1
+              ;;
+          esac
           swift sdk install \
-            "https://download.swift.org/swift-${SWIFT_VERSION}-release/wasm/swift-${SWIFT_VERSION}-RELEASE/swift-${SWIFT_VERSION}-RELEASE_wasm.artifactbundle.zip"
+            "https://download.swift.org/swift-${SWIFT_VERSION}-release/wasm-sdk/swift-${SWIFT_VERSION}-RELEASE/swift-${SWIFT_VERSION}-RELEASE_wasm.artifactbundle.tar.gz" \
+            --checksum "$WASM_SDK_CHECKSUM"
           swift sdk list
 
       # The WASI surface lives behind `#if canImport(WASILibc)`, so it is only
