@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Date** | 2026-06-26 |
-| **Status** | Proposed (not started) |
+| **Status** | In progress — **9 / 15 landed** (all of Wave A + Wave B #6/#7/#13/#14), verified + committed **local** on branch `wave-a-hardening` (unpushed, submodule unpinned). See [Progress](#progress-2026-06-26). |
 | **Type** | Cross-repo structural + behavioral improvement program |
 | **Evidence base** | [`docs/reports/2026-06-26-architecture-fragility-survey.md`](../reports/2026-06-26-architecture-fragility-survey.md) — 33-agent survey, 127 confirmed issues (2 critical / 35 high / 63 med / 27 low) |
 | **Affects** | `swift-tui` (framework) + this org-coordination root |
@@ -16,6 +16,18 @@ The single most important insight driving the ranking: the framework already *ha
 
 Opportunities are ranked by **leverage = (impact × fragility removed) ÷ (effort × risk)**.
 
+## Progress (2026-06-26)
+
+**9 of 15 opportunities landed**, each built + tested + committed; the full `bun run test` repo gate is green at both the Wave A and Wave B boundaries. All work is **local** on branch `wave-a-hardening` in both the `swift-tui` submodule (7 commits) and this org root (2 commits) — nothing pushed, the submodule pin not yet bumped.
+
+- **Wave A — complete (5/5):** #1 sampled-release soundness probe, #2 generative 15-registry harness, #3 off-main layout trap (closes the C1/SIGSEGV path), #5 org-gate + WASI CI, #8 VT220 parser fix.
+- **Wave B — 4/6:** #6 `FeatureFlags` registry, #7 totality guards, #13 version-coherence gate, #14 bounded image caches. **Deferred:** #4 (retag IR — XL public-API-baseline regen + cascade risk; *not* required for the internal Wave C decompositions) and #15 (autonomous-wake harness — depends on a documented framework wall where the scripted-input loop terminates with the stream, so a bounded test is hang-prone).
+- **Wave C — not started (#9–#12):** the god-object decompositions. These are the proposal's own XL / medium-risk items touching the most fragile code (e.g. #12 alone is 81 pointer-field sites across 7 files in `RunLoop`; #10 is `ViewGraph` at 2,501 lines). Held for dedicated, fully-verified sessions rather than rushed in bulk.
+
+Two implementation notes worth recording:
+- **#3 changed approach under the type system.** The proposal's first-choice fix (Mutex the cache) is *infeasible*: `LayoutProxyBox`'s `Any` caches are MainActor-isolated non-Sendable values, so a `Mutex` would require a `nonisolated(unsafe)`/`@unchecked Sendable` that the repo's own `structured-concurrency-escape-hatches` hook bans. Shipped the *second* first-step instead — a deterministic `MainActor.preconditionIsolated` trap — which keeps the cache correctly isolated and converts a silent corruption into an attributable crash.
+- **#2 earned its keep immediately.** The generative harness surfaced a latent two-sibling assumption hardcoded in the shared comparator that every fixed-shape test had masked; generalized and fixed in the same commit.
+
 ## The two CRITICAL findings (motivating #3)
 
 - **C1 — Off-main layout offload races MainActor state.** `LayoutProxyBox.cachedStates` (`CustomLayoutErasure.swift:289`) is an unsynchronized dictionary mutated from `nonisolated` methods inside `MainActor.assumeIsolated { … }`; the layout pass can run off-main, guarded only by a hand-maintained, ~5×-duplicated `canOffloadLayout` walk. A single missed edge → `assumeIsolated` UB + a torn write — the plausible mechanism for the unidentified, TSan-invisible SIGSEGV flake #1.
@@ -23,25 +35,25 @@ Opportunities are ranked by **leverage = (impact × fragility removed) ÷ (effor
 
 ## Ranked opportunities
 
-| # | Opportunity | Impact | Effort | Risk |
-|--:|-------------|:------:|:------:|:----:|
-| 1 | Promote reconciliation oracles to run where release bugs ship: sampled-release + always-on-in-test | 🟣 transformational | L | low |
-| 2 | Build a generative property-based reconciliation harness asserting skip == recompute across all 15 registries | 🟣 transformational | L | low |
-| 3 | Close the off-main layout-offload escape hatch behind the SIGSEGV flake #1 | 🔴 high | M | medium |
-| 4 | Retag the seven-phase pipeline IR from public to package before any god-object refactor | 🔴 high | M | low |
-| 5 | Add a root org-gate CI workflow plus a WASI/Android cross-compile gate | 🔴 high | S | low |
-| 6 | Introduce a single FeatureFlags registry to kill the env-flag getenv sprawl | 🟡 medium | M | low |
-| 7 | Generalize the checkpoint-totality test pattern to the other parallel-field-mirror families | 🟡 medium | M | low |
-| 8 | Fix the VT220 CSI parser bug that both dismisses modals and corrupts text on Delete/PageUp | 🟡 medium | S | low |
-| 9 | Decompose AnimationController and extract a CompletionLedger with a reusable carry-forward primitive | 🔴 high | L | medium |
-| 10 | Decompose ViewGraph along its existing method-cluster seams and group ViewNode fields into aggregates | 🔴 high | XL | medium |
-| 11 | Unify cross-host frame serialization behind a single HostFrameProjection DTO | 🟡 medium | L | medium |
-| 12 | Extract a PointerInteractionState machine out of the RunLoop god class | 🟡 medium | M | medium |
-| 13 | Add an executable cross-repo version-coherence gate to release_candidate | 🟡 medium | M | low |
-| 14 | Bound the unbounded image caches and fix the per-host metric-registration leak | 🟡 medium | M | low |
-| 15 | Add an autonomous-wake test harness and extract the shared input harness to Tests/Support | 🟡 medium | L | low |
+| # | Opportunity | Impact | Effort | Risk | Status |
+|--:|-------------|:------:|:------:|:----:|--------|
+| 1 | Promote reconciliation oracles to run where release bugs ship: sampled-release + always-on-in-test | 🟣 transformational | L | low | ✅ done · `ecac539b` |
+| 2 | Build a generative property-based reconciliation harness asserting skip == recompute across all 15 registries | 🟣 transformational | L | low | ✅ done · `4edc96b9` |
+| 3 | Close the off-main layout-offload escape hatch behind the SIGSEGV flake #1 | 🔴 high | M | medium | ✅ done · `78417f02` |
+| 4 | Retag the seven-phase pipeline IR from public to package before any god-object refactor | 🔴 high | M | low | ⏸️ deferred (XL baseline regen) |
+| 5 | Add a root org-gate CI workflow plus a WASI/Android cross-compile gate | 🔴 high | S | low | ✅ done · `68a7d2c` (org) |
+| 6 | Introduce a single FeatureFlags registry to kill the env-flag getenv sprawl | 🟡 medium | M | low | ✅ done · `e494595c` |
+| 7 | Generalize the checkpoint-totality test pattern to the other parallel-field-mirror families | 🟡 medium | M | low | ✅ done · `6ec5be68` |
+| 8 | Fix the VT220 CSI parser bug that both dismisses modals and corrupts text on Delete/PageUp | 🟡 medium | S | low | ✅ done · `52653c5f` |
+| 9 | Decompose AnimationController and extract a CompletionLedger with a reusable carry-forward primitive | 🔴 high | L | medium | ⬜ not started |
+| 10 | Decompose ViewGraph along its existing method-cluster seams and group ViewNode fields into aggregates | 🔴 high | XL | medium | ⬜ not started |
+| 11 | Unify cross-host frame serialization behind a single HostFrameProjection DTO | 🟡 medium | L | medium | ⬜ not started |
+| 12 | Extract a PointerInteractionState machine out of the RunLoop god class | 🟡 medium | M | medium | ⬜ not started |
+| 13 | Add an executable cross-repo version-coherence gate to release_candidate | 🟡 medium | M | low | ✅ done · `7987f7d` (org) |
+| 14 | Bound the unbounded image caches and fix the per-host metric-registration leak | 🟡 medium | M | low | ✅ done · `883223a2` |
+| 15 | Add an autonomous-wake test harness and extract the shared input harness to Tests/Support | 🟡 medium | L | low | ⏸️ deferred (framework wall) |
 
-**Effort:** S < 1 day · M ~ days · L ~ 1–2 weeks · XL > 2 weeks.
+**Effort:** S < 1 day · M ~ days · L ~ 1–2 weeks · XL > 2 weeks. **Status:** commits are on branch `wave-a-hardening` (`(org)` = org root; the rest are in the `swift-tui` submodule), all local/unpushed.
 
 ## Sequencing
 
