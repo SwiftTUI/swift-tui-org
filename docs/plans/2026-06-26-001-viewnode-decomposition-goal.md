@@ -3,10 +3,29 @@
 | | |
 |---|---|
 | **Date** | 2026-06-26 |
-| **Status** | Goal — guides the next, supervised pass on opportunity **#10** |
+| **Status** | **Done (2026-06-26)** — four cohesive sub-structs landed across five gate-green commits (`018c8f3b`→`8b59f095` on `swift-tui` `main`). See [Outcome](#outcome-2026-06-26). |
 | **Scope** | `SwiftTUICore/Resolve/ViewNode.swift` (the persistent reconciliation node) |
 | **Tracks** | [`#10` in the architecture-fragility proposal](../proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md) · [survey](../reports/2026-06-26-architecture-fragility-survey.md) |
 | **Gating** | **None.** `ViewNode` is `package final class`; decomposing it changes no public signature, so it is *not* gated on #4 (now [shelved](../proposals/2026-06-26-002-pipeline-ir-encapsulation-proposal.md#decision-2026-06-26)). |
+
+## Outcome (2026-06-26)
+
+**Done.** `ViewNode`'s mutable state now lives in **four cohesive value-typed sub-structs** (`ViewNodeFieldGroups.swift`), grouped by lifecycle and moved by whole-struct copy across checkpoint/restore — 25 of the engine's hand-mirrored fields collapsed out of the four-way mirror:
+
+| Group | Fields | Lifecycle |
+|---|--:|---|
+| `FrameState` | 11 | per-frame working set (reset by `prepareForFrame`/`beginEvaluation`) |
+| `EvaluationState` | 6 | cross-frame registration/evaluation/lifecycle bookkeeping |
+| `ReuseState` | 3 | reuse/freshness gating for the skip fast-paths |
+| `PersistentState` | 5 | retained per-node state (`@State` slots, deps, lifecycle, handlers, pending IDs) |
+
+Each landed as its own gate-green commit. **Identity/wiring** (`viewNodeID`/`identity`/the weak links/`dependencyTracker`), the **already-consolidated `committed`** (Item 6 folded ~14 render mirrors into it), and the **structural `children`** stay top-level by design ("grouping is a means, not a quota").
+
+All five done-criteria met: grouped state ✓; whole-struct rollback (`makeCheckpoint`/`restoreCheckpoint` copy the four sub-structs as units) ✓; **strengthened + generalized totality guard** (`ViewGraphCheckpointTotalityTests` asserts ViewNode-stored == Checkpoint-stored *and* every group member is mirrored in the flat debug snapshot — now 25 members) ✓; behavior byte-for-byte unchanged (full `bun run test` gate green, incl. the #1 sampled oracles, the #2 generative `skip==recompute` harness, the checkpoint round-trip, and TermUIPerf) ✓; empty public-API-baseline diff (`package`-internal) ✓.
+
+**The decomposition paid off immediately:** grouping the modifier ordinals into `FrameState` surfaced a *pre-existing* hand-mirror gap — `nextTaskModifierOrdinal` was checkpointed but omitted from the debug snapshot — which the strengthened guard then forced closed. That is exactly the silent mirror-drift this work exists to eliminate.
+
+**Notes for future grouping passes:** the `PersistentState` collections (`stateSlots`, `registeredHandlers`, `pendingChangeHandlerIDs`) are mutated in place on the resolve hot path, so plain get/set forwarders force a copy-on-write per mutation; this matched the proven `ViewGraph` field-group pattern and stayed perf-neutral *because the per-node collections are small* (TermUIPerf green). A future grouping of a *large* in-place-mutated collection should prefer a `_modify` (in-place yield) accessor instead. `PersistentState` is `@MainActor`-isolated because `NodeHandlers` carries main-actor closures; the other three groups are nonisolated.
 
 ## North star
 
