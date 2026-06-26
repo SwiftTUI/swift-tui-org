@@ -73,18 +73,22 @@ Accept that the IR is part of the contract (it already is, de facto), document a
 
 ### Option C — Phase 0: package only the deep internals that never reach Views
 
-A cheap, safe down payment: package the engine types that are exposed by *neither* the View surface *nor* the host/consumer set (e.g. dependency-tracking, the layout work-stacks, structural-diff, measurement caches, commit-planner internals). These retag with no Layer-2 cascade.
+> **⚠️ Verified non-existent at HEAD (2026-06-26).** A source-grounded audit found Option C **maps to no implementable scope**: the genuinely deep-internal types this option names (`DependencyTracker`, `DependencySet`, `StructuralDiff`, the layout work-stacks, measurement caches, commit-planner internals) are **already `package`**, not public. Every one of the ~63 *remaining* public pipeline types is transitively exposed as a public member of a Runtime-facing type — e.g. `LifecycleCommitOperation` via `CommitPlan`, `RouteKind` via `RouteID` (15 Runtime refs), `SemanticRole` via `PlacedNode` (57 refs), `CustomLayoutProxy` via `CustomLayout` (22 refs), the `FrameDiagnostic*` family via `FrameDiagnostics`. Packaging any of them either fails to compile (a `public` member cannot expose a `package` type) or is a no-op (already `package`). **There is no isolable "deep-internal subset" to trim without first redesigning the View/Runtime surfaces — which is Option A.** Option C is therefore struck: it is busywork disguised as a down-payment, not a real third choice. The text below is retained for the record.
 
-- **Pro:** Real (if modest) surface reduction, low risk, no API break, lands today.
-- **Con:** Leaves the headline products (`ResolvedNode`/`PlacedNode`/…) public — so it does **not** by itself de-risk Wave C. A genuine increment, not a substitute for A.
+~~A cheap, safe down payment: package the engine types that are exposed by *neither* the View surface *nor* the host/consumer set (e.g. dependency-tracking, the layout work-stacks, structural-diff, measurement caches, commit-planner internals). These retag with no Layer-2 cascade.~~
+
+- ~~**Pro:** Real (if modest) surface reduction, low risk, no API break, lands today.~~
+- ~~**Con:** Leaves the headline products (`ResolvedNode`/`PlacedNode`/…) public — so it does **not** by itself de-risk Wave C. A genuine increment, not a substitute for A.~~
 
 ## Recommendation
 
-**Pursue Option A, but sequence it with Wave C — not before.** The payoff of encapsulation is *latent*: it exists to make the god-object decompositions non-breaking, and those are deferred. Doing a multi-day consumer-API redesign now, ahead of the refactors it protects, is premature. Concretely:
+**Pursue Option A, but sequence it with Wave C — not before.** The payoff of encapsulation is *latent*: it exists to make the god-object decompositions non-breaking, and those are deferred. Doing a multi-day consumer-API redesign now, ahead of the refactors it protects, is premature. The decision is therefore binary — **Option A (when Wave C is scheduled) vs. formally shelve #4** — since Option C is verified non-existent (above). Concretely:
 
-1. **Now (optional):** land **Option C** (deep-internal packaging) as a low-risk surface trim, *if* a clean subset is worth a PR.
+1. ~~**Now (optional):** land **Option C**~~ — **struck:** Option C has no implementable scope at HEAD (see the boxed correction above); there is nothing to land.
 2. **When Wave C is scheduled:** do **Option A** as its **first step** — design the public authoring abstractions and de-expose the IR — so the subsequent `ViewGraph`/`AnimationController`/`Rasterizer` decompositions land behind a stable public API.
 3. **Explicitly reject Option B** unless the team consciously decides the IR is a supported power-user surface (in which case document and version it).
+
+**Note (2026-06-26):** #4/Option A gates *nothing* in the near-term hardening program — #9, #10, #12, and **#11's fragility fix are all `package`-internal or wire-preserving and proceed without it** (see the gating correction in [proposal 001](2026-06-26-001-architecture-fragility-improvements-proposal.md#gating-correction-2026-06-26)). Option A is worth doing only if a curated public IR surface becomes a product goal.
 
 ## If Option A: the plan
 
