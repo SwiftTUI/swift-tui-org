@@ -270,12 +270,12 @@ The original 15-item fragility program is **done** (Waves A/B/C merged, pinned, 
 
 ### Ranked by leverage = (impact × fragility-removed) / (effort × risk)
 
-| # | Opportunity | Impact | Effort | Risk |
-| --- | --- | --- | --- | --- |
-| 16 | Complete the LayoutProxyBox Mutex guard (finish #3 — structural, not just a trap) | High | S | Low |
+| # | Opportunity | Impact | Effort | Risk | Status |
+| --- | --- | --- | --- | --- | --- |
+| 16 | Complete the LayoutProxyBox Mutex guard (finish #3 — structural, not just a trap) | High | S | Low | |
 | 17 | Add `@MainActor` to the FrameScheduler public API (unlocked-Set convention → checked boundary) | High | S | Low |
 | 18 | Add an Android cross-compile gate to org CI alongside WASI | High | S | Low |
-| 19 | Bound the TerminalImageRenderer payload caches (kitty/sixel/fallback) | High | M | Low |
+| 19 | Bound the TerminalImageRenderer payload caches (kitty/sixel/fallback) | High | M | Low | ✅ done · `105414c1` |
 | 20 | Promote the memo shadow oracle to always-on-in-test + sampled-release (finish #1) | High | M | Low |
 | 21 | Guard/eliminate the `assumeIsolated` antipattern via one reusable checked-access helper | High | M | Low |
 | 22 | Audit & enforce `Sendable` on the public modifier-type surface | High | M | Low |
@@ -302,8 +302,10 @@ Proposal #3 promised to move `LayoutProxyBox.cachedStates` behind the `Mutex` pa
 ### #18 — Android cross-compile gate in org CI
 `org-gate.yml` runs a `wasi-cross-compile` job but has **zero** Android coverage, while `SwiftTUIAndroidHost` is a root Package target cross-compiled for aarch64/x86_64 Android — the exact structural gap that shipped WASI-only breaks at 0.0.19 and 0.0.26. Add an `android-cross-compile` job parallel to WASI that `swift build`s the host with the NDK toolchain for `aarch64-/x86_64-unknown-linux-android28`. Evidence: `.github/workflows/org-gate.yml:43` (`wasi-cross-compile:` present, Android absent), confirmed.
 
-### #19 — Bound the TerminalImageRenderer payload caches
+### #19 — Bound the TerminalImageRenderer payload caches — ✅ done (`105414c1`)
 `ImageAssetRepository` and `ImageBlendCompositor` already have LRU+budget eviction, but `TerminalImageRenderer.Storage`'s three payload dictionaries (`kittyPayloads`, `sixelPayloads`, `fallbackOverlays`) grow unbounded for the session lifetime — flagged P0 in the cache audit as the clearest remaining asymmetry. Apply the existing `evictIfNeeded` admission/cap pattern from the sibling compositor. Evidence: `swift-tui/Sources/SwiftTUIRuntime/Terminal/TerminalImageRendering.swift:42–44` (three unbounded dictionaries) confirmed; audit P0 at `2026-06-26-cache-layer-audit.md:605`.
+
+**Done (2026-06-27, swift-tui `105414c1`).** Ported the compositor's eviction into a generic `BoundedVariantCache<Value>` shared by all three kinds: each entry records the approximate byte cost supplied at store time plus its last-access generation, and `store(_:approxBytes:for:policy:)` evicts the lowest-generation entries (never the just-written, protected key) until the kind is within a new `TerminalImageRendererCachePolicy`. Defaults (256 entries / 16 MB per kind) mirror `ImageBlendCompositorCachePolicy`, so small workloads never reach the budget and behavior is byte-identical there — the cap only engages in long image-heavy sessions. The metric snapshot now also reports per-kind eviction counts. Three new tests in `TerminalGraphicsProtocolTests` cover the entry cap, the zero-byte budget (proving the protected-key floor of 1), and the default-policy no-eviction guarantee. Full repo gate green.
 
 ### #20 — Promote the memo shadow oracle to always-on-in-test + sampled-release
 Proposal #1 claimed the memo oracle was promoted to "always-on-in-test + sampled-release," but `MemoSkipTrace.isEnabled` still defaults to `false` and is env-gated by `SWIFTTUI_MEMO_TRACE` only — so the entire memoization-soundness class runs in *no* CI test unless a contributor sets the env var. Make it default-on under the test binary and wire it into every generative registry-restore test, then verify whether the promised sampled-release probe was ever wired into the production pipeline. Evidence: `swift-tui/Sources/SwiftTUICore/Resolve/MemoSkipTrace.swift:40` (`isEnabled` defaults off) confirmed.
