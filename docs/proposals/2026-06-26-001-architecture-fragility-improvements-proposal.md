@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Date** | 2026-06-26 |
-| **Status** | In progress — **10 / 15 landed** (all of Wave A + Wave B #6/#7/#13/#14/#15), verified + committed **local** on branch `wave-a-hardening` (unpushed, submodule unpinned). See [Progress](#progress-2026-06-26). |
+| **Status** | In progress — **11 / 15 landed**. Wave A + Wave B (#1/#2/#3/#5/#6/#7/#8/#13/#14/#15) are merged to `swift-tui` `main`, pinned, and pushed. Wave C **#12** (PointerInteractionState) landed 2026-06-26 (build + full `bun run test` repo gate green). Remaining: #4 (IR encapsulation) + Wave C #9/#10/#11. See [Progress](#progress-2026-06-26). |
 | **Type** | Cross-repo structural + behavioral improvement program |
 | **Evidence base** | [`docs/reports/2026-06-26-architecture-fragility-survey.md`](../reports/2026-06-26-architecture-fragility-survey.md) — 33-agent survey, 127 confirmed issues (2 critical / 35 high / 63 med / 27 low) |
 | **Affects** | `swift-tui` (framework) + this org-coordination root |
@@ -18,11 +18,24 @@ Opportunities are ranked by **leverage = (impact × fragility removed) ÷ (effor
 
 ## Progress (2026-06-26)
 
-**10 of 15 opportunities landed**, each built + tested + committed; the full `bun run test` repo gate is green at the Wave A boundary, the Wave B boundary, and after #15. All work is **local** on branch `wave-a-hardening` in both the `swift-tui` submodule and this org root — nothing pushed, the submodule pin not yet bumped.
+**11 of 15 opportunities landed**, each built + tested + committed; the full `bun run test` repo gate is green at the Wave A boundary, the Wave B boundary, after #15, and after #12. Wave A + Wave B are **merged to `swift-tui` `main`, pinned, and pushed**. Wave C **#12** landed 2026-06-26.
 
 - **Wave A — complete (5/5):** #1 sampled-release soundness probe, #2 generative 15-registry harness, #3 off-main layout trap (closes the C1/SIGSEGV path), #5 org-gate + WASI CI, #8 VT220 parser fix.
-- **Wave B — 5/6:** #6 `FeatureFlags` registry, #7 totality guards, #13 version-coherence gate, #14 bounded image caches, #15 autonomous-wake test **+ the `Tests/Support` harness extraction**. **Deferred: #4** — *attempted and re-estimated* (see the #4 note below); it is **XL**, not the M the survey rated, and its payoff is latent (it only de-risks the deferred Wave C), so it is held for a dedicated boundary-design session.
-- **Wave C — not started (#9–#12):** the god-object decompositions. These are the proposal's own XL / medium-risk items touching the most fragile code (e.g. #12 alone is 81 pointer-field sites across 7 files in `RunLoop`; #10 is `ViewGraph` at 2,501 lines). Held for dedicated, fully-verified sessions rather than rushed in bulk.
+- **Wave B — 5/6:** #6 `FeatureFlags` registry, #7 totality guards, #13 version-coherence gate, #14 bounded image caches, #15 autonomous-wake test **+ the `Tests/Support` harness extraction**. **Deferred: #4** — *attempted and re-estimated* (see the #4 note below); it is **XL**, not the M the survey rated, and its payoff is latent (it de-risks the *cleanliness* of #10/#11, see the gating correction), so it is held for a dedicated boundary-design session.
+- **Wave C — 1/4 (#12 done):** **#12 `PointerInteractionState`** extracted RunLoop's four pointer-*routing* fields (`armedRouteID`, `armedRouteUsesPointerHandler`, `capturedRouteID`, `dragStartLocation`) into a `package struct` with `private(set)` fields mutated only through five intent-named transitions (`beginPress`/`arm`/`capture`/`clearRouting`/`reset`). This makes the dominant "missed reset → stale route mis-routes the next gesture" bug class a **compile error** (a handler can no longer set one field and forget the coupled ones) without changing any behavior — the existing gesture/scroll/drag suites stay green and a new unit suite locks each transition's exact field tuple. The remaining Wave C items (#9 `AnimationController` `CompletionLedger`, #10 `ViewGraph`/`ViewNode`, #11 `HostFrameProjection` DTO) are held for dedicated sessions.
+
+### Gating correction (2026-06-26)
+
+The original sequencing claimed **"#4 must precede all of Wave C."** An access-control audit (33-agent assess + adversarial refutation, both high-confidence) found this **wrong for three of the four** — the decisive test is the access level of the *split target itself*, not of the IR it transitively touches:
+
+| # | Split target | Access | Gated on #4? | Why |
+|--:|--------------|:------:|:------------:|-----|
+| 9 | `AnimationController` | `package final class` | **No** | A `package` type can't appear in any `public`/`@_spi` signature; the split is module-internal. |
+| 10 | `ViewGraph` / `ViewNode` | `package final class` | **No** | They *hold* the public IR (`ResolvedNode`/`PlacedNode`) but don't redefine it — those are #4's own targets, not the holders being split. Decomposing the holders changes no public signature. |
+| 11 | WASI + Android frame encoders | `package` (WASI) / `public` (Android) | **Defer behind #4** | The Android encoder surfaces `SemanticHostFrame` on the `@_spi(Runners)` host boundary #4 hardens, *and* its wire format is a cross-repo contract decoded by `swift-tui-web` (TS) and `swift-tui-android` (Kotlin) — lockstep coordination, not just a local refactor. |
+| 12 | RunLoop pointer fields | `public` class, all fields `package` | **No (done)** | Adversarial refutation *failed*: no public exposure path exists. |
+
+Net: **#9, #10, #12 can land before #4; only #11 is genuinely gated** (and its real cost is the web/Android wire lockstep). #4 remains worth doing as #10/#11's first step for *cleanliness*, but it is not a hard blocker for #9/#10/#12.
 
 Four implementation notes worth recording:
 - **#3 changed approach under the type system.** The proposal's first-choice fix (Mutex the cache) is *infeasible*: `LayoutProxyBox`'s `Any` caches are MainActor-isolated non-Sendable values, so a `Mutex` would require a `nonisolated(unsafe)`/`@unchecked Sendable` that the repo's own `structured-concurrency-escape-hatches` hook bans. Shipped the *second* first-step instead — a deterministic `MainActor.preconditionIsolated` trap — which keeps the cache correctly isolated and converts a silent corruption into an attributable crash.
@@ -50,7 +63,7 @@ Four implementation notes worth recording:
 | 9 | Decompose AnimationController and extract a CompletionLedger with a reusable carry-forward primitive | 🔴 high | L | medium | ⬜ not started |
 | 10 | Decompose ViewGraph along its existing method-cluster seams and group ViewNode fields into aggregates | 🔴 high | XL | medium | ⬜ not started |
 | 11 | Unify cross-host frame serialization behind a single HostFrameProjection DTO | 🟡 medium | L | medium | ⬜ not started |
-| 12 | Extract a PointerInteractionState machine out of the RunLoop god class | 🟡 medium | M | medium | ⬜ not started |
+| 12 | Extract a PointerInteractionState machine out of the RunLoop god class | 🟡 medium | M | medium | ✅ done · `PointerInteractionState.swift` (swift-tui) |
 | 13 | Add an executable cross-repo version-coherence gate to release_candidate | 🟡 medium | M | low | ✅ done · `7987f7d` (org) |
 | 14 | Bound the unbounded image caches and fix the per-host metric-registration leak | 🟡 medium | M | low | ✅ done · `883223a2` |
 | 15 | Add an autonomous-wake test harness and extract the shared input harness to Tests/Support | 🟡 medium | L | low | ✅ done · `5daf33bc`+`e2f3b8ed`+`97efe443` |
@@ -76,14 +89,14 @@ Four implementation notes worth recording:
 - **#14 Bound the unbounded image caches and fix the per-host metric-registration leak** — 🟡 medium · M · risk low
 - **#15 Add an autonomous-wake test harness and extract the shared input harness to Tests/Support** — 🟡 medium · L · risk low
 
-### Wave C — The structural bets (gated on #4)
+### Wave C — The structural bets (mostly *not* gated on #4 — see the gating correction)
 
 - **#9 Decompose AnimationController and extract a CompletionLedger with a reusable carry-forward primitive** — 🔴 high · L · risk medium
 - **#10 Decompose ViewGraph along its existing method-cluster seams and group ViewNode fields into aggregates** — 🔴 high · XL · risk medium
 - **#11 Unify cross-host frame serialization behind a single HostFrameProjection DTO** — 🟡 medium · L · risk medium
 - **#12 Extract a PointerInteractionState machine out of the RunLoop god class** — 🟡 medium · M · risk medium
 
-Rationale for the order: Wave A closes the only memory-corruption path (#3) and makes the dominant bug class CI-visible (#1+#2 are paired — the oracles need the generator's inputs to actually hit the seams), with two cheap parallel wins (#5, #8). Wave B is low-risk, mechanical debt paydown; **#4 must precede all of Wave C** so the god-object decompositions are non-breaking. Wave C is the set of larger structural bets.
+Rationale for the order: Wave A closes the only memory-corruption path (#3) and makes the dominant bug class CI-visible (#1+#2 are paired — the oracles need the generator's inputs to actually hit the seams), with two cheap parallel wins (#5, #8). Wave B is low-risk, mechanical debt paydown. The original claim that **#4 must precede all of Wave C** turned out to be wrong (see the [gating correction](#gating-correction-2026-06-26)): #9/#10/#12 split `package` targets and are non-breaking regardless of #4; only **#11 is genuinely gated** (it reshapes the `@_spi(Runners)` host boundary and a cross-repo wire contract). #12 landed first as the best-scoped, highest-incidence, behavior-preserving entry; #4 is still worth doing as #10/#11's first step for a clean public surface.
 
 ## Opportunity detail
 
