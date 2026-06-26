@@ -3,11 +3,21 @@
 | | |
 |---|---|
 | **Date** | 2026-06-26 |
-| **Status** | Proposed (not started) — decision required |
+| **Status** | **Shelved (2026-06-26).** The decision is made: Option A (the recommended approach) is **deferred indefinitely** and the engine IR stays `public` ABI as an accepted trade-off. Option C is rejected (verified non-existent at HEAD). Revisit only if a curated public IR surface becomes a product goal. See [Decision](#decision-2026-06-26). |
 | **Type** | Public-API design change to `swift-tui` (framework) |
 | **Supersedes** | The "retag the IR `public → package`" opportunity (#4) in [`2026-06-26-001-architecture-fragility-improvements-proposal.md`](2026-06-26-001-architecture-fragility-improvements-proposal.md), which an implementation attempt re-estimated from *M/mechanical* to *XL/public-API redesign*. |
 | **Evidence base** | The [architecture-fragility survey](../reports/2026-06-26-architecture-fragility-survey.md) (modularity lens) + a ~14-build-cycle implementation spike (2026-06-26) summarized in the [Appendix](#appendix-the-implementation-spike). |
 | **Affects** | `SwiftTUICore` (the engine IR) and `SwiftTUIViews` (the public authoring surface). No host/Charts impact. |
+
+## Decision (2026-06-26)
+
+**#4 is formally shelved.** After the implementation spike (which re-scoped #4 from a mechanical retag to an XL, consumer-breaking public-API redesign) and the gating correction (which found #4 blocks *nothing* in the near-term hardening program), the call is to **not pursue Option A now** and to **park this proposal**. Rationale:
+
+- **It gates nothing.** Every remaining Wave-C item is non-breaking without it: #9 (`AnimationController`) and #10 (`ViewGraph`/`ViewNode`) split `package` targets, #12 already landed, and **#11's `HostFrameProjection` shipped** as a `package`/wire-preserving fix needing neither #4 nor cross-repo coordination. The "do #4 first for cleanliness" rationale buys a tidier public surface, not capability.
+- **Its cost is real and its payoff is latent.** Option A is a multi-day redesign of the public View-authoring surface (~701 reference sites across 17 files) whose only payoff — making future god-object decompositions non-breaking — accrues to refactors that are themselves deferred and, per the gating correction, non-breaking anyway because their split targets are already `package`.
+- **The accepted trade-off:** the ~116 `public` pipeline-IR types remain part of the library's ABI, so a future change to `ResolvedNode`/`MeasuredNode`/`PlacedNode`/`CommitPlan` shape is a source-breaking change for any consumer reaching into them. This is tolerable while SwiftTUI is pre-1.0 (breaking changes are expected) and because the only extension point that would need the IR public (custom `PrimitiveView`s) is itself `package` and no host references it.
+
+**Revisit when** a stable public API becomes a goal (e.g. approaching 1.0) **or** the team consciously decides to offer a curated power-user IR surface — at which point Option A (below) is the documented path. Until then this proposal is reference material, not active work.
 
 ## Summary
 
@@ -82,13 +92,13 @@ Accept that the IR is part of the contract (it already is, de facto), document a
 
 ## Recommendation
 
-**Pursue Option A, but sequence it with Wave C — not before.** The payoff of encapsulation is *latent*: it exists to make the god-object decompositions non-breaking, and those are deferred. Doing a multi-day consumer-API redesign now, ahead of the refactors it protects, is premature. The decision is therefore binary — **Option A (when Wave C is scheduled) vs. formally shelve #4** — since Option C is verified non-existent (above). Concretely:
+**Resolved: shelved (see [Decision](#decision-2026-06-26)).** The recommendation was *"pursue Option A, but sequence it with Wave C — not before,"* because the payoff of encapsulation is *latent* (it exists to make the god-object decompositions non-breaking, and those are deferred) and a multi-day consumer-API redesign ahead of the refactors it protects is premature. With Option C verified non-existent, the binary choice was **Option A (when Wave C is scheduled) vs. formally shelve #4** — and the call was to **shelve**. The Option A plan below is retained as the documented path *if and when* #4 is revisited:
 
 1. ~~**Now (optional):** land **Option C**~~ — **struck:** Option C has no implementable scope at HEAD (see the boxed correction above); there is nothing to land.
-2. **When Wave C is scheduled:** do **Option A** as its **first step** — design the public authoring abstractions and de-expose the IR — so the subsequent `ViewGraph`/`AnimationController`/`Rasterizer` decompositions land behind a stable public API.
-3. **Explicitly reject Option B** unless the team consciously decides the IR is a supported power-user surface (in which case document and version it).
+2. **If revisited:** do **Option A** as the **first step** of whatever motivates it — design the public authoring abstractions and de-expose the IR — so any subsequent `ViewGraph`/`AnimationController`/`Rasterizer` decompositions land behind a stable public API.
+3. **Option B** (ratify the IR as public) is *de facto* the shelved state: the IR stays public, but **undocumented and unversioned** — not promoted to a supported surface. Promote it only if the team consciously decides to offer a power-user IR surface (then document and version it).
 
-**Note (2026-06-26):** #4/Option A gates *nothing* in the near-term hardening program — #9, #10, #12, and **#11's fragility fix are all `package`-internal or wire-preserving and proceed without it** (see the gating correction in [proposal 001](2026-06-26-001-architecture-fragility-improvements-proposal.md#gating-correction-2026-06-26)). Option A is worth doing only if a curated public IR surface becomes a product goal.
+**Why shelving is safe:** #4/Option A gates *nothing* in the near-term hardening program — #9, #10, #12, and **#11's fragility fix are all `package`-internal or wire-preserving and proceed without it** (see the gating correction in [proposal 001](2026-06-26-001-architecture-fragility-improvements-proposal.md#gating-correction-2026-06-26)).
 
 ## If Option A: the plan
 
