@@ -258,3 +258,85 @@ Rationale for the order: Wave A closes the only memory-corruption path (#3) and 
 - This is a **proposal**, not a commitment; nothing here is implemented. Each Wave-A/B item is small enough to land as its own PR with a test.
 - The ranking is leverage-based, not severity-based: e.g. decomposing `ViewGraph` (#10) is high-impact but XL-effort/medium-risk and removes no shipped bug *by itself*, so it sits below the low-risk oracle/test changes that change the slope of the curve.
 - Full per-subsystem evidence, the 4 cross-cutting lens assessments, and the verification log are in the [survey report](../reports/2026-06-26-architecture-fragility-survey.md).
+
+
+---
+
+_Appended 2026-06-27 by a wider architecture deep-dive (6-dimension multi-agent fan-out + adversarial synthesis: kept 16 of 28, dropped duplicates/cosmetic/speculative). Candidate opportunities, not commitments — same status as the original 15._
+
+## Supplemental: wider architecture deep-dive (opportunities #16–#31)
+
+The original 15-item fragility program is **done** (Waves A/B/C merged, pinned, gated green). This supplemental is a second, wider pass across six dimensions — concurrency/isolation residuals, test/soundness architecture, performance architecture, public-API/1.0 readiness, platform/host & cross-repo build, and remaining god-objects/diagnostics. It surfaces only *new* opportunities: each item below is source-grounded and was kept after deduping cross-dimension overlap and dropping duplicates-of-the-15, cosmetic regroupings, diagnostics-only prep, and speculative policy work. Several are **completions of partially-landed #1/#2/#3** — places where the proposal promised more than shipped. Numbering continues from the original program.
+
+### Ranked by leverage = (impact × fragility-removed) / (effort × risk)
+
+| # | Opportunity | Impact | Effort | Risk |
+| --- | --- | --- | --- | --- |
+| 16 | Complete the LayoutProxyBox Mutex guard (finish #3 — structural, not just a trap) | High | S | Low |
+| 17 | Add `@MainActor` to the FrameScheduler public API (unlocked-Set convention → checked boundary) | High | S | Low |
+| 18 | Add an Android cross-compile gate to org CI alongside WASI | High | S | Low |
+| 19 | Bound the TerminalImageRenderer payload caches (kitty/sixel/fallback) | High | M | Low |
+| 20 | Promote the memo shadow oracle to always-on-in-test + sampled-release (finish #1) | High | M | Low |
+| 21 | Guard/eliminate the `assumeIsolated` antipattern via one reusable checked-access helper | High | M | Low |
+| 22 | Audit & enforce `Sendable` on the public modifier-type surface | High | M | Low |
+| 23 | Extend the generative registry-restore harness to seam shapes (finish #2) | High | L | Low |
+| 24 | Widen frame-tail layout-offload eligibility (after 16/21 land the safety) | High | L | Med |
+| 25 | Harden the release artifact pipeline: automate npm publish + gate orchestration order/availability | High | M | Med |
+| 26 | Document & lint-enforce `scopedAnyView` adoption for deferred content | Med | S | Low |
+| 27 | Standardize public error-type conformances (`Sendable`/`Equatable`/`CustomStringConvertible`) | Med | S | Low |
+| 28 | Add direct unit tests for the extracted stateless operators (GraphCheckpointStore, GraphNodeIndexQuery) | Med | S | Low |
+| 29 | Consolidate the 5 perf-gate `Configuration` enums and test the untested observation-firing fork | Med | M | Med |
+| 30 | Clarify & enforce custom `Layout.Cache` lifetime semantics | Med | M | Low |
+| 31 | Add a cross-host frame-encoder parity test (WASI vs Android) | Med | M | Med |
+
+## Detail
+
+### #16 — Complete the LayoutProxyBox Mutex guard
+Proposal #3 promised to move `LayoutProxyBox.cachedStates` behind the `Mutex` pattern already proven in its sibling `SendableLayoutWorkerProxy`, but only the `preconditionMainActor()` trap shipped — the dictionary is still unsynchronized and merely traps loudly on off-main entry. This is the *literal suspected mechanism* of the #1 SIGSEGV flake, so finishing it converts a "loud crash if the precondition fires" into "memory-safe by construction even under the legacy executor." First step: wrap `cachedStates` in `private let state = Mutex(State())` and route all accessors through it. Evidence: `swift-tui/Sources/SwiftTUIViews/Layout/CustomLayoutErasure.swift:289` (still unsynchronized) vs the trap at `:306–311` and the sibling Mutex pattern in the same file.
+
+ **Caveat (verified against #3's detail):** #3 explicitly records the `Mutex` as *infeasible* — the `Any` caches are MainActor-isolated non-`Sendable`, so a `Mutex` needs the `nonisolated(unsafe)`/`@unchecked Sendable` that the `structured-concurrency-escape-hatches` hook bans, which is why the trap shipped *instead*. So the real, narrower opportunity is a **different** safe synchronization (e.g. making the cached values `Sendable` so a `Mutex` is legal) or ratifying the trap as the accepted mitigation — not the originally-proposed `Mutex` as-is.
+
+### #17 — `@MainActor` the FrameScheduler public API
+`public final class FrameScheduler` carries six unlocked mutable Sets (`pendingCauses`, `invalidatedIdentities`, `signalNames`, `externalReasons`, …) and public `request*` methods that mutate them with no isolation annotation — safe only by caller convention, unlike RunLoop's equivalent fields. Adding `@MainActor` to the public surface turns a silent contract into a compile-checked boundary at near-zero behavioral risk (call sites in RunLoop/DefaultRenderer are already main-bound). Evidence: `swift-tui/Sources/SwiftTUICore/Pipeline/Scheduler.swift:105` (no `@MainActor`) and `:106–112` (the unlocked Sets), confirmed against source.
+
+### #18 — Android cross-compile gate in org CI
+`org-gate.yml` runs a `wasi-cross-compile` job but has **zero** Android coverage, while `SwiftTUIAndroidHost` is a root Package target cross-compiled for aarch64/x86_64 Android — the exact structural gap that shipped WASI-only breaks at 0.0.19 and 0.0.26. Add an `android-cross-compile` job parallel to WASI that `swift build`s the host with the NDK toolchain for `aarch64-/x86_64-unknown-linux-android28`. Evidence: `.github/workflows/org-gate.yml:43` (`wasi-cross-compile:` present, Android absent), confirmed.
+
+### #19 — Bound the TerminalImageRenderer payload caches
+`ImageAssetRepository` and `ImageBlendCompositor` already have LRU+budget eviction, but `TerminalImageRenderer.Storage`'s three payload dictionaries (`kittyPayloads`, `sixelPayloads`, `fallbackOverlays`) grow unbounded for the session lifetime — flagged P0 in the cache audit as the clearest remaining asymmetry. Apply the existing `evictIfNeeded` admission/cap pattern from the sibling compositor. Evidence: `swift-tui/Sources/SwiftTUIRuntime/Terminal/TerminalImageRendering.swift:42–44` (three unbounded dictionaries) confirmed; audit P0 at `2026-06-26-cache-layer-audit.md:605`.
+
+### #20 — Promote the memo shadow oracle to always-on-in-test + sampled-release
+Proposal #1 claimed the memo oracle was promoted to "always-on-in-test + sampled-release," but `MemoSkipTrace.isEnabled` still defaults to `false` and is env-gated by `SWIFTTUI_MEMO_TRACE` only — so the entire memoization-soundness class runs in *no* CI test unless a contributor sets the env var. Make it default-on under the test binary and wire it into every generative registry-restore test, then verify whether the promised sampled-release probe was ever wired into the production pipeline. Evidence: `swift-tui/Sources/SwiftTUICore/Resolve/MemoSkipTrace.swift:40` (`isEnabled` defaults off) confirmed.
+
+### #21 — Guard/eliminate the `assumeIsolated` antipattern with one reusable helper
+The codebase has ~20 `assumeIsolated` sites (grep-confirmed), of which only LayoutProxyBox is instrumented; KNOWN-TEST-FLAKES explicitly notes the rest are "un-instrumented." Several are the same structural debt: `Sendable` protocol conformers (`IndexedChildSource`, `LayoutDependentContent`) expose `@MainActor` storage through `nonisolated` methods that call `assumeIsolated`, and the off-main offload *decision gate* (`FrameTailLayoutOffloadEligibility`) itself lacks `@MainActor`. Extract a single `@inline(__always)` `CheckedMainActorAccess` / `trapIfNotMainActor` helper, retrofit it across all sites, and add `@MainActor` to the eligibility checker so a future contributor cannot call it from a worker. Evidence: `swift-tui/Sources/SwiftTUIViews/Collections/IndexedChildSources.swift:48–60`, `swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailLayoutOffloadEligibility.swift` (no `@MainActor`), `docs/KNOWN-TEST-FLAKES.md:102–103`.
+
+### #22 — Enforce `Sendable` on the public modifier surface
+50+ public `PrimitiveViewModifier` types (e.g. `PaddingModifier`, `SafeAreaPaddingModifier`) lack explicit `Sendable`, even though the framework is strict about `Sendable` everywhere else — blocking users from composing modifiers across tasks/actors and signalling 1.0 un-readiness. Audit `Modifiers/*.swift`, add `Sendable` (+ `Equatable`) where the type is a value with no reference escape, and extend the totality tests so no modifier silently loses it. Evidence: `swift-tui/Sources/SwiftTUIViews/Modifiers/ViewLayoutModifierTypes.swift:15` (`PaddingModifier` lacks `Sendable`).
+
+### #23 — Extend the generative registry-restore harness to seam shapes
+The #2 generative harness shipped, but its `generatedSeamShapes` enumerates **flat siblings only** (2–4 count, 9 shapes); the source comment at line 417 explicitly defers "Group/ForEach splice intermediaries, portal/overlay and lazy-tab hosts" — the precise reconciliation seams the original survey named as where completeness violations hide. Add a `spliceKind` axis (flat/forEachSpliced/portalInjected/lazyTabHost/sheetCaptured) to produce a 5×9 product and run the "scoped restore == full rebuild" oracle across all 15 registries. Evidence: `swift-tui/Tests/SwiftTUICoreTests/Graph/RuntimeRegistrationRestoreScopingTests.swift:417` (deferral comment) confirmed.
+
+### #24 — Widen frame-tail layout-offload eligibility
+The mainactor audit identifies layout offload as the best off-main lever, but three categories (`canRunOnWorker=false` custom layouts, indexed child sources needing live graph access, layout-realized content) force layout back onto MainActor. After #16/#21 make the off-main cache path provably safe, selectively promote safe layouts and snapshot indexed children at frame-head so deterministic IR work moves to workers. Sequence this *after* the safety items — it deliberately widens the off-main surface #16 is hardening. Evidence: `swift-tui/Sources/SwiftTUIRuntime/Rendering/FrameTailLayoutOffloadEligibility.swift:20–26` (three disqualifier categories); audit `2026-06-26-mainactor-synchronization-audit.md:88–94`.
+
+### #25 — Harden the release artifact pipeline
+`bump_version.sh` deliberately "never commits, tags, pushes, or publishes" (confirmed at the file header), so npm publish + GitHub release assets are a prose-only manual 6-step gate where a typo, credential miss, or out-of-order tag silently breaks the downstream resolve chain (examples/site pull tarball URLs). Add `swift-tui-web/.github/workflows/publish.yml` (OIDC npm publish on semver tag) as the automation slice, then a `release_orchestration.sh` that asserts each tag exists, its artifacts are reachable at canonical URLs, and downstream repos resolve in a dry run — wired into `release_candidate`. Evidence: `tools/coordination/bump_version.sh:13–15` confirmed; `tools/bazel/version_coherence.sh` gates alignment but not artifact availability.
+
+### #26 — Lint-enforce `scopedAnyView` for deferred content
+`docs/PUBLIC-API.md` mandates `scopedAnyView` for deferred authored content, but grep finds only **4** uses in the entire framework and the helper is undocumented in the public surface — so custom-container authors will reach for plain `AnyView` and silently lose dynamic-property scope and identity-bound state. Document it with a "when to use" example and add a check to `Scripts/check_public_surface_policies.sh` that flags unjustified `AnyView(...)` captures in public modifiers. Evidence: 4 uses (grep-confirmed) vs the policy at `docs/PUBLIC-API.md:82`.
+
+### #27 — Standardize public error-type conformances
+`TerminalHostError` is a naked `Error`, while `AppLaunchError` and `HostedSceneSessionError` already conform to `Error + Equatable + Sendable + CustomStringConvertible` — an inconsistency that creates silent friction in async/pattern-matching code and is a pure 1.0 surface gap. Audit `public enum *Error` across the three modules and bring the stragglers up to the established four-conformance baseline. Evidence: `swift-tui/Sources/SwiftTUIRuntime/Terminal/TerminalHost.swift:15` (naked `Error`).
+
+### #28 — Direct unit tests for the extracted stateless operators
+The #10 "clean first slice" lifted `GraphCheckpointStore` and `GraphNodeIndexQuery` off ViewGraph, but they are tested only indirectly through ViewGraph usage — so a field added to a checkpointed group but not read by `makeCheckpoint` would silently skip checkpointing. Both are stateless/pure, making them cheap high-confidence targets; drive `makeCheckpoint()` directly and assert it mirrors every field group, using the checkpoint-totality reflection pattern so the test self-updates. Evidence: `swift-tui/Sources/SwiftTUICore/Resolve/GraphCheckpointStore.swift` + `GraphNodeIndexQuery.swift` (stateless operators), no dedicated tests in `Tests/SwiftTUICoreTests/Graph/`.
+
+### #29 — Consolidate the perf-gate Configuration enums and test the observation fork
+#6 centralized getenv *parsing* but not gate *enrollment*: five separate `Configuration` enums (`MemoReuse`, `ObservableKeyPathInvalidation`, `PreciseObservationFiring`, `ReaderAttribution`, `SoundnessProbe`, all source-confirmed) each call `FeatureFlags` independently, and the resulting 4-way default-on observation-firing fork is essentially untested. Move them into one `FeatureGate` registry read once at RunLoop init, then add a generative test that exercises the combinations and asserts output-stability (memo-reuse identical regardless of ReaderAttribution). The untested combination of default-on perf paths is the real fragility here, not the enum sprawl. Evidence: `swift-tui/Sources/SwiftTUICore/Resolve/*Configuration.swift` (5 files) confirmed.
+
+### #30 — Clarify & enforce custom `Layout.Cache` lifetime
+The public `makeCache`/`updateCache` API implies cross-frame persistence, but the erasure layer discards cached state after placement on both paths — an author-surprising contract that risks silent perf regressions and stale state surviving structural changes. Document the pass-local lifetime on the protocol, add an explicit `canReuseCache(from:to:)` invalidation hook keyed on structural changes, and test that the cache is dropped when children/proposal/bindings change. Evidence: cache audit `2026-06-26-cache-layer-audit.md:606` (P0) and the dual discard paths in `CustomLayoutErasure.swift`.
+
+### #31 — Cross-host frame-encoder parity test
+#11 unified the *read* seam with `HostFrameProjection`, but the WASI and Android encoders still serialize independently with no parity contract — a field added to the projection but forgotten in one encoder silently drops data on that host, and the two encoders live in separate platform packages with isolated test suites. Add `CrossHostEncoderParityTests` that encodes one shared frame fixture through both encoders, decodes both wire formats, and asserts matching accessibility node counts, scroll-route bounds, damage rows, and focus identity. Evidence: `Tests/SwiftTUITests/HostFrameProjectionContractTests.swift` (projection contract only); the encoders tested in isolation under `Platforms/WASI` and `Platforms/Android`.
