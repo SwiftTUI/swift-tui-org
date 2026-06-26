@@ -112,6 +112,12 @@ documentation in their own `docs/` trees.
 
 ## Proposals
 
+- [proposals/2026-06-26-002-pipeline-ir-encapsulation-proposal.md](proposals/2026-06-26-002-pipeline-ir-encapsulation-proposal.md) -
+  the question behind improvement #4 (retag the IR `public → package`): is the
+  seven-phase pipeline IR public API or leaked engine internals? A ~14-build-cycle
+  spike found it is woven into the **public View authoring surface** (~701 sites,
+  17 files), so #4 is a consumer-API redesign, not a retag. Recommends
+  **encapsulation**, sequenced with Wave C; rejects freezing the IR as ABI.
 - [proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md](proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md) -
   ranked, sequenced program turning the architecture-fragility survey into work:
   15 leverage-ranked opportunities across three waves. **In progress — 10/15
