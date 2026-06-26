@@ -20,6 +20,13 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-26-architecture-fragility-survey.md](reports/2026-06-26-architecture-fragility-survey.md) -
+  org-wide architecture + fragility survey of the `swift-tui` framework + this
+  coordination root (33-agent pass; 127 confirmed issues). Macro-architecture is
+  sound; the dominant fragility is the reconciliation-seam bug class whose
+  soundness oracles ship `#if DEBUG`-only, plus god-object concentration. Drives
+  the improvement proposal; implementation is **10/15 landed** (see the proposal's
+  Progress section).
 - [reports/2026-06-18-android-interaction-sweep.md](reports/2026-06-18-android-interaction-sweep.md) -
   dev-overlay emulator sweep for the Android host: all 19 Gallery tabs rendered
   through physical visible-tab or overflow taps; Counter, Text Input, Scroll
@@ -105,6 +112,12 @@ documentation in their own `docs/` trees.
 
 ## Proposals
 
+- [proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md](proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md) -
+  ranked, sequenced program turning the architecture-fragility survey into work:
+  15 leverage-ranked opportunities across three waves. **In progress — 10/15
+  landed** (all of Wave A + Wave B #6/#7/#13/#14/#15), each verified + committed;
+  the Progress section tracks per-item status and the two deferrals (#4 retag-IR,
+  Wave C god-object decompositions).
 - [proposals/2026-06-25-001-deferred-context-abstraction-refactor.md](proposals/2026-06-25-001-deferred-context-abstraction-refactor.md) -
   proposal to split the overloaded deferred-context family into explicit
   contracts for captured inline children, lazy active-only children, portal
