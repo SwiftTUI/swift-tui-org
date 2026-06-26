@@ -65,6 +65,12 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Install Linux Swift dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev
+
       - name: Install swiftly + toolchain
         env:
           SWIFT_VERSION: ${{ steps.swift.outputs.version }}
