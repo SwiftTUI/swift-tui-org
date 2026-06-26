@@ -18,7 +18,7 @@ Opportunities are ranked by **leverage = (impact × fragility removed) ÷ (effor
 
 ## Progress (2026-06-26)
 
-**10 of 15 opportunities landed**, each built + tested + committed; the full `bun run test` repo gate is green at the Wave A boundary, the Wave B boundary, and after #15. All work is **local** on branch `wave-a-hardening` in both the `swift-tui` submodule (8 commits) and this org root (2 commits) — nothing pushed, the submodule pin not yet bumped.
+**10 of 15 opportunities landed**, each built + tested + committed; the full `bun run test` repo gate is green at the Wave A boundary, the Wave B boundary, and after #15. All work is **local** on branch `wave-a-hardening` in both the `swift-tui` submodule and this org root — nothing pushed, the submodule pin not yet bumped.
 
 - **Wave A — complete (5/5):** #1 sampled-release soundness probe, #2 generative 15-registry harness, #3 off-main layout trap (closes the C1/SIGSEGV path), #5 org-gate + WASI CI, #8 VT220 parser fix.
 - **Wave B — 5/6:** #6 `FeatureFlags` registry, #7 totality guards, #13 version-coherence gate, #14 bounded image caches, #15 autonomous-wake test **+ the `Tests/Support` harness extraction**. **Deferred:** #4 (retag IR — XL public-API-baseline regen + cascade risk; *not* required for the internal Wave C decompositions).
