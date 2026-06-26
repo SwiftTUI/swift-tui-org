@@ -1,0 +1,104 @@
+name: org-gate
+
+# Remote CI for the coordination root. Until now org integrity rested entirely
+# on an operator running Bazel locally (the root had no remote CI), and the
+# child-repo Linux gate deliberately never cross-compiles wasm32-wasi — so a
+# WASI-only break shipped green and only surfaced post-tag (hit at 0.0.19 and
+# again at 0.0.26 via EnvFrameTraceSink). This workflow closes both gaps:
+#   1. org-contract     — the cheap Bazel org contract checks (`mise run org-fast`).
+#   2. wasi-cross-compile — type-checks the pinned framework for wasm32-wasi.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push to the same ref cancels the previous in-flight run.
+concurrency:
+  group: org-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  org-contract:
+    name: org-fast (Bazel contract checks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # mise.toml pins Bazelisk + Bun (the only tools the contract checks need;
+      # Swift/Xcode are intentionally not installed by mise).
+      - uses: jdx/mise-action@v2
+        with:
+          experimental: true
+
+      - name: Run org-fast
+        run: mise run org-fast
+
+  wasi-cross-compile:
+    name: wasm32-wasi cross-compile (framework)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Swift is provisioned via swiftly (matching the project convention), not
+      # mise. The toolchain version tracks the framework's pinned .swift-version.
+      # The value is validated against a strict pattern before any downstream use
+      # so an attacker-controlled .swift-version (e.g. on a fork PR) cannot inject
+      # shell into the steps below; it is then passed via env, never interpolated
+      # directly into a run script.
+      - name: Resolve pinned Swift version
+        id: swift
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < swift-tui/.swift-version)"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+            echo "::error::Unexpected swift-tui/.swift-version contents: '$version'"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install swiftly + toolchain
+        env:
+          SWIFT_VERSION: ${{ steps.swift.outputs.version }}
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz" \
+            | tar zxf - -C /tmp
+          /tmp/swiftly init --quiet-shell-followup --assume-yes --skip-install
+          . "$HOME/.local/share/swiftly/env.sh"
+          swiftly install --use "$SWIFT_VERSION"
+          echo "$HOME/.local/share/swiftly/bin" >> "$GITHUB_PATH"
+
+      - name: Install the wasm32-wasi Swift SDK
+        env:
+          SWIFT_VERSION: ${{ steps.swift.outputs.version }}
+        run: |
+          set -euo pipefail
+          . "$HOME/.local/share/swiftly/env.sh"
+          # Official swift.org Swift SDK for WebAssembly. download.swift.org is a
+          # trusted host, so `swift sdk install` accepts the bundle by URL.
+          swift sdk install \
+            "https://download.swift.org/swift-${SWIFT_VERSION}-release/wasm/swift-${SWIFT_VERSION}-RELEASE/swift-${SWIFT_VERSION}-RELEASE_wasm.artifactbundle.zip"
+          swift sdk list
+
+      # The WASI surface lives behind `#if canImport(WASILibc)`, so it is only
+      # type-checked when actually cross-compiling. SwiftTUIRuntime transitively
+      # builds SwiftTUICore + SwiftTUIViews, covering the whole library surface.
+      - name: Cross-compile SwiftTUIRuntime for wasm32-wasi
+        working-directory: swift-tui
+        env:
+          SWIFT_VERSION: ${{ steps.swift.outputs.version }}
+        run: |
+          set -euo pipefail
+          . "$HOME/.local/share/swiftly/env.sh"
+          swift build \
+            --swift-sdk "swift-${SWIFT_VERSION}-RELEASE_wasm" \
+            --target SwiftTUIRuntime
