@@ -2,12 +2,20 @@ name: org-gate
 
 # Remote CI for the coordination root. Until now org integrity rested entirely
 # on an operator running Bazel locally (the root had no remote CI), and the
-# child-repo Linux gate deliberately never cross-compiles wasm32-wasi or Android —
-# so a target-only break shipped green and only surfaced post-tag (hit at 0.0.19
-# and again at 0.0.26 via EnvFrameTraceSink). This workflow closes those gaps:
-#   1. org-contract        — the cheap Bazel org contract checks (`mise run org-fast`).
-#   2. wasi-cross-compile  — type-checks the pinned framework for wasm32-wasi.
-#   3. android-cross-compile — type-checks the framework + SwiftTUIAndroidHost for Android.
+# child-repo Linux gate deliberately never cross-compiles wasm32-wasi — so a
+# WASI-only break shipped green and only surfaced post-tag (hit at 0.0.19 and
+# again at 0.0.26 via EnvFrameTraceSink). This workflow closes both gaps:
+#   1. org-contract     — the cheap Bazel org contract checks (`mise run org-fast`).
+#   2. wasi-cross-compile — type-checks the pinned framework for wasm32-wasi.
+#
+# An android-cross-compile job is intended here too (SwiftTUIAndroidHost is a
+# root Package target with #if os(Android) code the Linux gate never builds): the
+# framework source cross-compiles clean for aarch64-unknown-linux-android28 from
+# a macOS host, but wiring it into this x86_64 Linux runner is blocked on a
+# bundled-NDK-sysroot include-path issue (clang can't find <semaphore.h> when
+# building SwiftOverlayShims, though it is present in the bundle). The robust fix
+# is likely skiptools/swift-android-action or explicit -Xcc sysroot flags — see
+# docs/proposals/2026-06-26-001 #18.
 
 on:
   push:
@@ -117,79 +125,3 @@ jobs:
           swift build \
             --swift-sdk "swift-${SWIFT_VERSION}-RELEASE_wasm" \
             --target SwiftTUIRuntime
-
-  android-cross-compile:
-    name: Android cross-compile (framework + host)
-    runs-on: ubuntu-latest
-    # The Android Swift SDK is published on its own cadence by the Android
-    # workgroup, NOT at every toolchain patch level — there is no 6.3.1 Android
-    # SDK, so it is pinned here separately from the toolchain (URL + SHA256 from
-    # swift.org's getting-started guide). The pinned 6.3.1 toolchain + 6.3.2
-    # Android SDK pairing is the verified-working combination; bump
-    # ANDROID_SDK_VERSION/CHECKSUM when a matching SDK ships for a newer toolchain.
-    env:
-      ANDROID_SDK_VERSION: "6.3.2"
-      ANDROID_SDK_CHECKSUM: "939e933549d12d28f2e0bf71019d734d309859e9773c572657ce565a81f85d68"
-      # The bundle ID `swift-6.3.2-RELEASE_android` is ambiguous — it matches 27
-      # triples (aarch64/x86_64/armv7 × android28..36), and SwiftPM then
-      # auto-selects by *host* arch, picking a broken x86_64-android sysroot on
-      # the x86_64 Linux runner. Pin an explicit target triple so selection is
-      # host-independent. aarch64 (API 28) is the dominant Android target.
-      ANDROID_TARGET_TRIPLE: "aarch64-unknown-linux-android28"
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      # Toolchain via swiftly, tracking the framework's pinned .swift-version
-      # (validated against a strict pattern so a fork PR cannot inject shell
-      # through it), exactly like the wasm job above.
-      - name: Resolve pinned Swift version
-        id: swift
-        run: |
-          set -euo pipefail
-          version="$(tr -d '[:space:]' < swift-tui/.swift-version)"
-          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
-            echo "::error::Unexpected swift-tui/.swift-version contents: '$version'"
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Install Linux Swift dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev
-
-      - name: Install swiftly + toolchain
-        env:
-          SWIFT_VERSION: ${{ steps.swift.outputs.version }}
-        run: |
-          set -euo pipefail
-          curl -fsSL "https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz" \
-            | tar zxf - -C /tmp
-          /tmp/swiftly init --quiet-shell-followup --assume-yes --skip-install
-          . "$HOME/.local/share/swiftly/env.sh"
-          swiftly install --use "$SWIFT_VERSION"
-          echo "$HOME/.local/share/swiftly/bin" >> "$GITHUB_PATH"
-
-      - name: Install the Android Swift SDK
-        run: |
-          set -euo pipefail
-          . "$HOME/.local/share/swiftly/env.sh"
-          swift sdk install \
-            "https://download.swift.org/swift-${ANDROID_SDK_VERSION}-release/android-sdk/swift-${ANDROID_SDK_VERSION}-RELEASE/swift-${ANDROID_SDK_VERSION}-RELEASE_android.artifactbundle.tar.gz" \
-            --checksum "$ANDROID_SDK_CHECKSUM"
-          swift sdk list
-
-      # SwiftTUIAndroidHost depends on SwiftTUIRuntime (which builds SwiftTUICore
-      # + SwiftTUIViews), so this covers the whole library surface plus the
-      # Android host's `#if os(Android)` code that the Linux gate never compiles.
-      - name: Cross-compile SwiftTUIAndroidHost for Android
-        working-directory: swift-tui
-        run: |
-          set -euo pipefail
-          . "$HOME/.local/share/swiftly/env.sh"
-          swift build \
-            --swift-sdk "$ANDROID_TARGET_TRIPLE" \
-            --target SwiftTUIAndroidHost
