@@ -130,6 +130,12 @@ jobs:
     env:
       ANDROID_SDK_VERSION: "6.3.2"
       ANDROID_SDK_CHECKSUM: "939e933549d12d28f2e0bf71019d734d309859e9773c572657ce565a81f85d68"
+      # The bundle ID `swift-6.3.2-RELEASE_android` is ambiguous — it matches 27
+      # triples (aarch64/x86_64/armv7 × android28..36), and SwiftPM then
+      # auto-selects by *host* arch, picking a broken x86_64-android sysroot on
+      # the x86_64 Linux runner. Pin an explicit target triple so selection is
+      # host-independent. aarch64 (API 28) is the dominant Android target.
+      ANDROID_TARGET_TRIPLE: "aarch64-unknown-linux-android28"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -185,5 +191,5 @@ jobs:
           set -euo pipefail
           . "$HOME/.local/share/swiftly/env.sh"
           swift build \
-            --swift-sdk "swift-${ANDROID_SDK_VERSION}-RELEASE_android" \
+            --swift-sdk "$ANDROID_TARGET_TRIPLE" \
             --target SwiftTUIAndroidHost
