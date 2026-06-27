@@ -25,8 +25,9 @@ documentation in their own `docs/` trees.
   coordination root (33-agent pass; 127 confirmed issues). Macro-architecture is
   sound; the dominant fragility is the reconciliation-seam bug class whose
   soundness oracles ship `#if DEBUG`-only, plus god-object concentration. Drives
-  the improvement proposal; implementation is **10/15 landed** (see the proposal's
-  Progress section).
+  the improvement proposal; the original 15-item implementation program is now
+  effectively complete, including the 2026-06-27 public IR encapsulation pass
+  (see the proposal's Progress section).
 - [reports/2026-06-18-android-interaction-sweep.md](reports/2026-06-18-android-interaction-sweep.md) -
   dev-overlay emulator sweep for the Android host: all 19 Gallery tabs rendered
   through physical visible-tab or overflow taps; Counter, Text Input, Scroll
@@ -114,16 +115,17 @@ documentation in their own `docs/` trees.
 
 - [proposals/2026-06-26-002-pipeline-ir-encapsulation-proposal.md](proposals/2026-06-26-002-pipeline-ir-encapsulation-proposal.md) -
   the question behind improvement #4 (retag the IR `public → package`): is the
-  seven-phase pipeline IR public API or leaked engine internals? A ~14-build-cycle
-  spike found it is woven into the **public View authoring surface** (~701 sites,
-  17 files), so #4 is a consumer-API redesign, not a retag. Recommends
-  **encapsulation**, sequenced with Wave C; rejects freezing the IR as ABI.
+  seven-phase pipeline IR public API or leaked engine internals? Landed
+  2026-06-27: public renderer output is `RenderSnapshot`, raw phase artifacts are
+  `package`, the public API baseline/policy guard the boundary, and examples use
+  public snapshot/raster/semantic surfaces. Retains the earlier spike findings
+  that this was a source-breaking public-API boundary pass, not a mechanical retag.
 - [proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md](proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md) -
   ranked, sequenced program turning the architecture-fragility survey into work:
-  15 leverage-ranked opportunities across three waves. **In progress — 10/15
-  landed** (all of Wave A + Wave B #6/#7/#13/#14/#15), each verified + committed;
-  the Progress section tracks per-item status and the two deferrals (#4 retag-IR,
-  Wave C god-object decompositions).
+  15 leverage-ranked opportunities across three waves. The original program is
+  effectively complete: Wave A/B/C work is merged, pinned, pushed, and #4
+  public IR encapsulation is now landed via `RenderSnapshot` plus package-only
+  phase artifacts.
 - [proposals/2026-06-25-001-deferred-context-abstraction-refactor.md](proposals/2026-06-25-001-deferred-context-abstraction-refactor.md) -
   proposal to split the overloaded deferred-context family into explicit
   contracts for captured inline children, lazy active-only children, portal

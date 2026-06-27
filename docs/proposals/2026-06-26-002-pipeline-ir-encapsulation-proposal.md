@@ -3,29 +3,48 @@
 | | |
 |---|---|
 | **Date** | 2026-06-26 |
-| **Status** | **Shelved (2026-06-26).** The decision is made: Option A (the recommended approach) is **deferred indefinitely** and the engine IR stays `public` ABI as an accepted trade-off. Option C is rejected (verified non-existent at HEAD). Revisit only if a curated public IR surface becomes a product goal. See [Decision](#decision-2026-06-26). |
+| **Status** | **Landed (2026-06-27).** #4 is no longer shelved: the public renderer now returns `RenderSnapshot`, raw phase products are `package`, public-surface policy guards prevent re-leaks, and the org root pins the pushed framework/examples commits. See [Implementation update](#implementation-update-2026-06-27). |
 | **Type** | Public-API design change to `swift-tui` (framework) |
-| **Supersedes** | The "retag the IR `public → package`" opportunity (#4) in [`2026-06-26-001-architecture-fragility-improvements-proposal.md`](2026-06-26-001-architecture-fragility-improvements-proposal.md), which an implementation attempt re-estimated from *M/mechanical* to *XL/public-API redesign*. |
-| **Evidence base** | The [architecture-fragility survey](../reports/2026-06-26-architecture-fragility-survey.md) (modularity lens) + a ~14-build-cycle implementation spike (2026-06-26) summarized in the [Appendix](#appendix-the-implementation-spike). |
-| **Affects** | `SwiftTUICore` (the engine IR) and `SwiftTUIViews` (the public authoring surface). No host/Charts impact. |
+| **Supersedes** | The "retag the IR `public -> package`" opportunity (#4) in [`2026-06-26-001-architecture-fragility-improvements-proposal.md`](2026-06-26-001-architecture-fragility-improvements-proposal.md). |
+| **Evidence base** | The [architecture-fragility survey](../reports/2026-06-26-architecture-fragility-survey.md), the ~14-build-cycle 2026-06-26 spike summarized in the [Appendix](#appendix-the-implementation-spike), and the final 2026-06-27 implementation/validation bundle. |
+| **Affects** | `SwiftTUICore` phase products/engines, `SwiftTUIRuntime.DefaultRenderer`, public API baseline/policy, and example tests that previously reached into raw frame artifacts. |
 
-## Decision (2026-06-26)
+## Implementation update (2026-06-27)
 
-**#4 is formally shelved.** After the implementation spike (which re-scoped #4 from a mechanical retag to an XL, consumer-breaking public-API redesign) and the gating correction (which found #4 blocks *nothing* in the near-term hardening program), the call is to **not pursue Option A now** and to **park this proposal**. Rationale:
+**#4 is landed.** The final design accepted the source-breaking risk of removing accidental phase-IR API and implemented a narrower, reviewable Option A rather than ratifying the raw engine IR:
 
-- **It gates nothing.** Every remaining Wave-C item is non-breaking without it: #9 (`AnimationController`) and #10 (`ViewGraph`/`ViewNode`) split `package` targets, #12 already landed, and **#11's `HostFrameProjection` shipped** as a `package`/wire-preserving fix needing neither #4 nor cross-repo coordination. The "do #4 first for cleanliness" rationale buys a tidier public surface, not capability.
-- **Its cost is real and its payoff is latent.** Option A is a multi-day redesign of the public View-authoring surface (~701 reference sites across 17 files) whose only payoff — making future god-object decompositions non-breaking — accrues to refactors that are themselves deferred and, per the gating correction, non-breaking anyway because their split targets are already `package`.
-- **The accepted trade-off:** the ~116 `public` pipeline-IR types remain part of the library's ABI, so a future change to `ResolvedNode`/`MeasuredNode`/`PlacedNode`/`CommitPlan` shape is a source-breaking change for any consumer reaching into them. This is tolerable while SwiftTUI is pre-1.0 (breaking changes are expected) and because the only extension point that would need the IR public (custom `PrimitiveView`s) is itself `package` and no host references it.
+- `DefaultRenderer.render` and `renderAsync` now return `RenderSnapshot`, a curated public value carrying `rasterSurface`, `semanticSnapshot`, `presentationDamage`, and `diagnostics`.
+- `RenderSnapshot` keeps the raw `FrameArtifacts` behind a `package` initializer/property so runtime internals and package tests can still use the phase products without exposing them to consumers.
+- Phase engines and phase products are now `package`: `Resolver`, `LayoutEngine`, `SemanticExtractor`, `DrawExtractor`, `Rasterizer`, `CommitPlanner`, `FrameArtifacts`, `CommitPlan`, `ResolvedNode`, `MeasuredNode`, `PlacedNode`, `DrawNode`, layout/cache/proxy helpers, and related lifecycle/commit internals.
+- The intentional public boundary stays public: authored `View` APIs, geometry/style/animation value types, `RasterSurface`, `SemanticSnapshot`, `SemanticHostFrame`, `FrameDiagnostics`, and the new public `FrameDropBlocker`.
+- `Scripts/check_public_surface_policies.sh`, `docs/public_api_overrides.yml`, `docs/PUBLIC_API_BASELINE.md`, and `docs/.public-api-baseline.txt` now encode the boundary so raw IR does not drift back into public API.
+- `swift-tui-examples` tests now consume public snapshots/raster/semantic surfaces instead of `FrameArtifacts` or phase trees.
 
-**Revisit when** a stable public API becomes a goal (e.g. approaching 1.0) **or** the team consciously decides to offer a curated power-user IR surface — at which point Option A (below) is the documented path. Until then this proposal is reference material, not active work.
+Pushed implementation commits:
+
+- `swift-tui` `315fd53c` — `refactor: encapsulate render phase IR`
+- `swift-tui-examples` `3d70f26` — `test: use public render snapshots`
+- `swift-tui-org` `73586ee` — `chore: pin public render snapshot work`
+
+Validation:
+
+- `swiftly run swift test` in `swift-tui` — 2,589 tests passed.
+- `Scripts/check_public_surface_policies.sh`
+- `Scripts/generate_public_api_inventory.sh --check` — baseline current, 713 top-level public symbols.
+- Worktree-overlay example tests: `gallery`, `layouts`, `gifcat`, `gifeditor`.
+- `mise exec -- bazel test //:org_fast`
+
+## Historical decision (2026-06-26, superseded)
+
+The first spike re-scoped #4 from a mechanical retag to a source-breaking public-API boundary change, and the near-term hardening program did not require it. The temporary call was therefore to shelve the work. That decision was superseded on 2026-06-27 after the source-breaking risk was accepted and the smaller `RenderSnapshot` facade made the boundary tractable.
 
 ## Summary
 
-SwiftTUI's seven-phase render pipeline — `resolve → measure → place → semantics → draw → raster → commit` — produces value types (`ResolvedNode`, `MeasuredNode`, `PlacedNode`, `CommitPlan`, the draw tree, …). Roughly **116 of these engine-internal IR types are declared `public`**, and the survey flagged this as the framework freezing its own internal representation as library ABI: every planned god-object decomposition (`ViewGraph`, `AnimationController`, the `Rasterizer`) is a potential source-breaking change for anyone who did `import SwiftTUI`.
+SwiftTUI's seven-phase render pipeline — `resolve → measure → place → semantics → draw → raster → commit` — produces value types (`ResolvedNode`, `MeasuredNode`, `PlacedNode`, `CommitPlan`, the draw tree, …). At survey time, roughly **116 of these engine-internal IR types were declared `public`**, and the survey flagged this as the framework freezing its own internal representation as library ABI: every planned god-object decomposition (`ViewGraph`, `AnimationController`, the `Rasterizer`) was a potential source-breaking change for anyone who did `import SwiftTUI`.
 
-The obvious fix — retag the IR `package` — was attempted and **does not work as a mechanical retag**, because the IR is not cleanly internal: it is **woven into the public `SwiftTUIViews` authoring surface** (the View modifiers, gestures, focus, and primitives that users actually call), at **~701 reference sites across 17 files**. Retagging the IR therefore *breaks user code* unless that authoring surface is first redesigned to stop exposing it.
+The obvious fix — retag the IR `package` — was attempted and **does not work as a blind mechanical retag**, because the IR had leaked through parts of the public `SwiftTUIViews` authoring surface (the View modifiers, gestures, focus, and primitives that users actually call), at **~701 reference sites across 17 files** in the original spike. Retagging the IR therefore had to be treated as a public API boundary change, not a keyword sweep.
 
-So the real question is not "retag or not" but **"is the pipeline IR part of SwiftTUI's intended public API, or engine internals that leaked into the authoring surface?"** This proposal frames that decision, recommends **encapsulation (treat the IR as internal)**, and specifies the work — explicitly tied to the Wave C god-object refactors it exists to de-risk.
+The 2026-06-27 implementation answered the core design question: **the raw pipeline IR is engine-internal, while rendered output is public.** `RenderSnapshot` is the public runtime facade; package-only accessors preserve internal testing and runtime composition; direct consumers of raw `ResolvedNode`/`PlacedNode`/`FrameArtifacts` were intentionally broken while SwiftTUI is still pre-1.0.
 
 ## The core question
 
@@ -33,7 +52,7 @@ So the real question is not "retag or not" but **"is the pipeline IR part of Swi
 
 The analogy is decisive. SwiftUI — the framework SwiftTUI mirrors — does **not** expose its resolved view tree, layout results, or display list. Users compose `View`s and read `GeometryProxy`/environment/layout *proposals*; they never touch the engine's resolved nodes. By that standard, SwiftTUI's IR should be **internal**, and its current `public` status is **accidental** — a consequence of building the authoring surface directly on the IR types rather than on narrower public abstractions.
 
-The implementation spike confirms the accident: the IR leaks to users through exactly the places where the authoring layer reaches into the engine (custom layout, gesture/pointer routing, focus values, lifecycle, semantics/accessibility, primitive lowering), not through a designed "here is our public IR" surface.
+The implementation spike confirmed the accident: the IR leaked to users through exactly the places where the authoring layer reaches into the engine (custom layout, gesture/pointer routing, focus values, lifecycle, semantics/accessibility, primitive lowering), not through a designed "here is our public IR" surface.
 
 ## Evidence: two exposure layers
 
@@ -67,6 +86,8 @@ These are the **APIs users call**. Their public signatures reference pipeline IR
 
 ## Options
 
+These options record the pre-implementation decision space. The landed outcome is [Option A](#option-a--encapsulate-the-ir-recommended) in the narrower `RenderSnapshot` form described above.
+
 ### Option A — Encapsulate the IR *(recommended)*
 
 Treat the pipeline IR as engine internals. Introduce/round-out the **narrow public abstractions** the authoring surface actually needs (geometry proposals, environment access, semantic *roles*, gesture/pointer value types, namespace tokens — most already exist in `Geometry`/`Styling`/`Content`/`Semantics`), refactor the ~17 View files to express their public API in those terms, then retag the IR `package`.
@@ -74,9 +95,9 @@ Treat the pipeline IR as engine internals. Introduce/round-out the **narrow publ
 - **Pro:** Frees the engine to be refactored (Wave C: `ViewGraph`/`AnimationController`/`Rasterizer` decompositions) without breaking users; shrinks the public surface to an intentional contract; matches SwiftUI's encapsulation.
 - **Con:** XL, multi-day; consumer-breaking for anyone currently reaching into the IR (mitigated below); requires designing the public authoring abstractions, not just moving keywords.
 
-### Option B — Ratify the IR as public API *(close #4 as won't-fix)*
+### Option B — Ratify the IR as public API *(rejected)*
 
-Accept that the IR is part of the contract (it already is, de facto), document and stabilize it, and **drop the goal of packaging it**.
+Accept that the IR is part of the contract, document and stabilize it, and **drop the goal of packaging it**.
 
 - **Pro:** Zero work now; honest about today's reality.
 - **Con:** Permanently **freezes the IR as ABI** — the exact constraint #4 set out to remove. Every Wave C god-object decomposition that changes `ResolvedNode`/`ViewNode`/`PlacedNode` shape becomes a breaking change. This forecloses the engine's evolvability, so it is **not recommended** unless the team decides the IR is a deliberate power-user surface.
@@ -92,23 +113,19 @@ Accept that the IR is part of the contract (it already is, de facto), document a
 
 ## Recommendation
 
-**Resolved: shelved (see [Decision](#decision-2026-06-26)).** The recommendation was *"pursue Option A, but sequence it with Wave C — not before,"* because the payoff of encapsulation is *latent* (it exists to make the god-object decompositions non-breaking, and those are deferred) and a multi-day consumer-API redesign ahead of the refactors it protects is premature. With Option C verified non-existent, the binary choice was **Option A (when Wave C is scheduled) vs. formally shelve #4** — and the call was to **shelve**. The Option A plan below is retained as the documented path *if and when* #4 is revisited:
+**Resolved: landed.** Option A was implemented in its narrowest useful form: keep user-facing authoring/render-output types public, introduce `RenderSnapshot` for rendered frame results, and move the raw phase IR to `package`. Option B (ratify the raw IR as public API) is rejected; Option C remains non-existent at HEAD.
 
-1. ~~**Now (optional):** land **Option C**~~ — **struck:** Option C has no implementable scope at HEAD (see the boxed correction above); there is nothing to land.
-2. **If revisited:** do **Option A** as the **first step** of whatever motivates it — design the public authoring abstractions and de-expose the IR — so any subsequent `ViewGraph`/`AnimationController`/`Rasterizer` decompositions land behind a stable public API.
-3. **Option B** (ratify the IR as public) is *de facto* the shelved state: the IR stays public, but **undocumented and unversioned** — not promoted to a supported surface. Promote it only if the team consciously decides to offer a power-user IR surface (then document and version it).
-
-**Why shelving is safe:** #4/Option A gates *nothing* in the near-term hardening program — #9, #10, #12, and **#11's fragility fix are all `package`-internal or wire-preserving and proceed without it** (see the gating correction in [proposal 001](2026-06-26-001-architecture-fragility-improvements-proposal.md#gating-correction-2026-06-26)).
+The earlier gating correction still matters historically: #9, #10, #11, and #12 did not *need* #4 to proceed. #4 nevertheless improves public API cleanliness and future refactor freedom by ensuring runtime consumers depend on rendered output, not the engine's phase products.
 
 ## If Option A: the plan
 
-**Phasing (each phase builds + gates green independently):**
+**Phasing (implemented 2026-06-27; each phase built + gated green):**
 
-1. **Define the boundary.** Enumerate, per the Layer-1 table, the keep-public consumer/host set; everything else in `resolve/measure/place/semantics/draw/raster/commit` is a packaging candidate.
-2. **Round out the public authoring abstractions.** For each of the 17 View files, identify what its public API *actually* needs to expose and ensure a public, IR-free type carries it (extend `Geometry`/`Styling`/`Semantics`-role types as needed). This is the design core of the work.
-3. **Refactor the View surface** file-by-file to use those abstractions (or `@_spi(Engine)` where a power-user hook is genuinely intended) instead of raw IR.
-4. **Retag the IR `package`** (the proven `perl` retag, skipping `@_spi`).
-5. **Regenerate the public-API baseline**, review the removed-symbols diff, gate.
+1. **Define the boundary.** Kept authored `View` APIs, geometry/style/animation values, host-facing raster/semantic values, and diagnostics public; marked phase engines/products as packaging candidates.
+2. **Add the public render facade.** Introduced `RenderSnapshot` and changed public `DefaultRenderer.render` / `renderAsync` to return it; retained package-only `renderArtifacts` paths for internals.
+3. **Retag the raw IR `package`.** Moved the phase products/engines and package-only renderer plumbing behind the module boundary.
+4. **Update consumers.** Migrated framework tests that need internals to package artifact paths and migrated example tests to public snapshot/raster/semantic checks.
+5. **Regenerate and enforce the public API baseline.** Updated overrides, baselines, docs, and policy checks to make the boundary executable.
 
 **Why it is safe to do (despite being consumer-breaking):**
 
@@ -126,10 +143,10 @@ Accept that the IR is part of the contract (it already is, de facto), document a
 
 | | |
 |---|---|
-| **Effort** | XL (multi-day) — dominated by Phase 2 (designing the public authoring abstractions) and Phase 3 (17-file refactor), not the mechanical retag. |
-| **Risk** | Medium-high *as an API change* (consumer-breaking), but **low as an engineering risk** (compiler-guaranteed, baseline-reviewed). |
-| **Blocks** | Nothing today. **Unblocks** non-breaking Wave C decompositions (`#9` `AnimationController`, `#10` `ViewGraph`). |
-| **Do it when** | Wave C is scheduled — as its first step. |
+| **Effort** | L/XL boundary pass — smaller than the original 17-file redesign because the final public facade is `RenderSnapshot`, but still a source-breaking API change plus example/test migration. |
+| **Risk** | Medium-high *as an API change* (direct raw-IR consumers break), but low as an engineering risk (compiler-guaranteed and baseline-reviewed). |
+| **Blocks** | Nothing today. Landed for API cleanliness and future refactor freedom. |
+| **Do it when** | Done 2026-06-27. |
 
 ## Appendix: the implementation spike
 
@@ -141,4 +158,4 @@ A 2026-06-26 spike attempted the bulk retag against the compiler across ~14 conf
 - Reverting `Scheduler.swift`/packaging its internals repeatedly produced **1646** errors — the module-emit phantom cascade (root-caused to a handful of real Core errors).
 - Final clean-Core build surfaced the **~701-site, 17-file `SwiftTUIViews`** exposure — the decisive finding.
 
-All changes were reverted; **no partial boundary was shipped** (working tree clean, build green).
+Those spike changes were reverted; **no partial boundary shipped on 2026-06-26**. The follow-up 2026-06-27 implementation is the shipped boundary recorded above.

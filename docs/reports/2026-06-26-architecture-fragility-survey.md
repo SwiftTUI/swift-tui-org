@@ -3,7 +3,7 @@
 **Date:** 2026-06-26
 **Scope:** The whole `SwiftTUI/swift-tui` framework (~110k LOC source, ~90k LOC tests) plus this org-coordination root.
 **Method:** Multi-agent survey — 14 parallel subsystem readers → 14 adversarial fragility validators + 4 cross-cutting lenses → ranked synthesis (33 agents, ~3.5M tokens). Headline claims independently spot-verified against source by the author (see *Verification* below).
-**Status:** Read-only assessment (the survey itself changed no code). **Implementation has begun** — 10 of the 15 ranked opportunities have landed; see the [proposal's Progress section](../proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md#progress-2026-06-26) for the live status.
+**Status:** Read-only assessment (the survey itself changed no code). **Implementation follow-through is effectively complete for the original 15-item program**, including the 2026-06-27 public IR encapsulation pass; see the [proposal's Progress section](../proposals/2026-06-26-001-architecture-fragility-improvements-proposal.md#progress-updated-2026-06-27) for the live status.
 
 ---
 
