@@ -273,7 +273,7 @@ The original 15-item fragility program is **done** (Waves A/B/C merged, pinned, 
 | # | Opportunity | Impact | Effort | Risk | Status |
 | --- | --- | --- | --- | --- | --- |
 | 16 | Complete the LayoutProxyBox Mutex guard (finish #3 — structural, not just a trap) | High | S | Low | |
-| 17 | Add `@MainActor` to the FrameScheduler public API (unlocked-Set convention → checked boundary) | High | S | Low |
+| 17 | Add `@MainActor` to the FrameScheduler public API (unlocked-Set convention → checked boundary) | High | ~~S~~ M | ~~Low~~ Med | ⚠️ re-rated: protocol-wide cascade (see detail) |
 | 18 | Add an Android cross-compile gate to org CI alongside WASI | High | S | Low |
 | 19 | Bound the TerminalImageRenderer payload caches (kitty/sixel/fallback) | High | M | Low | ✅ done · `105414c1` |
 | 20 | Promote the memo shadow oracle to always-on-in-test + sampled-release (finish #1) | High | M | Low |
@@ -283,7 +283,7 @@ The original 15-item fragility program is **done** (Waves A/B/C merged, pinned, 
 | 24 | Widen frame-tail layout-offload eligibility (after 16/21 land the safety) | High | L | Med |
 | 25 | Harden the release artifact pipeline: automate npm publish + gate orchestration order/availability | High | M | Med |
 | 26 | Document & lint-enforce `scopedAnyView` adoption for deferred content | Med | S | Low |
-| 27 | Standardize public error-type conformances (`Sendable`/`Equatable`/`CustomStringConvertible`) | Med | S | Low |
+| 27 | Standardize public error-type conformances (`Sendable`/`Equatable`/`CustomStringConvertible`) | Med | S | Low | ✅ done · `127caafe` |
 | 28 | Add direct unit tests for the extracted stateless operators (GraphCheckpointStore, GraphNodeIndexQuery) | Med | S | Low | ✅ done · `6dbd4b73` |
 | 29 | Consolidate the 5 perf-gate `Configuration` enums and test the untested observation-firing fork | Med | M | Med |
 | 30 | Clarify & enforce custom `Layout.Cache` lifetime semantics | Med | M | Low |
@@ -298,6 +298,8 @@ Proposal #3 promised to move `LayoutProxyBox.cachedStates` behind the `Mutex` pa
 
 ### #17 — `@MainActor` the FrameScheduler public API
 `public final class FrameScheduler` carries six unlocked mutable Sets (`pendingCauses`, `invalidatedIdentities`, `signalNames`, `externalReasons`, …) and public `request*` methods that mutate them with no isolation annotation — safe only by caller convention, unlike RunLoop's equivalent fields. Adding `@MainActor` to the public surface turns a silent contract into a compile-checked boundary at near-zero behavioral risk (call sites in RunLoop/DefaultRenderer are already main-bound). Evidence: `swift-tui/Sources/SwiftTUICore/Pipeline/Scheduler.swift:105` (no `@MainActor`) and `:106–112` (the unlocked Sets), confirmed against source.
+
+**Re-rated S/Low → M/Med after a 2026-06-27 caller audit — DEFER or do as a protocol-wide pass.** The "near-zero risk, callers already main-bound" claim is over-optimistic. `FrameScheduler` is reached mostly *through* the `public protocol Invalidating` (`invalidator?.requestInvalidation(...)`), not the concrete class — call sites span `ViewNode`, `StateContainer`, `FocusTracker` (SwiftTUICore), `ScrollViewReader`, `NavigationStack`, `FocusState`, `Observation`, and ~8 Presentation modifiers (SwiftTUIViews). A `@MainActor` method cannot satisfy a non-isolated protocol requirement, so isolating the class forces `@MainActor` onto the *public* `Invalidating` / `AnimationAwareInvalidating` / `FrameScheduling` protocols, which then cascades to every one of those cross-module call sites and changes the public-API baseline. It is also a source-breaking change for downstream host repos (swift-tui-swiftui, android) that is only validated by the pre-tag gates, not the swift-tui repo gate. Real scope is a protocol-hierarchy isolation pass (M/Med), not a one-line annotation — sequence it deliberately, not as a quick win.
 
 ### #18 — Android cross-compile gate in org CI
 `org-gate.yml` runs a `wasi-cross-compile` job but has **zero** Android coverage, while `SwiftTUIAndroidHost` is a root Package target cross-compiled for aarch64/x86_64 Android — the exact structural gap that shipped WASI-only breaks at 0.0.19 and 0.0.26. Add an `android-cross-compile` job parallel to WASI that `swift build`s the host with the NDK toolchain for `aarch64-/x86_64-unknown-linux-android28`. Evidence: `.github/workflows/org-gate.yml:43` (`wasi-cross-compile:` present, Android absent), confirmed.
@@ -328,8 +330,10 @@ The mainactor audit identifies layout offload as the best off-main lever, but th
 ### #26 — Lint-enforce `scopedAnyView` for deferred content
 `docs/PUBLIC-API.md` mandates `scopedAnyView` for deferred authored content, but grep finds only **4** uses in the entire framework and the helper is undocumented in the public surface — so custom-container authors will reach for plain `AnyView` and silently lose dynamic-property scope and identity-bound state. Document it with a "when to use" example and add a check to `Scripts/check_public_surface_policies.sh` that flags unjustified `AnyView(...)` captures in public modifiers. Evidence: 4 uses (grep-confirmed) vs the policy at `docs/PUBLIC-API.md:82`.
 
-### #27 — Standardize public error-type conformances
+### #27 — Standardize public error-type conformances — ✅ done (`127caafe`)
 `TerminalHostError` is a naked `Error`, while `AppLaunchError` and `HostedSceneSessionError` already conform to `Error + Equatable + Sendable + CustomStringConvertible` — an inconsistency that creates silent friction in async/pattern-matching code and is a pure 1.0 surface gap. Audit `public enum *Error` across the three modules and bring the stragglers up to the established four-conformance baseline. Evidence: `swift-tui/Sources/SwiftTUIRuntime/Terminal/TerminalHost.swift:15` (naked `Error`).
+
+**Done (2026-06-27, swift-tui `127caafe`).** The audit found seven stragglers (wider than just `TerminalHostError`): `TerminalHostError` (naked `Error`), `ColorError` + `ColorResolutionError` (no `CustomStringConvertible`), both `FileOpenError`s + `PTYError` (no `Equatable`), and `CPUSamplerError` (no `Sendable`). All seven brought to the baseline — `Equatable`/`Sendable` synthesized (every payload already conforms), `description`s written for the three missing `CustomStringConvertible`. Regenerated `docs/PUBLIC_API_BASELINE.md` + `.public-api-baseline.txt` (adds the three new `description` members; the synthesized conformances add no member symbols, so the inventory doesn't track them) and added `PublicErrorConformanceTests` to pin the `Equatable` + `description` behavior the inventory can't. Full repo gate green.
 
 ### #28 — Direct unit tests for the extracted stateless operators — ✅ done (`6dbd4b73`)
 The #10 "clean first slice" lifted `GraphCheckpointStore` and `GraphNodeIndexQuery` off ViewGraph, but they are tested only indirectly through ViewGraph usage — so a field added to a checkpointed group but not read by `makeCheckpoint` would silently skip checkpointing. Both are stateless/pure, making them cheap high-confidence targets; drive `makeCheckpoint()` directly and assert it mirrors every field group, using the checkpoint-totality reflection pattern so the test self-updates. Evidence: `swift-tui/Sources/SwiftTUICore/Resolve/GraphCheckpointStore.swift` + `GraphNodeIndexQuery.swift` (stateless operators), no dedicated tests in `Tests/SwiftTUICoreTests/Graph/`.
