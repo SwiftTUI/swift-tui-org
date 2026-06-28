@@ -91,4 +91,84 @@ done
 [[ "$failures" -eq 0 ]] \
   || fail "one or more web package versions diverge from canonical $canonical_web"
 
+# 3. Every SwiftTUI-org sibling consumer pin must match the canonical framework
+#    version. The org ships its public packages in lockstep, so a consumer that
+#    still pins an older framework is a partial-bump skew — exactly the version
+#    class this gate exists to catch. Without this, a bump that updates
+#    releases.yml + the web package.json but misses a child SwiftPM/Xcode pin
+#    passes every gate: the pretag overlay rewrites `exact:"X"` to a local path
+#    regardless of `X`, and release_artifact_contract only checks the tag exists.
+#    Third-party pins (swift-syntax, Splash, …) are ignored by matching the
+#    SwiftTUI org URL. swift-tui-swiftui is checked against the same canonical
+#    version because it ships in lockstep with swift-tui.
+pin_failures=0
+checked_pins=0
+
+check_consumer_pin() {
+  # $1 file, $2 version, $3 kind
+  checked_pins=$((checked_pins + 1))
+  if [[ "$2" != "$canonical_swifttui" ]]; then
+    printf '[version_coherence] MISMATCH %s: %s pins SwiftTUI %s (expected %s)\n' \
+      "$1" "$3" "$2" "$canonical_swifttui" >&2
+    pin_failures=1
+  fi
+}
+
+# SwiftPM: `.package(url: ".../SwiftTUI/swift-tui*.git", exact: "X")`, handling
+# both single-line and multi-line `.package(...)` declarations. A `url:` line
+# that is not a SwiftTUI org URL resets the match so a following third-party
+# `exact:` is never attributed to SwiftTUI.
+mapfile -t package_manifests < <(
+  find swift-tui-examples swift-tui-swiftui swift-tui-web \
+    -name Package.swift -not -path '*/.build/*' 2>/dev/null | sort
+)
+if [[ "${#package_manifests[@]}" -gt 0 ]]; then
+  while IFS=$'\t' read -r file version; do
+    [[ -n "$file" ]] || continue
+    check_consumer_pin "$file" "$version" SwiftPM
+  done < <(
+    awk '
+      FNR == 1 { swifttui = 0 }
+      /url:/ { swifttui = ($0 ~ /SwiftTUI\/swift-tui/) ? 1 : 0 }
+      swifttui && /exact:[[:space:]]*"[^"]+"/ {
+        v = $0
+        sub(/.*exact:[[:space:]]*"/, "", v)
+        sub(/".*/, "", v)
+        print FILENAME "\t" v
+        swifttui = 0
+      }
+    ' "${package_manifests[@]}"
+  )
+fi
+
+# Xcode: an `XCRemoteSwiftPackageReference` for a SwiftTUI org URL pinned with
+# `kind = exactVersion; version = X;`.
+mapfile -t pbxproj_files < <(
+  find swift-tui-examples swift-tui-swiftui \
+    -name project.pbxproj -not -path '*/.build/*' 2>/dev/null | sort
+)
+if [[ "${#pbxproj_files[@]}" -gt 0 ]]; then
+  while IFS=$'\t' read -r file version; do
+    [[ -n "$file" ]] || continue
+    check_consumer_pin "$file" "$version" Xcode
+  done < <(
+    awk '
+      /repositoryURL/ { swifttui = ($0 ~ /SwiftTUI\/swift-tui/) ? 1 : 0; next }
+      swifttui && /^[[:space:]]*version[[:space:]]*=/ {
+        v = $0
+        sub(/.*version[[:space:]]*=[[:space:]]*/, "", v)
+        sub(/;.*/, "", v)
+        gsub(/[" ]/, "", v)
+        print FILENAME "\t" v
+        swifttui = 0
+      }
+    ' "${pbxproj_files[@]}"
+  )
+fi
+
+[[ "$pin_failures" -eq 0 ]] \
+  || fail "one or more consumer pins diverge from canonical SwiftTUI $canonical_swifttui"
+
+printf '[version_coherence] %s SwiftTUI consumer pins coherent at %s\n' \
+  "$checked_pins" "$canonical_swifttui"
 printf '[version_coherence] all lockstep versions coherent at %s\n' "$canonical_swifttui"
