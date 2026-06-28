@@ -183,6 +183,24 @@ is_history() {
   esac
 }
 
+# Test sources and fixtures: a string that matches the current org version here
+# is almost always test DATA — e.g. gitviz's git-tag fixtures — not an
+# org-version pin. The candidate scan is a plain `git grep -F`, so without this
+# the boundary-aware rewrite would silently edit those fixtures (breaking the
+# tests) whenever the org version happened to collide with the fixture data.
+# Surfaced for review like history rather than rewritten: a coincidental match is
+# never silently changed, and a genuine version reference inside a test is still
+# caught by a human. Org-version pins live in manifests at a package root
+# (Package.swift, package.json, *.pbxproj), never under a Tests/ tree, so this
+# never skips a real pin.
+is_test_data() {
+  case "$1" in
+    Tests/*|*/Tests/*) return 0 ;;
+    */Fixtures/*|*/__fixtures__/*|*/__snapshots__/*|*/testdata/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Boundary-aware token rewrite: replaces the whole version token only.
 #   (?<![0-9.])   not preceded by a digit/dot  -> skips 10.0.7, 1.0.0.7
 #   (?![0-9])     not followed by a digit       -> skips 0.0.70
@@ -200,6 +218,7 @@ transform_to_stdout() {
 rewrite_files=()
 generated_files=()
 history_files=()
+test_data_files=()
 resolve_dirs=()
 bunlock_dirs=()
 bazel_lock_seen=0
@@ -222,6 +241,11 @@ for r in "${scan_repos[@]}"; do
 
     if is_history "$rel"; then
       history_files+=("$rel")
+      continue
+    fi
+
+    if is_test_data "$rel"; then
+      test_data_files+=("$rel")
       continue
     fi
 
@@ -266,10 +290,16 @@ printf '\n[bump_version] summary\n'
 printf '  rewrite targets : %s file(s), %s occurrence(s)\n' "${#rewrite_files[@]}" "$total_hunks"
 printf '  generated (skip): %s file(s) — regenerate after tagging\n' "${#generated_files[@]}"
 printf '  history  (skip) : %s file(s) — left as historical record\n' "${#history_files[@]}"
+  printf '  test data(skip) : %s file(s) — version likely test data, review by hand\n' "${#test_data_files[@]}"
 
 if [[ "${#history_files[@]}" -gt 0 ]]; then
   printf '\n[bump_version] history/narrative files left untouched (review by hand if intended):\n'
   printf '%s\n' "${history_files[@]}" | sort | sed 's/^/  /'
+fi
+
+if [[ "${#test_data_files[@]}" -gt 0 ]]; then
+  printf '\n[bump_version] test sources/fixtures left untouched (contain %s as data; review if a real pin):\n' "$old_version"
+  printf '%s\n' "${test_data_files[@]}" | sort | sed 's/^/  /'
 fi
 
 # Regeneration runbook --------------------------------------------------------
