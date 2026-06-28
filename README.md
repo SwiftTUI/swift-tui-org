@@ -318,20 +318,17 @@ These targets copy the pinned child repos into `.build/coordination/...` and
 rewrite dependencies only inside that temporary overlay before running the
 native child gates.
 
-Release candidates add a published-pin check:
+Release candidates add published-pin and artifact-availability checks:
 
 ```sh
 bazel test //:release_candidate
 ```
 
-This coordination root has **no CI of its own**: `//:org_fast`, `//:org_full`,
-and `//:release_candidate` are run locally and at release time (see the release
-workflow below). Each child repository owns and runs its own GitHub Actions for
-its native gate. To enforce the org-level contract checks (registry staleness,
-pin cleanliness, public-dependency contracts) automatically, add a root
-`.github/workflows/org-gate.yml` that checks out submodules recursively and runs
-`mise run org-fast`; until then, run `bazel test //:org_fast` by hand before
-recording new pins.
+Root CI runs the cheap org contract checks and the framework WASI cross-compile.
+The full native release gate remains a release-time/local gate because it needs
+the full native toolchain matrix. `//:release_candidate` includes `//:org_full`,
+published-pin reachability, lockstep version coherence, and public release
+artifact reachability for the web/npm/Android artifacts.
 
 ## What The Native Gates Run
 
@@ -419,8 +416,9 @@ What it deliberately does **not** do — these stay maintainer-owned:
 
 Run order is web → swift-tui → swift-tui-swiftui → android → examples → site →
 record pins here, because examples consume the web, framework, SwiftUI-host, and
-Android artifacts, and the site then consumes examples. The tool prints this runbook; finish with
-`bazel test //:release_candidate`.
+Android artifacts, and the site then consumes examples. The web tag publish
+workflow creates the GitHub release tarballs and publishes npm packages; finish
+with `bazel test //:release_candidate`.
 
 ## Editing Child Repositories
 
@@ -450,7 +448,8 @@ A release should still be published from the native repos:
 
 1. Validate and tag child repos with their native gates.
 2. Update this org root's submodule pins to those exact release commits.
-3. Run `bazel test //:release_candidate`.
+3. Run `bazel test //:release_candidate`; it now fails if the public web/npm or
+   Android artifacts for the canonical release version are missing or mismatched.
 4. Commit and tag this orchestration repo with the same release name if the
    whole-organization state matters.
 

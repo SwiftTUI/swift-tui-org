@@ -73,6 +73,25 @@ sh_test(
 )
 
 sh_test(
+    name = "release_artifact_contract",
+    srcs = ["tools/bazel/release_artifact_contract.sh"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_test(
+    name = "release_artifact_contract_fixture",
+    srcs = ["tools/bazel/release_artifact_contract_fixture_test.sh"],
+    data = ["tools/bazel/release_artifact_contract.sh"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_test(
     name = "public_dependency_contracts",
     srcs = ["tools/bazel/check_public_dependency_contracts.sh"],
     tags = [
@@ -206,6 +225,7 @@ test_suite(
     tests = [
         ":pin_cleanliness",
         ":public_dependency_contracts",
+        ":release_artifact_contract_fixture",
         ":repo_registry_contract",
         ":submodule_status",
     ],
@@ -225,6 +245,7 @@ test_suite(
     name = "release_candidate",
     tests = [
         ":org_full",
+        ":release_artifact_contract",
         ":release_pin_contract",
         ":version_coherence",
     ],

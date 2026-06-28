@@ -302,8 +302,8 @@ cat <<EOF
   web, and Android artifacts; site consumes examples.
 
   1. swift-tui-web : commit the bump, run \`bun install\`, tag $new_version,
-                     push, then publish the npm tarballs / GitHub release assets
-                     (the .tgz URLs the other repos now point at).
+                     push; the tag-triggered Publish workflow creates the
+                     GitHub release tarballs and publishes npm packages.
   2. swift-tui     : commit the bump, tag $new_version, push.
   3. swift-tui-android : commit the bump, tag $new_version, publish the Gradle
                      plugin/AAR artifacts, push.
@@ -312,7 +312,7 @@ cat <<EOF
                      tag $new_version, push.
   5. swift-tui-site: \`bun install\` under Website/, commit, tag $new_version, push.
   6. THIS repo     : record the new submodule pins, then validate:
-                       git add swift-tui swift-tui-web swift-tui-android swift-tui-examples swift-tui-site
+                       git add swift-tui swift-tui-swiftui swift-tui-web swift-tui-android swift-tui-examples swift-tui-site
                        git commit -m "chore: bump org to $new_version"
                        bazel fetch //:org_full
                        bazel test  //:release_candidate

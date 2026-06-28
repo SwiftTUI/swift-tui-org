@@ -60,9 +60,12 @@ swift-tui-web  →  swift-tui  →  swift-tui-swiftui  →  swift-tui-android  �
 
 - `mise trust && mise install` (Bazelisk + Bun pinned via `mise.toml`).
 - Swift 6.3.x via `swiftly` (`swift --version` → 6.3.1). Not installed by mise.
+- Node/npm available for the release artifact contract's `npm view` checks.
 - `gh` authenticated (`gh auth status`) with push + release rights on the org.
-- An npm **publish** token for the `@swifttui` scope. Never write it into a
-  tracked file. Use an isolated userconfig (see step 1g) and delete it after.
+- npm trusted publishing configured for both `@swifttui/web` and
+  `@swifttui/build`, pointing at
+  `SwiftTUI/swift-tui-web/.github/workflows/publish.yml`. The normal release
+  path uses GitHub Actions OIDC, not a long-lived npm token.
 - Push access to all **six** publishable repos over SSH (`swift-tui-web`,
   `swift-tui`, `swift-tui-swiftui`, `swift-tui-android`, `swift-tui-examples`,
   `swift-tui-site`).
@@ -129,24 +132,7 @@ b. **Validate** with the exact repo gate:
    bun run ci            # install --frozen-lockfile && test && build:web
    ```
 
-c. **Build the tarballs** into a scratch dir (keep them out of the repo):
-
-   ```sh
-   mkdir -p /tmp/swifttui-release/assets
-   (cd packages/web   && bun pm pack --destination /tmp/swifttui-release/assets)
-   (cd packages/build && bun pm pack --destination /tmp/swifttui-release/assets)
-   ```
-
-   Produces `swifttui-web-0.0.13.tgz` and `swifttui-build-0.0.13.tgz` — the exact
-   filenames the release URLs reference. Verify the build tarball resolved its
-   sibling correctly:
-
-   ```sh
-   tar xzO -f /tmp/swifttui-release/assets/swifttui-build-0.0.13.tgz package/package.json | grep swifttui/web
-   # → "@swifttui/web": "0.0.13"
-   ```
-
-d. **Commit + tag + push** (release commits land directly on `main`; the org
+c. **Commit + tag + push** (release commits land directly on `main`; the org
    pins against the trunk):
 
    ```sh
@@ -155,34 +141,23 @@ d. **Commit + tag + push** (release commits land directly on `main`; the org
    git push origin main && git push origin 0.0.13
    ```
 
-e. **Create the GitHub release with both assets** — the step that was missing
-   for 0.0.8:
+d. **Wait for the `Publish` workflow on the tag.** It packs
+   `swifttui-web-0.0.13.tgz` and `swifttui-build-0.0.13.tgz`, verifies that the
+   `@swifttui/build` tarball depends on `@swifttui/web: "0.0.13"`, attaches both
+   tarballs to the GitHub release, and publishes the same tarballs to npm through
+   trusted publishing:
 
    ```sh
-   gh release create 0.0.13 --target main --title 0.0.13 --notes "..." \
-     /tmp/swifttui-release/assets/swifttui-web-0.0.13.tgz \
-     /tmp/swifttui-release/assets/swifttui-build-0.0.13.tgz
+   gh run list --repo SwiftTUI/swift-tui-web --workflow publish.yml --limit 5
    ```
 
-f. **Verify the tarball URLs resolve** (this is the 0.0.8 failure mode):
+e. **Verify the tarball URLs resolve** (this is the 0.0.8 failure mode):
 
    ```sh
    for f in swifttui-web-0.0.13 swifttui-build-0.0.13; do
      curl -sS -o /dev/null -w "$f -> %{http_code}\n" -L \
        "https://github.com/SwiftTUI/swift-tui-web/releases/download/0.0.13/$f.tgz"
    done   # both must be 200
-   ```
-
-g. **Publish to npm** using the packed tarballs (so npm and the GitHub release
-   are byte-identical), via an isolated userconfig that never touches the repo:
-
-   ```sh
-   NPMRC=/tmp/swifttui-release/.npmrc
-   printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$NPMRC"; chmod 600 "$NPMRC"
-   npm whoami --userconfig "$NPMRC"        # sanity
-   npm publish /tmp/swifttui-release/assets/swifttui-web-0.0.13.tgz   --userconfig "$NPMRC" --access public
-   npm publish /tmp/swifttui-release/assets/swifttui-build-0.0.13.tgz --userconfig "$NPMRC" --access public
-   rm -f "$NPMRC"                           # shred the token file immediately
    ```
 
 ## 2. swift-tui (framework)
@@ -400,6 +375,10 @@ bazel test  //:release_candidate     # full org gate (needs native toolchains)
       `git submodule status` shows the new SHAs for all six child repos
       (`swift-tui`, `swift-tui-swiftui`, `swift-tui-web`, `swift-tui-android`,
       `swift-tui-examples`, `swift-tui-site`).
+- [ ] `bazel test //:release_artifact_contract` passes. This executes the web
+      GitHub release asset checks, npm checks, Android Pages Maven checks, and a
+      clean downstream Bun dry-run against the public tarball URLs. The full
+      `//:release_candidate` target includes this check.
 
 ## Gotchas & notes
 
@@ -425,10 +404,10 @@ bazel test  //:release_candidate     # full org gate (needs native toolchains)
   ED25519 ssh key, `git push` may print `error: communication with agent
   failed` (or similar signing warnings) yet still land the push. Confirm with
   `git ls-remote origin <ref>` rather than re-pushing on the warning alone.
-- **Root CI:** the org root currently has **no tracked `.github/workflows`** —
-  the historical "Org Gate" is absent, so pushes to root do not trigger remote
-  org validation. Run `bazel test //:release_candidate` locally instead, and
-  consider restoring the gate workflow.
-- **Token hygiene:** the npm token is a publish credential. Use it only through a
+- **Root CI:** the org root workflow runs `org-fast` plus the WASI
+  cross-compile. It intentionally does not run the full native release gate.
+  Keep running `bazel test //:release_candidate` locally at release time.
+- **Token hygiene:** the normal web publish path uses npm trusted publishing via
+  GitHub Actions OIDC. If an emergency npm token is ever used manually, use a
   throwaway userconfig under `/tmp`, delete it immediately, and rotate it if it
-  was ever shared in plaintext (e.g. pasted into a chat).
+  was ever shared in plaintext.
