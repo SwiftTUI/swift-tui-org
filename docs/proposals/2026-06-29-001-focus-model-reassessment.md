@@ -1,10 +1,12 @@
 # Focus Model Reassessment & Redesign Plan
 
 Date: 2026-06-29
-Status: Proposal — design + plan. **Phase 1 and Phase 2 implemented** (focus-target
-decoupling, then pure active/visible-context activation; see Part 3 / the phase
-status sections below). The crash fix (Part 0), Phase 1, and Phase 2 are shipped.
-Phase 3 (convergence loop → dependency graph) remains.
+Status: Proposal — design + plan. **Phases 1, 2, and the full focus-role
+redesign are implemented** (focus-target decoupling → pure active/visible-context
+activation → explicit command-host role + container abstraction; see Part 3 / the
+phase status sections below). The crash fix (Part 0), Phase 1, Phase 2, and the
+redesign are shipped. **Only Phase 3 (convergence loop → dependency graph)
+remains.**
 
 ## Phase 1 status (implemented 2026-06-29)
 
@@ -89,10 +91,65 @@ confirmed to crash identically at Phase-1 HEAD with the Phase-2 changes stashed.
 `SwiftTUIRuntime` cross-compiles clean for `wasm32-wasi`. The authoritative full
 gate is Linux CI (no main-thread `#12`).
 
-Remaining for the full redesign (beyond this proposal's Phase 2): replace the
-`.view("Panel")` host marker with an explicit focus-role on `ActionScope`; settle
-the `.sealed` semantics and the multi-active-context open question (nested
-TabViews / modals / split panes); Phase 3 (convergence loop → dependency graph).
+## Full focus-role redesign (implemented 2026-06-29, swift-tui `fbf48e7a`)
+
+Completes the items the Phase 2 note had deferred to "the full redesign," and
+adopts the correct structural abstraction for a host.
+
+**Explicit command-host role (replaces the node-kind marker).** A new
+`SemanticMetadata.isCommandHost` flag marks the Role-A hosting capability,
+orthogonal to focus participation. It replaces *both* the Phase-2 `.view("Panel")`
+string match *and* the resolve-time `hasFocusableDescendant` heuristic on
+`NavigationStack` / `NavigationDestination`. Removing that heuristic also fixes a
+latent bug: it counted only explicit `.focusable(true)` descendants and missed
+*automatic* leaves (`Button`/`TextField` via `AutomaticFocusPolicy`), so a host
+wrapping a `Button` wrongly made itself a focus target.
+
+**Hosts are containers, not controls.** Decided from first principles: a control
+is an interactive *leaf* the user operates and a focus/hit target in its own
+right; a host is a transparent structural *scope* that groups content and hoists
+commands/chrome. So `Panel`, `NavigationStack`, and `NavigationDestination` now
+set `isCommandHost` instead of `isFocusable = true`. They no longer participate in
+top-level focus, so they emit no focus region (no prune — the Phase-2
+emit-then-prune is deleted) and classify in `semanticRole` as
+`.generic`/`.container`, never `.control`. The old `.control` classification was
+purely an artifact of the focus-coupling this work removes. (`semanticRole` is
+descriptive-only — read solely by a debug snapshot — so the relabel carries no
+geometry cost; that was the key finding that made the abstraction free to fix.)
+
+**`.sealed` = block descent, not a target (S2).** A sealed `Panel` sets
+`isCommandHost` (no region) + `sealsFocusDescendants` (blocks descent), so a
+sealed subtree yields zero focus targets — the SwiftUI-pure reading.
+
+**Active/visible context = unambiguous single chain (M2).**
+`SemanticExtractor.resolveActiveCommandScopePath` returns the deepest host chain
+**iff** every visible host lies on that one nested chain (totally ordered by
+nesting); divergent multi-pane hosts are ambiguous and resolve to empty, so a key
+command fires nothing without focus and the app sets focus to disambiguate. A
+single host — or a straight nested stack — always resolves, so the bare
+command-host case keeps working.
+
+**Decisions settled (open questions from Part 4 / "Open questions"):**
+- Host scope: `Panel` + `NavigationStack` + `NavigationDestination` are pure
+  hosts; modal/presentation surfaces keep their focusable-when-empty fallback (so
+  an empty modal still traps focus) — left untouched this pass.
+- `.sealed`: blocks descent and is never a target (S2).
+- Multi-active-context: SwiftUI-faithful focus-or-nothing (M2) — ambiguous
+  multi-pane fires nothing without focus.
+
+Tests: `PanelTests` sealed assertions now expect zero regions; new tests assert a
+`Panel` is never `.control` and that active context resolves only for an
+unambiguous host chain. Verified under **AddressSanitizer** across the
+focus/Panel/Nav/Toolbar/Presentation/FocusTracker suites plus SwiftUISurface
+(197), AppRuntime, AsyncFrameTail, Phase4Observation, and the pointer/interaction
+suites — all green; `SwiftTUIRuntime` cross-compiles for `wasm32-wasi`. The two
+ASan crashers remain the pre-existing `#12` deep-render suites.
+
+**Remaining:** a known narrow follow-up — the codebase overloads the
+`focusRegions` list to also answer "what scope is under this pointer?" (spatial
+drop dispatch reads `focusRegions`), so a *spatial* drop onto a *bare* host (no
+focusable child) loses its hit rect; the correct fix is a separate "scope region"
+list. And **Phase 3** (convergence loop → dependency graph). Both deferred.
 
 ---
 
