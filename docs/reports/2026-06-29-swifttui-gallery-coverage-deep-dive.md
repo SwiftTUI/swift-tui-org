@@ -673,3 +673,72 @@ The previous TODO deep dive already recorded one current caveat:
 
 Investigate that before treating `TabViewLifecycleTests` as a reliable green
 signal.
+
+## Implementation & Re-evaluation Update (2026-06-29, later same day)
+
+The "First Patch" tests were committed (swift-tui `ede676de`, org pin
+`ffb4888`) and then evaluated for whether they actually enable a TDD drilldown.
+They did **not**, and they were reworked. Findings and the resulting state:
+
+### The signal-11 caveat is a deterministic snapshot-render crash, not just a flake
+
+The TODO deep dive's `TabViewLifecycleTests` signal 11 was run down. It is a
+**deterministic** `SIGSEGV` (`swift_release` during `outlined destroy of
+RenderSnapshot` inside `DefaultRenderer.render`) on the **synchronous snapshot
+`DefaultRenderer().render()` path for TabView / presentation trees** — not the
+non-deterministic load flake. Evidence:
+
+- `TabViewLifecycleTests/firstTimeActivationFiresOnAppear` (pre-existing) crashes
+  3/3 in isolation at the current pin, but passes 3/3 at `573fc2af` and
+  `e552ad98`. The only delta between those and the current pin is **test-only**
+  commits — i.e. the corruption is latent in the framework and the added test
+  code tips the binary layout into manifesting it (the `SwiftTUI/swift-tui#12`
+  family). The full `SwiftTUITests` bundle is red on macOS as a result; the
+  Linux repo gate (a different platform for this main-thread corruption) is
+  unaffected, which is how the pin was bumped.
+- `PresentationActionScopeTests` and the committed
+  `PresentationRouteSuppressionTests` snapshot cases crash the same way.
+- The **synchronous run-loop path is stable** for these exact view shapes
+  (`FocusContextRuntimeTests`, `AppRuntimeTests.galleryLikePresentationTab…`).
+
+Consequence: a crashing test yields no assertion and takes its siblings down —
+the opposite of a drilldown. Snapshot-based gallery tests are the wrong vehicle.
+
+### Why the committed tests did not drill down, and what replaced them
+
+- **Logo Breaker / bug #1** had no test at all (the report's
+  `TabAutonomousTaskRuntimeTests` was not added). Replaced with a new
+  `Tests/SwiftTUITests/TabAutonomousTaskRuntimeTests.swift` that drives a real
+  `RunLoop` and asserts `lifecycleCoordinator.activeTaskCount` returns to zero
+  when the active geometry-backed tab leaves (the observable runtime symptom).
+- **Presentation routing / bug #2**: the committed snapshot tests asserted the
+  static `interactionRegions` set, which proves route gating but not that
+  runtime pointer dispatch refuses the click (the actual "background remains
+  interactive" symptom) — and they crashed. `PresentationRouteSuppressionTests`
+  was rewritten onto the run-loop path: it records the base control's point,
+  opens each modal family (sheet / confirmation / boolean popover), clicks the
+  recorded base point and asserts the base action does **not** fire, then
+  dismisses (control + Escape) and asserts the base is live again.
+- **`TabViewLifecycleTests.switchingAwayFromActiveOnlyTabSchedulesTaskCancel`**
+  used a two-shot `DefaultRenderer().render()` and asserted a `.taskCancel`
+  *plan entry*. The snapshot renderer never starts or cancels real tasks, so it
+  cannot observe the symptom; removed in favour of the runtime test above.
+- **Focus Context / bug #3**: `focusContextTabTraversalReachesFirstEditableField`
+  is kept ENABLED and is a genuine **red** — one Tab lands focus on the
+  `TabContentPayload` container, not the first field. The
+  `focusedBindingActionMutates…` test is a faithful repro of the reported "crash
+  after repeats": dispatching the `@FocusedBinding` mutation while a
+  `focusedValue` field is focused traps at `RunLoop+Rendering.swift:125` ("Focus
+  synchronization did not converge after 13 rerenders", a `fatalError`). It is
+  held `.disabled` with that precise reason because a `fatalError` aborts the
+  whole test process rather than recording a catchable issue.
+
+### Honest limitation: only bug #3 reds at the framework level
+
+The minimal run-loop fixtures for bugs #1 and #2 pass (the framework primitives
+are sound in isolation) — the failures are seam-specific to the gallery's
+capture-host / portal / overflow composition, exactly as Phase 0 anticipated. So
+the genuine red oracles for #1/#2 are gallery **integration** tests in
+`swift-tui-examples` (added separately), with these run-loop tests as fast
+guards. The latent `#12` snapshot corruption is now deterministically
+reproducible at this pin and is left for a dedicated investigation.
