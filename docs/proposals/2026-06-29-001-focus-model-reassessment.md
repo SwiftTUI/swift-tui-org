@@ -1,10 +1,10 @@
 # Focus Model Reassessment & Redesign Plan
 
 Date: 2026-06-29
-Status: Proposal — design + plan. **Phase 1 implemented** (focus-target
-decoupling; see Part 3 / "Phase 1 status" below). The crash fix (Part 0) and
-Phase 1 are shipped. Phase 2 (pure active/visible-context activation, removing
-the focusable fallback) and Phase 3 (convergence loop → dependency graph) remain.
+Status: Proposal — design + plan. **Phase 1 and Phase 2 implemented** (focus-target
+decoupling, then pure active/visible-context activation; see Part 3 / the phase
+status sections below). The crash fix (Part 0), Phase 1, and Phase 2 are shipped.
+Phase 3 (convergence loop → dependency graph) remains.
 
 ## Phase 1 status (implemented 2026-06-29)
 
@@ -38,6 +38,61 @@ identical for every case with focusable content (all real UIs); pure
 active-context (Phase 2) removes the fallback. The transparent-container marker
 is currently the `.view("Panel")` node kind; Phase 2/full redesign should replace
 it with an explicit focus-role on `ActionScope`.
+
+## Phase 2 status (implemented 2026-06-29, swift-tui `335271c0`)
+
+Pure active/visible-context activation. The Phase 1 fallback is removed: an open
+`Panel` (Role-A command/chrome host) is **never** a focus target. In
+`SemanticExtractor.extract` (`Semantics.swift`) every focus region an open
+`Panel` emits is now pruned unconditionally (not just when it has a focusable
+descendant), so Tab always passes through to item leaves. A `.sealed` Panel still
+keeps its region (the deliberate stop); List rows are unaffected.
+
+Command activation re-bases from the focus chain onto the **active/visible
+context** so a bare command-host Panel's key commands still fire without focus:
+
+- `SemanticExtractor` tracks the deepest visible hosting region's scope chain and
+  publishes it as `SemanticSnapshot.activeCommandScopePath` (the host's own
+  `scopePath`, which already includes its scope identity since a `Panel` is a
+  `focusScopeBoundary`).
+- `RunLoop.commandDispatchScopePath()` prefers the focused region's `scopePath`
+  (a refinement that already extends through every ancestor host when focus
+  exists) and falls back to `activeCommandScopePath` when nothing is focused. The
+  keyCommand dispatch site uses it; shallowest-wins is preserved over the
+  active-context chain. (`topmostNavigationDestinationPopAction` and
+  drop-destination dispatch were left on the focus chain — rebasing those is a
+  possible follow-up, not required for the bare command-host case.)
+
+Convergence-loop fix (a latent bug Phase 2 exposes): a route change to a host
+with no focusable leaf must clear the now-stale focus, but the rerender budget
+derived from a zero-candidate tree (`max(1, syncCandidateCount + 1) == 1`)
+granted **zero** rerenders and tripped the convergence assertion. The budget now
+floors at one settling pass (`max(1, syncCandidateCount) + 1`); it only ever
+grants headroom, so no converging loop regresses.
+
+Test updates: `PanelTests` "Panel is focusable" is reinterpreted as "an open
+Panel is a focus *scope* but not a focus *target*" (a bare host yields zero focus
+regions; a host wrapping a focusable leaf yields exactly one — the leaf). The
+bare-Panel `KeyCommandDispatchTests` route test now asserts focus *clears* after
+the route change and the command fires via active context
+(`activeCommandScopePath` non-empty). The drop-dispatch helper comment was
+refreshed (Panels no longer appear in the focus region list).
+
+Verified under **AddressSanitizer** (same `#12`-dodging rationale as Phase 1):
+PanelTests, FocusContextRuntime, FocusTransition, KeyCommandDispatch,
+DropDestinationDispatch, SwiftUISurface (197), AppRuntime, AsyncFrameTail,
+Phase4Observation, PipelineContract, TabViewLifecycle, FocusTracker,
+AccessibilityNodeExtraction, RetainedReuseInvariant, and more — all green. The
+two ASan crashers (`InteractiveRuntimeTests`, `StackSafetyRegressionTests`) are
+pre-existing `#12`/deep-recursion artifacts: `InteractiveRuntimeTests` was
+confirmed to crash identically at Phase-1 HEAD with the Phase-2 changes stashed.
+`SwiftTUIRuntime` cross-compiles clean for `wasm32-wasi`. The authoritative full
+gate is Linux CI (no main-thread `#12`).
+
+Remaining for the full redesign (beyond this proposal's Phase 2): replace the
+`.view("Panel")` host marker with an explicit focus-role on `ActionScope`; settle
+the `.sealed` semantics and the multi-active-context open question (nested
+TabViews / modals / split panes); Phase 3 (convergence loop → dependency graph).
 
 ---
 
