@@ -20,6 +20,13 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-06-29-gallery-todo-deep-dive.md](reports/2026-06-29-gallery-todo-deep-dive.md) -
+  deep dive on the root `TODO.md` gallery/runtime issues: Logo Breaker teardown,
+  Presentation Lab modal dismissal/base-interaction, Focus Context Tab traversal
+  crash, coverage gaps, and the gifeditor performance fix path.
+- [reports/2026-06-29-swifttui-gallery-coverage-deep-dive.md](reports/2026-06-29-swifttui-gallery-coverage-deep-dive.md) -
+  follow-up coverage plan translating the Gallery TODO failures and adjacent
+  runtime seams into concrete `swift-tui` framework tests.
 - [reports/2026-06-26-architecture-fragility-survey.md](reports/2026-06-26-architecture-fragility-survey.md) -
   org-wide architecture + fragility survey of the `swift-tui` framework + this
   coordination root (33-agent pass; 127 confirmed issues). Macro-architecture is
