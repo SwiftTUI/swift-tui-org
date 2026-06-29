@@ -1,10 +1,47 @@
 # Focus Model Reassessment & Redesign Plan
 
 Date: 2026-06-29
-Status: Proposal — design + plan for review. Not implemented beyond the bug-#3
-crash fix (shipped, see Part 0). The redesign below is approved in *direction*
-(SwiftUI-like "active/visible context" activation; decouple hosting from focus
-targeting) but not in code.
+Status: Proposal — design + plan. **Phase 1 implemented** (focus-target
+decoupling; see Part 3 / "Phase 1 status" below). The crash fix (Part 0) and
+Phase 1 are shipped. Phase 2 (pure active/visible-context activation, removing
+the focusable fallback) and Phase 3 (convergence loop → dependency graph) remain.
+
+## Phase 1 status (implemented 2026-06-29)
+
+A transparent (open) `Panel` is now a focus **target only as a fallback** — when
+it has no focusable descendant. Implemented in `SemanticExtractor.extract`
+(`Semantics.swift`): after the walk, a focus region whose node is an open `Panel`
+and whose identity is an ancestor scope of another focusable region (i.e. it has
+a focusable descendant) is pruned, so Tab reaches the leaf directly. A bare open
+`Panel` (key-command host with no focusable child) and a `.sealed` Panel keep
+their region. List rows are unaffected (synthetic payload regions, not `Panel`s).
+
+This fixes bug #3 facet 1 (`FocusContextRuntimeTests` Tab traversal now passes).
+Test updates: two `KeyCommandDispatchTests` route tests dropped their
+`setFocus`-returns-true assertion (the row is now focused directly, so setFocus is
+a no-op) and assert the row is focused instead.
+
+Verified: every focus-touching suite passes (FocusContext, KeyCommandDispatch,
+FocusTransition, SwiftUISurface (197), PanelTests, PresentationActionScope,
+InteractionGate, AsyncFrameTail, TextInputRuntime, Phase4Observation,
+PipelineContract, ImperativeAuthoringContextDispatch, DropDestination, and
+InteractiveRuntime focus tests). Because the macOS test bundle hits the
+pre-existing `#12` snapshot/run-loop memory-corruption crash on `swift test`,
+verification was run under **AddressSanitizer** (which shifts the layout out of
+the deterministic-crash phase and is clean on `#12`); the authoritative full
+gate is Linux CI (no main-thread `#12`).
+
+NOTE: Phase 1 deviates from the chosen end-state (active/visible-context
+activation) in *one* way — it keeps a bare open `Panel` focusable as a fallback
+rather than dispatching its commands by visible context. This is behaviorally
+identical for every case with focusable content (all real UIs); pure
+active-context (Phase 2) removes the fallback. The transparent-container marker
+is currently the `.view("Panel")` node kind; Phase 2/full redesign should replace
+it with an explicit focus-role on `ActionScope`.
+
+---
+
+(Original proposal follows.)
 
 ## Why this exists
 
