@@ -5,8 +5,10 @@ Status: Proposal — design + plan. **Phases 1, 2, and the full focus-role
 redesign are implemented** (focus-target decoupling → pure active/visible-context
 activation → explicit command-host role + container abstraction; see Part 3 / the
 phase status sections below). The crash fix (Part 0), Phase 1, Phase 2, and the
-redesign are shipped. **Only Phase 3 (convergence loop → dependency graph)
-remains.**
+redesign are shipped. **Phase 3 (convergence loop → dependency graph) is underway:
+slice 1 — single-pass convergence behind a flag — is shipped (default off, proven
+at parity); precise focused-value reader attribution and flipping the default
+remain.**
 
 ## Phase 1 status (implemented 2026-06-29)
 
@@ -149,7 +151,44 @@ ASan crashers remain the pre-existing `#12` deep-render suites.
 `focusRegions` list to also answer "what scope is under this pointer?" (spatial
 drop dispatch reads `focusRegions`), so a *spatial* drop onto a *bare* host (no
 focusable child) loses its hit rect; the correct fix is a separate "scope region"
-list. And **Phase 3** (convergence loop → dependency graph). Both deferred.
+list.
+
+## Phase 3 status — slice 1 (implemented 2026-06-30, swift-tui `620224d6`)
+
+Single-pass focus-sync convergence, gated by `SWIFTTUI_SINGLE_PASS_FOCUS`, **default
+off** (`SinglePassFocusConvergenceConfiguration`; same `FeatureGate` pattern as
+`ReaderAttributionConfiguration`). Proven at parity before the default flips.
+
+Mechanism (gate on): `processFocusSyncIteration` stops looping and splits the work
+by node kind, with **no budget**:
+
+- **Focus location** (focus moved / a focus request or default focus applied / a
+  `@FocusState` flip / scroll-to-reveal / initial auto-adoption) is not a feedback
+  edge and cannot oscillate, so it applies **eagerly** with exactly one extra
+  render — the committed frame shows correct focus, and `currentFocusedValues`
+  (updated before that render) rides along. Capped at one pass; residual lags a
+  frame. Initial auto-adoption (nil → a control), which `FocusTracker.updateRegions`
+  deliberately does not flag as a change, is treated as a location establishment so
+  first-presentation focused values are not stale.
+- A **pure focused-value change** (the focused subtree republished without focus
+  moving) is the genuine output→input feedback edge: it does not loop, it lags one
+  frame via reader invalidation. Focus styling is a commit-time presentation handler
+  (no re-resolve); `@FocusState` readers already self-invalidate.
+
+Design fork settled (one-frame-lag had a visible first-presentation focus flash and
+stale exit frames): split **focus location (eager, ≤1 render, no budget)** from
+**focused values (lag)** rather than lag everything.
+
+Verified under **AddressSanitizer**: 409 tests across 14 focus/runtime suites pass
+identically with the gate off (no-op; legacy loop intact) and on (single-pass
+parity). No hangs — termination holds without a budget. `SwiftTUIRuntime`
+cross-compiles for `wasm32-wasi`.
+
+**Remaining (Phase 3):** (1) precise `@FocusedValue` reader attribution — a pure
+focused-value change currently nudges a coarse root invalidation (whole-tree
+re-render next frame) rather than invalidating only the readers (the
+focused-value-key-as-derived-node model); (2) prove against the gallery, then flip
+the default and retire the loop + budget.
 
 ---
 
