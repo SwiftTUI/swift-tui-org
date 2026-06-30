@@ -184,11 +184,17 @@ identically with the gate off (no-op; legacy loop intact) and on (single-pass
 parity). No hangs — termination holds without a budget. `SwiftTUIRuntime`
 cross-compiles for `wasm32-wasi`.
 
-**Remaining (Phase 3):** (1) precise `@FocusedValue` reader attribution — a pure
-focused-value change currently nudges a coarse root invalidation (whole-tree
-re-render next frame) rather than invalidating only the readers (the
-focused-value-key-as-derived-node model); (2) prove against the gallery, then flip
-the default and retire the loop + budget.
+**Remaining (Phase 3) — directed by
+[`docs/plans/2026-06-30-001-focus-single-pass-slice2-plan.md`](../plans/2026-06-30-001-focus-single-pass-slice2-plan.md):**
+(1) precise `@FocusedValue` reader attribution — a pure focused-value change
+currently nudges a coarse root invalidation (whole-tree re-render next frame)
+rather than invalidating only the readers (the focused-value-key-as-derived-node
+model). The wall: a `@FocusedValue` read is invisible to the reader-attribution
+*and* reuse systems, so naive precise invalidation is not reuse-safe (a reused
+reader records no read → stale); the recommended route is env-read attribution for
+`@FocusedValue` plus a `focusSyncEquals` special-case in the env-change/reuse
+comparison. (2) prove against the gallery, then flip the default and retire the
+loop + budget.
 
 ---
 
