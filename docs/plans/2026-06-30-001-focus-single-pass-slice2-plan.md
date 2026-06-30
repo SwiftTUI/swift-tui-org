@@ -1,10 +1,12 @@
 # Phase 3 slice 2 — precise focused-value reader attribution, then flip the default
 
 Date: 2026-06-30
-Status: **Task 1 (precise focused-value reader attribution) is shipped**
-(swift-tui `190b3a64`, gate still default off, proven at parity; see the proposal's
-"Phase 3 status — slice 2"). Phase 3 slice 1 was already shipped. **Only task 2
-remains: flip the default on once gallery-proven, then retire the loop + budget.**
+Status: **Both slice-2 tasks shipped.** Task 1 (precise focused-value reader
+attribution, swift-tui `190b3a64`) and task 2's **default flip** (swift-tui
+`683c63e0`: single-pass is now the default, gallery-verified, `SWIFTTUI_SINGLE_PASS_FOCUS=0`
+opts out) are landed and proven at parity. **The only Phase 3 work left is retiring
+the now-dormant loop + budget** (a separate cleanup; see "Flip the default" → step 2
+below and the proposal's "Phase 3 status — default flipped on").
 
 ## What shipped (task 1, 2026-06-29)
 

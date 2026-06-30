@@ -5,11 +5,11 @@ Status: Proposal — design + plan. **Phases 1, 2, and the full focus-role
 redesign are implemented** (focus-target decoupling → pure active/visible-context
 activation → explicit command-host role + container abstraction; see Part 3 / the
 phase status sections below). The crash fix (Part 0), Phase 1, Phase 2, and the
-redesign are shipped. **Phase 3 (convergence loop → dependency graph) is underway:
-slice 1 (single-pass convergence behind a flag) and slice 2's precise
-focused-value reader attribution are shipped (gate still default off, both proven
-at parity); only flipping the default — gated on a by-hand gallery pass — and
-retiring the loop + budget remain.**
+redesign are shipped. **Phase 3 (convergence loop → dependency graph): slice 1
+(single-pass convergence), slice 2's precise focused-value reader attribution, and
+the default flip are shipped — single-pass is now the default
+(`SWIFTTUI_SINGLE_PASS_FOCUS=0` opts back into the legacy loop), gallery-verified
+and proven at parity. Only retiring the now-dormant loop + budget remains.**
 
 ## Phase 1 status (implemented 2026-06-29)
 
@@ -221,15 +221,24 @@ dependents. Dependency-model and reuse suites
 (`DependencyModelTests`/`StateInvalidationDependencyTests`/`RetainedSubtreeReuseTests`/…)
 stay green. `SwiftTUIRuntime` cross-compiles for `wasm32-wasi`.
 
+## Phase 3 status — default flipped on (2026-06-30, swift-tui `683c63e0`)
+
+`FeatureGate.singlePassFocusConvergence.defaultIsEnabled` is now `true`: single-pass
+focus-sync is the default behavior. `SWIFTTUI_SINGLE_PASS_FOCUS=0` opts back into the
+legacy render-until-fixpoint loop. The gallery (`swift-tui-examples`) was exercised
+by hand for real focus interactions (Tab traversal, default focus, `@FocusedValue`
+toolbars, focus-dependent content) and behaved correctly. Verified at parity under
+**AddressSanitizer**: 412 tests across 15 focus/runtime suites pass both default-on
+and with `SWIFTTUI_SINGLE_PASS_FOCUS=0`. `SwiftTUIRuntime` cross-compiles for
+`wasm32-wasi`.
+
 **Remaining (Phase 3) — directed by
 [`docs/plans/2026-06-30-001-focus-single-pass-slice2-plan.md`](../plans/2026-06-30-001-focus-single-pass-slice2-plan.md):**
-flip the default on (`FeatureGate.singlePassFocusConvergence.defaultIsEnabled = true`)
-**once gallery-proven** by-hand for real focus interactions (Tab traversal, default
-focus, `@FocusedValue` toolbars, focus-dependent content), then retire the loop +
-budget (`processFocusSyncIteration`'s `.rerender`/budget path,
-`FocusSyncRerenderBudget`, the `RunLoop+Rendering.swift` budget assertion, and the
-`FocusSyncConvergenceState` simplification). The gallery pass is the only gate left
-on the flip; the precise-attribution prerequisite is done.
+retire the now-dormant loop + budget (`processFocusSyncIteration`'s `.rerender`/budget
+path, `FocusSyncRerenderBudget`, the `RunLoop+Rendering.swift` budget assertion, and
+the `FocusSyncConvergenceState` simplification). The gate can be kept as a legacy
+fallback or removed with the loop. This is the "no loop, no budget" end state Part 2
+targets.
 
 ---
 
