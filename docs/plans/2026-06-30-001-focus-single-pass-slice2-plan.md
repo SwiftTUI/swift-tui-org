@@ -1,12 +1,14 @@
 # Phase 3 slice 2 — precise focused-value reader attribution, then flip the default
 
 Date: 2026-06-30
-Status: **Both slice-2 tasks shipped.** Task 1 (precise focused-value reader
-attribution, swift-tui `190b3a64`) and task 2's **default flip** (swift-tui
-`683c63e0`: single-pass is now the default, gallery-verified, `SWIFTTUI_SINGLE_PASS_FOCUS=0`
-opts out) are landed and proven at parity. **The only Phase 3 work left is retiring
-the now-dormant loop + budget** (a separate cleanup; see "Flip the default" → step 2
-below and the proposal's "Phase 3 status — default flipped on").
+Status: **COMPLETE — Phase 3 done.** Task 1 (precise focused-value reader
+attribution, swift-tui `190b3a64`), task 2's **default flip** (swift-tui `683c63e0`,
+gallery-verified), and the **loop + budget retirement** (swift-tui `1b2c9661`) are all
+shipped. Single-pass focus-sync is the only path — no loop, no budget, no gate; the
+render-until-fixpoint loop, `FocusSyncRerenderBudget`, and
+`SinglePassFocusConvergenceConfiguration` are deleted. See the proposal's "Phase 3
+status — loop + budget retired" for the final summary. Nothing in this plan remains
+open.
 
 ## What shipped (task 1, 2026-06-29)
 

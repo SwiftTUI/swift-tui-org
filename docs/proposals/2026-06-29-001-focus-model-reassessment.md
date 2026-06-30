@@ -5,11 +5,11 @@ Status: Proposal — design + plan. **Phases 1, 2, and the full focus-role
 redesign are implemented** (focus-target decoupling → pure active/visible-context
 activation → explicit command-host role + container abstraction; see Part 3 / the
 phase status sections below). The crash fix (Part 0), Phase 1, Phase 2, and the
-redesign are shipped. **Phase 3 (convergence loop → dependency graph): slice 1
-(single-pass convergence), slice 2's precise focused-value reader attribution, and
-the default flip are shipped — single-pass is now the default
-(`SWIFTTUI_SINGLE_PASS_FOCUS=0` opts back into the legacy loop), gallery-verified
-and proven at parity. Only retiring the now-dormant loop + budget remains.**
+redesign are shipped. **Phase 3 (convergence loop → dependency graph) is COMPLETE:
+slice 1 (single-pass convergence), slice 2's precise focused-value reader
+attribution, the default flip, and the loop + budget retirement are all shipped.
+Single-pass is the only focus-sync path — no loop, no budget, no gate; the
+render-until-fixpoint loop and `FocusSyncRerenderBudget` are deleted.**
 
 ## Phase 1 status (implemented 2026-06-29)
 
@@ -232,13 +232,37 @@ toolbars, focus-dependent content) and behaved correctly. Verified at parity und
 and with `SWIFTTUI_SINGLE_PASS_FOCUS=0`. `SwiftTUIRuntime` cross-compiles for
 `wasm32-wasi`.
 
-**Remaining (Phase 3) — directed by
-[`docs/plans/2026-06-30-001-focus-single-pass-slice2-plan.md`](../plans/2026-06-30-001-focus-single-pass-slice2-plan.md):**
-retire the now-dormant loop + budget (`processFocusSyncIteration`'s `.rerender`/budget
-path, `FocusSyncRerenderBudget`, the `RunLoop+Rendering.swift` budget assertion, and
-the `FocusSyncConvergenceState` simplification). The gate can be kept as a legacy
-fallback or removed with the loop. This is the "no loop, no budget" end state Part 2
-targets.
+## Phase 3 status — loop + budget retired (2026-06-30, swift-tui `1b2c9661`) — PHASE 3 COMPLETE
+
+The legacy render-until-fixpoint loop and rerender budget are deleted. Single-pass
+focus-sync is now the *only* path — the "no loop, no budget" end state Part 2 targets:
+
+- `processFocusSyncIteration` drops the gate check and the legacy budget branch; only
+  the single-pass logic remains (eager focus-location re-render capped at one pass by
+  `didEagerFocusLocationRerender` — the termination guarantee — plus precise
+  focused-value reader invalidation).
+- `FocusSyncRerenderBudget` and `SinglePassFocusConvergenceConfiguration` are deleted.
+- `RunLoop+Rendering.swift` drops the `budgetExceeded` checks in both the sync and
+  async convergence loops and the `budgetExceeded` `assertionFailure` in
+  `applyAcquiredFrame`.
+- `FocusSyncConvergenceState` loses `budget`/`budgetExceeded`/`recordRerender`;
+  `rerenderCount` (the public `focusSyncRerenders` diagnostic, now 0 or 1) derives
+  from `didEagerFocusLocationRerender`.
+- The `singlePassFocusConvergence` `FeatureGate` case (`SWIFTTUI_SINGLE_PASS_FOCUS`) is
+  removed — there is no legacy path left to opt into. (Incidentally realigned
+  `FeatureGateRegistryTests`, red since slice 1 added the gate without updating its
+  expected env-var list — it lives outside the repo gate's shared suite.)
+
+Because the previous commit had already made single-pass the default, the legacy
+branch was unreachable in the default config; this removal is dead-code deletion and
+does not change default behavior. Verified under **AddressSanitizer**: 411
+focus/runtime tests across 15 suites pass; `FeatureGateRegistryTests` green;
+`SwiftTUIRuntime` cross-compiles for `wasm32-wasi`.
+
+**Phase 3 is complete.** Focus is now modeled the way the research framed it: focus
+location is applied once per event (the single eager re-render, which cannot
+oscillate) and focused values propagate by precise reader invalidation — an acyclic
+dependency cascade that terminates with no budget.
 
 ---
 
