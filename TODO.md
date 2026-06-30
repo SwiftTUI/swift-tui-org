@@ -1,5 +1,5 @@
 - [ ] BUG: gallery, transitioning off of the logo breaker tab takes forever.
-- [ ] BUG: gallery, when opening the presentation lab overlays they are sometimes un-closable. in this case the background remains interactive.
+- [x] BUG: gallery, when opening the presentation lab overlays they are sometimes un-closable. in this case the background remains interactive. (fixed: pointer activation constrained to the control under the cursor; swift-tui ecb95e78)
 - [ ] BUG: gallery, crash in focus context tab. hitting tab does not appear to do anything. crash observed after time/repeats
 - [ ] ISSUE: test coverage in swift-tui does not suffice for complex gallery issues
 - [ ] ISSUE: performance in the gifeditor when drawing is unacceptable
