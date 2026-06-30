@@ -6,9 +6,10 @@ redesign are implemented** (focus-target decoupling → pure active/visible-cont
 activation → explicit command-host role + container abstraction; see Part 3 / the
 phase status sections below). The crash fix (Part 0), Phase 1, Phase 2, and the
 redesign are shipped. **Phase 3 (convergence loop → dependency graph) is underway:
-slice 1 — single-pass convergence behind a flag — is shipped (default off, proven
-at parity); precise focused-value reader attribution and flipping the default
-remain.**
+slice 1 (single-pass convergence behind a flag) and slice 2's precise
+focused-value reader attribution are shipped (gate still default off, both proven
+at parity); only flipping the default — gated on a by-hand gallery pass — and
+retiring the loop + budget remain.**
 
 ## Phase 1 status (implemented 2026-06-29)
 
@@ -184,17 +185,51 @@ identically with the gate off (no-op; legacy loop intact) and on (single-pass
 parity). No hangs — termination holds without a budget. `SwiftTUIRuntime`
 cross-compiles for `wasm32-wasi`.
 
+## Phase 3 status — slice 2 (precise attribution implemented 2026-06-29, swift-tui `190b3a64`)
+
+A pure focused-value change now invalidates **exactly** the
+`@FocusedValue`/`@FocusedBinding` readers instead of the coarse whole-tree root
+invalidation. `@FocusedValue`/`@FocusedBinding` read the cached
+`AuthoringContext.focusedValues` field, so the read was invisible to reader
+attribution; the read now records a **synthetic** `FocusedValuesDependencyKey`
+env dependency on the reading node (`EnvironmentValues.recordFocusedValuesDependencyRead`).
+
+The key is deliberately **decoupled from the value-carrying `FocusedValuesKey`** —
+mirroring how `FocusedIdentityKey` is decoupled from the `_focusedIdentity`
+side-field — because `ResolveContext.init` reads `environmentValues.focusedValues`
+for *every* node, so attributing through `FocusedValuesKey` would mark every node a
+reader (the precision test caught exactly this). Single-pass focus-sync
+(`RunLoop.processFocusSyncIteration`) now invalidates
+`renderer.focusedValuesDependentIdentities()` (empty ⇒ nothing reads it ⇒ nothing
+to do) rather than `[rootIdentity]`.
+
+Reuse-safe by construction: the dependency reverse-index is only rewritten in
+`ViewGraph.finishEvaluation` (an actual resolve) and is untouched by reuse, so a
+reader reused since its last resolve keeps its index entry and is still found (the
+"reused reader records no read → stale" gap the plan flagged is closed by the
+persistent index, not by an env-snapshot special-case). The change is also
+**value-driven** (`focusSyncEquals`), so it catches a `@FocusedBinding` mutation
+whose reflected-string snapshot is stable — no `==`-vs-`focusSyncEquals`
+env-comparison special-casing was needed (the route-A refinement the plan
+proposed turned out unnecessary).
+
+Verified under **AddressSanitizer**: 412 tests across 15 focus/runtime suites
+pass identically gate-off and gate-on, plus a new
+`FocusedValueReaderAttributionTests` (SwiftTUIViewsTests) proving the reader is
+attributed while a static sibling is spared and a reader-free tree records no
+dependents. Dependency-model and reuse suites
+(`DependencyModelTests`/`StateInvalidationDependencyTests`/`RetainedSubtreeReuseTests`/…)
+stay green. `SwiftTUIRuntime` cross-compiles for `wasm32-wasi`.
+
 **Remaining (Phase 3) — directed by
 [`docs/plans/2026-06-30-001-focus-single-pass-slice2-plan.md`](../plans/2026-06-30-001-focus-single-pass-slice2-plan.md):**
-(1) precise `@FocusedValue` reader attribution — a pure focused-value change
-currently nudges a coarse root invalidation (whole-tree re-render next frame)
-rather than invalidating only the readers (the focused-value-key-as-derived-node
-model). The wall: a `@FocusedValue` read is invisible to the reader-attribution
-*and* reuse systems, so naive precise invalidation is not reuse-safe (a reused
-reader records no read → stale); the recommended route is env-read attribution for
-`@FocusedValue` plus a `focusSyncEquals` special-case in the env-change/reuse
-comparison. (2) prove against the gallery, then flip the default and retire the
-loop + budget.
+flip the default on (`FeatureGate.singlePassFocusConvergence.defaultIsEnabled = true`)
+**once gallery-proven** by-hand for real focus interactions (Tab traversal, default
+focus, `@FocusedValue` toolbars, focus-dependent content), then retire the loop +
+budget (`processFocusSyncIteration`'s `.rerender`/budget path,
+`FocusSyncRerenderBudget`, the `RunLoop+Rendering.swift` budget assertion, and the
+`FocusSyncConvergenceState` simplification). The gallery pass is the only gate left
+on the flip; the precise-attribution prerequisite is done.
 
 ---
 

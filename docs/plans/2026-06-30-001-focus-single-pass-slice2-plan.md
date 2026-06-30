@@ -1,7 +1,34 @@
 # Phase 3 slice 2 — precise focused-value reader attribution, then flip the default
 
 Date: 2026-06-30
-Status: Plan / pickup prompt. Phase 3 **slice 1 is shipped** (single-pass focus-sync
+Status: **Task 1 (precise focused-value reader attribution) is shipped**
+(swift-tui `190b3a64`, gate still default off, proven at parity; see the proposal's
+"Phase 3 status — slice 2"). Phase 3 slice 1 was already shipped. **Only task 2
+remains: flip the default on once gallery-proven, then retire the loop + budget.**
+
+## What shipped (task 1, 2026-06-29)
+
+The recommended route A (env-read attribution) was implemented with one
+simplification proven during the work: a **dedicated synthetic
+`FocusedValuesDependencyKey`** token records the reader (decoupled from the
+value-carrying `FocusedValuesKey`, which `ResolveContext.init` reads per node —
+the precision test caught that attributing through it marks every node a reader),
+and **no `==`-vs-`focusSyncEquals` env-comparison special-case was needed**: the
+pure-value invalidation is precise via the persistent reverse-index +
+`focusSyncEquals`-driven change detection, and the single-pass branch invalidates
+`renderer.focusedValuesDependentIdentities()` (empty ⇒ no-op) instead of
+`[rootIdentity]`. Reuse-safety comes from the dependency index persisting across
+reuse (only rewritten in `ViewGraph.finishEvaluation`), not from an env-snapshot
+special-case. New test: `FocusedValueReaderAttributionTests` (SwiftTUIViewsTests).
+
+---
+
+(Original plan follows. Task 1 sections are retained for context; only "Flip the
+default" remains to do.)
+
+## Original status
+
+Phase 3 **slice 1 is shipped** (single-pass focus-sync
 convergence behind a flag, default off, proven at parity). This directs the
 remaining Phase 3 work.
 
