@@ -48,6 +48,8 @@ Ranking weighs verified severity × class leverage (does it delete a bug *family
 | --- | --- | --- | --- |
 | 1 | **F01** | **Deflake `TaskReadsUnbodiedStateTests` and green main.** 5 of 8 completed Linux Repo Gate runs since `a210b7be` failed at TaskReadsUnbodiedStateTests.swift:102:23 (exact-tick frame/offset co-occurrence the async driver doesn't guarantee under CI load). Unregistered in docs/KNOWN-TEST-FLAKES.md, which inverts its own "unlisted = real" triage rule; org pins were bumped over the red. Fix with the flake-#3 playbook (sync driver for setup/grab or at-or-after assertion); verify no real race in the live-slot path. **Structural follow-up:** add an org_fast contract that queries child CI status for pinned SHAs so pin bumps can't pass over a red child gate. | S |
 
+> **F01 status: FIXED 2026-07-01 (same day).** Root cause was subtler than the survey's mechanism: the suite's two variants run **concurrently** and shared a `ProbeGrabState.shared` singleton, so one variant scraped its terminal for the other's grab tick (the exact-tick scrape was additionally unsound under frame coalescing). No framework bug — the imperative `@State` write-preservation path traced clean under instrumentation. Fixed in swift-tui `ff018143` (fixed flake #4 in its KNOWN-TEST-FLAKES.md; Repo Gate green), pinned by org `e39c36b`; the structural follow-up landed as `//:child_ci_status` in `org_fast` (`7f8da34`).
+
 ### Tier 1 — strategic investments (the pre-production window)
 
 | # | ID | Opportunity | Effort | Verdict |
