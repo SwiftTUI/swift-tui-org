@@ -5,7 +5,10 @@ name: org-gate
 # child-repo Linux gate deliberately never cross-compiles wasm32-wasi — so a
 # WASI-only break shipped green and only surfaced post-tag (hit at 0.0.19 and
 # again at 0.0.26 via EnvFrameTraceSink). This workflow closes both gaps:
-#   1. org-contract     — the cheap Bazel org contract checks (`mise run org-fast`).
+#   1. org-contract     — the cheap Bazel org contract checks (`mise run org-fast`),
+#                         including child_ci_status, which fails when any pinned
+#                         child commit has a red CI check (pins were twice bumped
+#                         over a failing swift-tui Repo Gate — survey F01).
 #   2. wasi-cross-compile — type-checks the pinned framework for wasm32-wasi.
 #
 # An android-cross-compile job is intended here too (SwiftTUIAndroidHost is a
@@ -47,6 +50,10 @@ jobs:
           experimental: true
 
       - name: Run org-fast
+        env:
+          # Authenticates child_ci_status's public-repo check-runs queries
+          # (rate limits only; the child repos are public).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mise run org-fast
 
   wasi-cross-compile:

@@ -45,6 +45,19 @@ sh_test(
     ],
 )
 
+# Queries the GitHub check-runs API for every pinned child commit; "external"
+# keeps Bazel from caching a verdict that live CI state can change.
+sh_test(
+    name = "child_ci_status",
+    srcs = ["tools/bazel/child_ci_status.sh"],
+    tags = [
+        "external",
+        "local",
+        "no-sandbox",
+        "requires-network",
+    ],
+)
+
 sh_test(
     name = "pin_cleanliness",
     srcs = ["tools/bazel/pin_cleanliness.sh"],
@@ -223,6 +236,7 @@ test_suite(
 test_suite(
     name = "org_fast",
     tests = [
+        ":child_ci_status",
         ":pin_cleanliness",
         ":public_dependency_contracts",
         ":release_artifact_contract_fixture",
