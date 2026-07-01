@@ -20,6 +20,14 @@ documentation in their own `docs/` trees.
 
 ## Reports
 
+- [reports/2026-07-01-framework-stress-known-issue-investigation.md](reports/2026-07-01-framework-stress-known-issue-investigation.md) -
+  investigation of the new `FrameworkStressTests` `withKnownIssue` cases (78 at
+  baseline). Roots the dominant cluster to one architectural mismatch — reuse
+  safety keyed on identity/structural *containment* vs. the framework re-rooting
+  identity/structural-path in several layers, so an ancestor `.id` churn serves
+  re-rooted descendants stale. Includes a measured-and-reverted candidate fix and
+  a ranked plan (churn→subtree invalidation) plus the tractable independent
+  fixes (disabled key-press leakage, hover first-frame, count-two tap).
 - [reports/2026-06-29-gallery-todo-deep-dive.md](reports/2026-06-29-gallery-todo-deep-dive.md) -
   deep dive on the root `TODO.md` gallery/runtime issues: Logo Breaker teardown,
   Presentation Lab modal dismissal/base-interaction, Focus Context Tab traversal
