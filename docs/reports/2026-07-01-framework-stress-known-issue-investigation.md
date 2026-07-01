@@ -2,13 +2,14 @@
 
 - **Date:** 2026-07-01
 - **Scope:** `SwiftTUI/swift-tui` — `Tests/SwiftTUITests/FrameworkStressTests.swift`
-- **Status:** Investigation + one root cause fully characterized. **Three
-  independent fixes landed** (disabled key-press leakage, hover first-frame
-  render, count-two tap) → **78 known issues to 66**, suite green, repo gate
-  green. The candidate reuse fix for the dominant cluster was written, measured
-  to be insufficient, and reverted (§5). The cluster-A architectural fix is
-  dispatched to a background agent (see
-  [../plans/2026-07-01-003-cluster-a-reuse-rerooting-fix.md](../plans/2026-07-01-003-cluster-a-reuse-rerooting-fix.md)).
+- **Status:** Root cause fully characterized and **largely fixed**. Four fixes
+  landed → **78 known issues to 29**, stress suite green, no unexpected failures:
+  three independent fixes (disabled key-press leakage, hover first-frame render,
+  count-two tap) plus the cluster-A churn→re-rooting fix (§10) delivered by the
+  background agent per
+  [../plans/2026-07-01-003-cluster-a-reuse-rerooting-fix.md](../plans/2026-07-01-003-cluster-a-reuse-rerooting-fix.md).
+  The naive per-layer reuse guard from an earlier attempt was measured
+  insufficient and reverted (§5). Residual 29 flags are documented in §10.
 
 ## 1. What prompted this
 
@@ -259,3 +260,62 @@ architectural mismatch — **reuse safety is decided by identity/structural
 layers, and an ancestor `.id` churn lets those re-rooted descendants dodge
 invalidation and serve stale content.** Fix the churn→subtree invalidation once
 and most of cluster A/D/G should fall together.
+
+## 10. Cluster-A resolution (DONE, 2026-07-01)
+
+The recommended approach from §6.1 (churn→subtree invalidation) landed and
+confirmed the diagnosis. It also surfaced a **second, coupled mechanism** the
+trace in §4 hadn't isolated: the re-rooted descendant's runtime node is pruned
+together with the departing owner and re-minted one frame later, which churns
+the pointer route/registration identity a run-loop click depends on — so for
+many cases the visible symptom was "the click no longer dispatches," not merely
+a stale closure.
+
+Two coordinated changes:
+
+1. **`ExactIdentityModifier.resolve`** (`ViewMetadataModifiers.swift`) detects a
+   frame-over-frame identity churn at the churned slot and marks the subtree via
+   a new `ResolveContext.withinChurnedSubtree` flag.
+2. **`ResolveContext` + `ViewFoundation.resolveView`** carry that flag across
+   every `child`/`replacingIdentity` derivation (added to `PropagatedRegistries`)
+   so it survives every re-rooting layer, and **suppress retained + memo reuse**
+   for any node under a churned subtree — forcing fresh re-resolution while node
+   `@State` (keyed by the descendant's own identity) persists.
+3. **`ViewGraph.removeSubtree`** keeps a **parent-detached (`parent == nil`) node
+   that was visited this frame** — a re-rooted descendant re-parented under the
+   arriving subtree — instead of retiring it with the departing owner. This
+   prevents the node re-mint that broke same-node pointer interactions. A
+   genuinely-departing node (unvisited, or still parented under the surviving
+   tree) retires as before. An earlier broad `visitedThisFrame` guard regressed
+   `navigationDestinationsArePruned…` (lifecycle accumulation 26 > 16); the
+   `parent == nil` signal fixes cluster A while keeping that test green.
+
+**Result: 78 → 29 known issues** combined with the three independent fixes.
+Cleared: the 8 `anyView*` frame cases (Toggle/Disclosure/TextField/SecureField/
+Stepper/Slider/Picker + `tapGestureAnyView`) and the discovery
+`stableButtonActionRebinds` label (cluster G). Perf-safe:
+`withinChurnedSubtree` is provably `false` on non-churn frames, so the reuse hot
+path is unchanged; the `removeSubtree` guard is off the hot path. Protected
+suites (`ResolveReuseAncestorInvalidationTests`, `RetainedSubtreeReuseTests`,
+`ResolveReuseIndexingTests`, `ResolvePurityTests`, `RetainedPhaseProductGateTests`,
+`ViewGraphCheckpointTotalityTests`, `EntityRoutingTests`, lifecycle/scene/tabview)
+all green.
+
+### Residual 29 flags (intentionally still `withKnownIssue`)
+
+- **`anyViewButtonActionRebinds` / `panelButtonActionRebinds`** — a *different*
+  seam: Button's `ButtonStyle` chrome resolves **several nodes at one structural
+  identity** (`…/ButtonBody/false` + background/base/overlay). The fresh
+  post-churn ButtonBody root is not marked visited, so it is pruned and the
+  pointer route re-mints. Needs a multi-node-at-one-identity reconciliation fix,
+  not the reuse seam. Documented in-code.
+- **`anyViewTextEditorPasteRebinds`, `stackedKeyPressTextRebinds`,
+  `preferenceObserverRebinds`, `onChangeHandlerRebinds`** — remain flagged
+  (onChange fails even at gen 0, so it is a separate dispatch gap, not the reuse
+  seam).
+- Assorted `maxRegistrationKnownIssueDescription` accumulation cases tied to the
+  above.
+
+These are the natural next tranche: the multi-node-at-one-identity ButtonBody
+seam would likely clear the two Button cases, and `onChange`/preference dispatch
+is an independent investigation.
