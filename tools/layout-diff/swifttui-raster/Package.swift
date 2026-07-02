@@ -11,7 +11,7 @@ let package = Package(
   name: "swifttui-raster",
   platforms: [.macOS(.v15)],
   dependencies: [
-    .package(url: "https://github.com/SwiftTUI/swift-tui.git", exact: "0.1.0"),
+    .package(url: "https://github.com/SwiftTUI/swift-tui.git", exact: "0.1.1"),
     .package(name: "swift-tui-swiftui", path: "../../../swift-tui-swiftui"),
     .package(name: "layouts-demo", path: "../../../swift-tui-examples/layouts"),
   ],

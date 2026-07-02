@@ -78,19 +78,19 @@ repos.
 
 ## Current Public Beta State
 
-All child repositories are public and tagged at `0.1.0`. Public child defaults
+All child repositories are public and tagged at `0.1.1`. Public child defaults
 now resolve through public release artifacts:
 
-- `swift-tui` is consumed through the `0.1.0` HTTPS SwiftPM tag.
+- `swift-tui` is consumed through the `0.1.1` HTTPS SwiftPM tag.
 - `swift-tui-web` publishes `@swifttui/web` and `@swifttui/build` tarballs on
-  the GitHub `0.1.0` release.
+  the GitHub `0.1.1` release.
 - `swift-tui-android` publishes the `sh.swifttui:android-host` AAR and
-  `sh.swifttui.android` Gradle plugin at `0.1.0`.
-- `swift-tui-examples` uses the `swift-tui` `0.1.0` tag and the web `0.1.0`
-  release tarballs by default; AndroidGallery also uses the Android `0.1.0`
+  `sh.swifttui.android` Gradle plugin at `0.1.1`.
+- `swift-tui-examples` uses the `swift-tui` `0.1.1` tag and the web `0.1.1`
+  release tarballs by default; AndroidGallery also uses the Android `0.1.1`
   artifacts.
 - `swift-tui-site` fetches tagged `swift-tui-examples` input into
-  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.1.0` tag.
+  `.build/public-inputs/` and builds DocC from the `swift-tui` `0.1.1` tag.
 
 The web packages are also on npm: external consumers `npm install @swifttui/web
 @swifttui/build`, while in-org consumers resolve the release tarball URLs.
@@ -392,7 +392,7 @@ bazel test //:org_full
 
 ## Bumping the Org Version
 
-The release version (currently `0.1.0`) is denormalized across every child:
+The release version (currently `0.1.1`) is denormalized across every child:
 `package.json` versions, SwiftPM `exact:`/`upToNextMinor(from:)` pins, the Xcode
 `exactVersion`, Android Gradle plugin/AAR coordinates, GitHub release tarball
 URLs, `tree`/`blob`/`tag` links, site display strings, and the canonical

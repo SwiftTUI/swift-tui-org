@@ -77,7 +77,7 @@ to <new-version> together (the model the org ships under today).
 
 Arguments:
   <new-version>   Target semver, e.g. 0.0.13 (also accepts pre-release suffixes,
-                  e.g. 0.1.0-rc.1).
+                  e.g. 0.1.1-rc.1).
 
 Options:
   --from VERSION  Override the detected current version. By default the current
