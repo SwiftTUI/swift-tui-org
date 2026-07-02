@@ -1,7 +1,22 @@
 # F02 identity-churn root fix — design findings from the first implementation attempt
 
 **Date:** 2026-07-01
-**Status:** Findings. The mechanical "extend entity routing to `ExactIdentityModifier`,
+**Status:** SUPERSEDED IN PART — the second dedicated session (same day) landed
+the extension as swift-tui `fe1345ba` using the "Recommended shape" below
+(§Recommended): `entityHosting` scoped to *host-escaping* routes, an
+outermost-claim ownership rule for forwarded claims (the piece this doc's
+Config A/B analysis was missing — interior wrapper levels re-fire the forwarded
+claim and must not steal the enclosing mid-evaluation node, in either
+direction), resolved-identity index sparing, a graph-side displacement mark,
+and entity-routed descent deferral to the pending-removals barrier. The
+sweep-as-oracle step then **failed the deletion gate** (294 orphans still only
+caught by the sweep: conditional-variant chrome flips inside stable-entity
+controls, churned-generation interiors beyond entity release, old-generation
+conditional content) — so the compensator stack REMAINS, per §Compensator-stack
+status. Deletion now requires closing those three coverage classes.
+Original findings text follows unchanged.
+
+**Original status:** Findings. The mechanical "extend entity routing to `ExactIdentityModifier`,
 then delete the compensator stack" plan from the 2026-07-01 survey (F02) was
 implemented in three configurations and **does not land as an extension** — the
 remaining ~22% of Stage 6 is a design problem, not plumbing. This document
