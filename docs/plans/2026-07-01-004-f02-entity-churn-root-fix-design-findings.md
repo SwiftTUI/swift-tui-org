@@ -1,6 +1,64 @@
 # F02 identity-churn root fix — design findings from the first implementation attempt
 
 **Date:** 2026-07-01
+**Update 2026-07-02 (third session — orphan-class closure):** the sweep-oracle
+census dropped **294 → 172** by closing residual class 1 at the root (swift-tui
+commit following `fe1345ba`). What landed:
+
+1. **Ghost-node reclaim (class 1 closed, −122).** A cold resolve of
+   `composite → conditional-branch → composite` mints an inner node whose
+   output the enclosing chain level absorbs (`normalizeResolvedElements`
+   count==1); the inner node is never wired as a child, its identity index
+   entry is overwritten by the absorber's reindex, and *no* teardown path can
+   reach it — a permanent leak in the baseline framework, churn or not (every
+   `TextField` mount leaked one node). Fix: `reindexIdentity` records index
+   shadowings into `LifecycleEventBuffers.absorbedShadowedNodeIDs`;
+   `pruneAbsorbedShadowedNodes()` at the finalize barrier (and preview, for
+   plan equality) reclaims candidates that end the frame parentless,
+   same-frame-minted, and not an entity's routed home. The output value does
+   NOT carry the ghost's `viewNodeID` (the absorber's transform stamps its
+   own), so a value-based reclaim at `finishEvaluation` is impossible — the
+   index shadowing is the only observable trace.
+2. **`removeSubtree` keep-guard refined to reachability.** The
+   visited+parent-detached keep-guard now also requires the node to own one of
+   its identity index entries or be an entity's routed home. A live re-rooted
+   node always satisfies one of these; a ghost satisfies none. Without this,
+   the reclaim was defeated (ghosts are visited on their mint frame).
+3. **Rebind-churn continuity guard.** On a collapsed two-EIM chain
+   (`.id(stable)` inside `.id(owner-gen)`), the slot node's `resolvedIdentity`
+   is the *inner* EIM's identity, so the outer EIM's rebind predicate re-fired
+   **every frame** of the steady state — recording a false departure and
+   suppressing reuse permanently. Fix: no churn when the arriving EIM's entity
+   already routes to the slot node (`entityRouteIsBound`).
+4. **Teardown live-children coverage.** After the committed-snapshot value
+   descent, `removeSubtree` now also descends still-parented live children:
+   a chain collapse can absorb an interior node's output so the value tree
+   names its identity with the absorber's stamp — the value walk re-enters
+   the absorber and the interior node is reachable only as a live child.
+5. **`liveNodeIDs` hygiene.** `finalizeFrame` no longer unions dead IDs back
+   into `liveNodeIDs` (mid-resolve eviction of an already-visited occupant,
+   same-frame ghost reclaim).
+
+**Remaining 172 orphans (classes 2–3, sweep still required):**
+NavigationSource 108, Expansion 30, ScrollFocusReveal 24, Additional 10. Root
+cause identified but NOT yet fixed: **value-tree / node-graph divergence under
+warm-frame re-shapes.** Traced end-to-end on the scroll fixture: the committed
+value tree flip-flops between the mount shape (`Frame → ScrollView →
+ScrollContent` node values) and a warm shape where the ScrollContent value
+(20 children) pairs positionally with the *slot* node in an enclosing apply
+(`resolvedWithRuntimeNodeIDs` count-guard-unmet, 15×/generation) — the
+ScrollContent node ends up in **nobody's** children array (detached by
+re-parenting applies), index-shadowed, un-routed, and unreachable by any walk;
+only the identity-prefix sweep (an identity-space GC) finds it after its
+generation departs. Probes proved the SC-shaped value is NOT produced by
+`resolveView` returns, Layer-A/B reuse serves, either `applyResolvedNode` call
+site, or `apply`/`applyRetainedSnapshot` (all clean) — pointing at the
+**layout-realized-children machinery** (`resolvedPreservingLayoutRealizedChildren`
+/ scroll viewport realization) splicing interior values into committed trees.
+Next session: trace the layout-realization splice, stabilize the committed
+shape (or record detach events as reclaim candidates), then re-run the oracle.
+The sweep deletion remains blocked until the census reads zero.
+
 **Status:** SUPERSEDED IN PART — the second dedicated session (same day) landed
 the extension as swift-tui `fe1345ba` using the "Recommended shape" below
 (§Recommended): `entityHosting` scoped to *host-escaping* routes, an
