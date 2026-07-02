@@ -77,7 +77,7 @@ while IFS= read -r -d '' pkg; do
     rewritten_count=$((rewritten_count + 1))
   fi
   if grep -Eq 'url:[[:space:]]*"https://github\.com/SwiftTUI/swift-tui(-swiftui)?(\.git)?"' "$pkg"; then
-    unlocalized+=("${pkg#$worktree_overlay/}")
+    unlocalized+=("${pkg#"$worktree_overlay"/}")
   fi
 done < <(find "$worktree_overlay" -name Package.swift -print0)
 if [[ "$rewritten_count" -ge 1 ]]; then
@@ -89,6 +89,24 @@ if [[ "${#unlocalized[@]}" -eq 0 ]]; then
   ok "no un-localized SwiftTUI sibling pins remain in the overlay"
 else
   err "un-localized SwiftTUI sibling pins remain: ${unlocalized[*]}"
+fi
+
+swiftui_pbxproj="$worktree_overlay/swift-tui-examples/SwiftUIExample/SwiftUIExample.xcodeproj/project.pbxproj"
+if grep -Eq 'XCRemoteSwiftPackageReference "swift-tui(-swiftui)?"|repositoryURL = "https://github\.com/SwiftTUI/swift-tui(-swiftui)?(\.git)?";' "$swiftui_pbxproj"; then
+  err "SwiftUIExample project still contains remote SwiftTUI sibling package references"
+else
+  ok "SwiftUIExample project has no remote SwiftTUI sibling package references"
+fi
+
+if perl -0ne 'exit(/XCLocalSwiftPackageReference "swift-tui"[^}]*relativePath = \.\.\/\.\.\/swift-tui;/s ? 0 : 1)' "$swiftui_pbxproj"; then
+  ok "SwiftUIExample project localizes swift-tui to the overlay sibling checkout"
+else
+  err "SwiftUIExample project did not localize swift-tui to the overlay sibling checkout"
+fi
+if perl -0ne 'exit(/XCLocalSwiftPackageReference "swift-tui-swiftui"[^}]*relativePath = \.\.\/\.\.\/swift-tui-swiftui;/s ? 0 : 1)' "$swiftui_pbxproj"; then
+  ok "SwiftUIExample project localizes swift-tui-swiftui to the overlay sibling checkout"
+else
+  err "SwiftUIExample project did not localize swift-tui-swiftui to the overlay sibling checkout"
 fi
 
 # Web localization is now a structured edit to the examples ROOT package.json (not

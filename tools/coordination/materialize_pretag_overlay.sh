@@ -20,7 +20,6 @@ else
   fi
 fi
 
-scope=all
 output="${SWIFTTUI_ORG_PRETAG_OVERLAY_DIR:-$repo_root/.build/coordination/pretag-overlay}"
 source_mode="${SWIFTTUI_ORG_OVERLAY_SOURCE_MODE:-head}"
 
@@ -78,7 +77,8 @@ while [[ "$#" -gt 0 ]]; do
       exit 0
       ;;
     all|examples|site)
-      scope=$1
+      # Accepted for gate/open_overlay calling convention. The materializer
+      # always copies every registered Bazel-module repo.
       shift
       ;;
     *)
@@ -174,7 +174,17 @@ rewrite_examples_overlay() {
 
   pbxproj="$examples_dir/SwiftUIExample/SwiftUIExample.xcodeproj/project.pbxproj"
   if [[ -f "$pbxproj" ]]; then
-    perl -0pi -e 's#relativePath = [^;]*swift-tui;#relativePath = ../../swift-tui;#g' "$pbxproj"
+    # Xcode keeps Swift package dependencies in project.pbxproj instead of
+    # Package.swift. Localize the native host app's direct sibling references so
+    # the overlay build links the overlay's swift-tui sources.
+    perl -0pi -e \
+      's#XCRemoteSwiftPackageReference "swift-tui"#XCLocalSwiftPackageReference "swift-tui"#g;
+       s#(/\* XCLocalSwiftPackageReference "swift-tui" \*/ = \{\n)\s*isa = XCRemoteSwiftPackageReference;\n\s*repositoryURL = "https://github\.com/SwiftTUI/swift-tui(?:\.git)?";\n\s*requirement = \{\n\s*kind = [^;]+;\n\s*version = [^;]+;\n\s*\};\n\s*\};#$1\t\t\tisa = XCLocalSwiftPackageReference;\n\t\t\trelativePath = ../../swift-tui;\n\t\t};#sg;
+       s#(/\* XCLocalSwiftPackageReference "swift-tui" \*/ = \{\n\s*isa = XCLocalSwiftPackageReference;\n\s*)relativePath = [^;]+;#$1relativePath = ../../swift-tui;#sg;
+       s#XCRemoteSwiftPackageReference "swift-tui-swiftui"#XCLocalSwiftPackageReference "swift-tui-swiftui"#g;
+       s#(/\* XCLocalSwiftPackageReference "swift-tui-swiftui" \*/ = \{\n)\s*isa = XCRemoteSwiftPackageReference;\n\s*repositoryURL = "https://github\.com/SwiftTUI/swift-tui-swiftui(?:\.git)?";\n\s*requirement = \{\n\s*kind = [^;]+;\n\s*version = [^;]+;\n\s*\};\n\s*\};#$1\t\t\tisa = XCLocalSwiftPackageReference;\n\t\t\trelativePath = ../../swift-tui-swiftui;\n\t\t};#sg;
+       s#(/\* XCLocalSwiftPackageReference "swift-tui-swiftui" \*/ = \{\n\s*isa = XCLocalSwiftPackageReference;\n\s*)relativePath = [^;]+;#$1relativePath = ../../swift-tui-swiftui;#sg' \
+      "$pbxproj"
   fi
 
   # Localize the released @swifttui web packages to the overlay's local web build
@@ -258,9 +268,22 @@ verify_overlay_rewrites() {
   # (swift-tui / swift-tui-swiftui) through a public HTTPS URL.
   while IFS= read -r -d '' manifest; do
     if grep -Eq 'url:[[:space:]]*"https://github\.com/SwiftTUI/swift-tui(-swiftui)?(\.git)?"' "$manifest"; then
-      problems+=("un-localized SwiftPM sibling pin in ${manifest#$output/}")
+      problems+=("un-localized SwiftPM sibling pin in ${manifest#"$output"/}")
     fi
   done < <(find "$output" -name Package.swift -print0 2>/dev/null)
+
+  swiftui_pbxproj="$output/swift-tui-examples/SwiftUIExample/SwiftUIExample.xcodeproj/project.pbxproj"
+  if [[ -f "$swiftui_pbxproj" ]]; then
+    if grep -Eq 'XCRemoteSwiftPackageReference "swift-tui(-swiftui)?"|repositoryURL = "https://github\.com/SwiftTUI/swift-tui(-swiftui)?(\.git)?";' "$swiftui_pbxproj"; then
+      problems+=("SwiftUIExample Xcode project did not localize SwiftTUI sibling package references")
+    fi
+    if ! perl -0ne 'exit(/XCLocalSwiftPackageReference "swift-tui"[^}]*relativePath = \.\.\/\.\.\/swift-tui;/s ? 0 : 1)' "$swiftui_pbxproj"; then
+      problems+=("SwiftUIExample Xcode project is missing local swift-tui package reference")
+    fi
+    if ! perl -0ne 'exit(/XCLocalSwiftPackageReference "swift-tui-swiftui"[^}]*relativePath = \.\.\/\.\.\/swift-tui-swiftui;/s ? 0 : 1)' "$swiftui_pbxproj"; then
+      problems+=("SwiftUIExample Xcode project is missing local swift-tui-swiftui package reference")
+    fi
+  fi
 
   # The examples root package.json must localize the web packages: @swifttui/web
   # and @swifttui/build redirected to workspace:* AND the two local web packages
@@ -301,8 +324,9 @@ mkdir -p "$output"
 # open_overlay/--print-env calling convention, not to gate the copy). github
 # (docs-only, bazel_module:false) carries no build contract and is not copied.
 registry="$repo_root/tools/registry/repos.generated.sh"
-[[ -f "$registry" ]] || fail "missing generated registry: ${registry#$repo_root/} (run: python3 tools/registry/generate.py --write)"
+[[ -f "$registry" ]] || fail "missing generated registry: ${registry#"$repo_root"/} (run: python3 tools/registry/generate.py --write)"
 # shellcheck source=../registry/repos.generated.sh
+# shellcheck disable=SC1091
 source "$registry"
 
 for repo in "${BAZEL_MODULE_REPOS[@]}"; do
